@@ -4,6 +4,7 @@ import { supabase } from './supabaseService';
 export { supabase };
 
 const SUPABASE_FUNCTIONS_URL = 'https://qeooehgozaaojaovukfq.supabase.co/functions/v1';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_g-ZfK5SItIlOPNCQK5eltQ_llq2qy54';
 
 // Local storage key defaults
 const PROFILE_KEY = 'funlylearn_user_profile_v2';
@@ -76,7 +77,10 @@ export async function sendMessageToMamaTiti(params: {
   try {
     const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/mama-titi-chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+      },
       body: JSON.stringify({
         message: params.message,
         childName: params.profile.name,
@@ -102,7 +106,10 @@ export async function fetchAudioTTS(text: string, language: string): Promise<{ a
   try {
     const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/yarngpt-proxy`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+      },
       body: JSON.stringify({ text, voice: 'Idera' })
     });
     if (!res.ok) throw new Error('TTS network error: ' + res.status);
