@@ -3,6 +3,8 @@ import { supabase } from './supabaseService';
 
 export { supabase };
 
+const SUPABASE_FUNCTIONS_URL = 'https://qeooehgozaaojaovukfq.supabase.co/functions/v1';
+
 // Local storage key defaults
 const PROFILE_KEY = 'funlylearn_user_profile_v2';
 const CHAT_KEY = 'funlylearn_chat_history_v2';
@@ -72,7 +74,7 @@ export async function sendMessageToMamaTiti(params: {
   conversationHistory?: ChatMessage[];
 }): Promise<{ reply: string; timestamp: string }> {
   try {
-    const res = await fetch('/api/chat', {
+    const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/mama-titi-chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -85,7 +87,7 @@ export async function sendMessageToMamaTiti(params: {
         conversationHistory: params.conversationHistory
       })
     });
-    if (!res.ok) throw new Error('Chat network error');
+    if (!res.ok) throw new Error('Chat network error: ' + res.status);
     return await res.json();
   } catch (err) {
     console.warn('Mama Titi server call failed, providing offline guided response:', err);
@@ -96,64 +98,26 @@ export async function sendMessageToMamaTiti(params: {
   }
 }
 
-export interface VoiceConfigResponse {
-  yarnGptConfigured: boolean;
-  hasYarnGptKey: boolean;
-  yarnGptKeyMasked: string;
-}
-
 export async function fetchAudioTTS(text: string, language: string): Promise<{ audioBase64?: string; useClientSpeech?: boolean; textToSpeak?: string; voice?: string }> {
   try {
-    const res = await fetch('/api/tts', {
+    const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/yarngpt-proxy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, language })
+      body: JSON.stringify({ text, voice: 'Idera' })
     });
-    if (!res.ok) throw new Error('TTS network error');
-    return await res.json();
+    if (!res.ok) throw new Error('TTS network error: ' + res.status);
+
+    const blob = await res.blob();
+    const audioBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    return { audioBase64, voice: 'Idera' };
   } catch (err) {
+    console.error('YarnGPT call failed:', err);
     return { useClientSpeech: true, textToSpeak: text };
   }
 }
-
-export async function getVoiceConfig(): Promise<VoiceConfigResponse> {
-  try {
-    const res = await fetch('/api/config/voice');
-    if (!res.ok) throw new Error('Config network error');
-    return await res.json();
-  } catch (err) {
-    return {
-      yarnGptConfigured: false,
-      hasYarnGptKey: false,
-      yarnGptKeyMasked: ''
-    };
-  }
-}
-
-export async function saveVoiceConfig(params: {
-  yarnApiKey?: string;
-}): Promise<{ success: boolean; config: VoiceConfigResponse; message: string }> {
-  try {
-    const res = await fetch('/api/config/voice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
-    });
-    if (!res.ok) throw new Error('Save config error');
-    return await res.json();
-  } catch (err) {
-    return {
-      success: false,
-      config: {
-        yarnGptConfigured: false,
-        hasYarnGptKey: false,
-        yarnGptKeyMasked: ''
-      },
-      message: 'Failed to connect to server.'
-    };
-  }
-}
-
-// Backwards compatibility helper
-export const saveYarnGptKey = async (yarnApiKey: string) => saveVoiceConfig({ yarnApiKey });
-
