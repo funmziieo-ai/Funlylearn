@@ -299,12 +299,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                         </span>
                       </div>
                       <SyncedReadAlong
-                        text={msg.text}
-                        language={profile.language}
-                        onSpeechStateChange={(speaking) =>
-                          setSpeakingMessageId(speaking ? msg.id : null)
-                        }
-                      />
+  text={msg.text}
+  language={profile.language}
+  autoPlay={isMama && idx === messages.length - 1 && !isLoading}
+  onSpeechStateChange={(speaking) =>
+    setSpeakingMessageId(speaking ? msg.id : null)
+  }
+/>
                     </div>
                   ) : (
                     <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
