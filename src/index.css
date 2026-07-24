@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-headline: 'Playfair Display', Georgia, serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-button: 'Plus Jakarta Sans', sans-serif;
+  }
+  
+  body {
+    font-family: var(--font-body);
+    background-color: #FFFBF5;
+    color: #1E293B;
+  }
+
+  h1, h2, h3, .font-serif-headline {
+    font-family: var(--font-headline);
+  }
+
+  button, .font-jakarta-button, input, select, textarea {
+    font-family: var(--font-button);
+  }
+}
+
+.font-serif {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.font-sans {
+  font-family: 'Inter', sans-serif;
+}
+
+.font-jakarta {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+/* Custom colors for FunlyLearn design system */
+.bg-coral-primary {
+  background-color: #FF6B35;
+}
+
+.bg-coral-dark {
+  background-color: #E85523;
+}
+
+.bg-naija-green {
+  background-color: #064E3B;
+}
+
+.bg-naija-green-dark {
+  background-color: #022C22;
+}
+
+.bg-naija-gold {
+  background-color: #F59E0B;
+}
+
+.text-coral-primary {
+  color: #FF6B35;
+}
+
+.text-naija-green {
+  color: #064E3B;
+}
+
+.text-naija-gold {
+  color: #D97706;
+}
+
+/* Soft card shadow */
+.shadow-soft {
+  box-shadow: 0 10px 30px -5px rgba(6, 78, 59, 0.08), 0 4px 12px -2px rgba(255, 107, 51, 0.05);
+}
+
+.shadow-coral {
+  box-shadow: 0 8px 25px -4px rgba(255, 107, 51, 0.35);
+}
+
+/* Synced read-along highlight */
+.word-highlight {
+  background-color: #FDE68A;
+  color: #78350F;
+  border-radius: 0.25rem;
+  padding: 0 0.15rem;
+  transition: all 0.15s ease-in-out;
+}
+

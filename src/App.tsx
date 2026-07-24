@@ -1,0 +1,289 @@
+import React, { useState, useEffect } from 'react';
+import { UserProfile, UserSubscription } from './types';
+import { getStoredProfile, saveStoredProfile } from './services/apiClient';
+import {
+  supabase,
+  getStoredSubscription,
+  getGuestDailyMessageCount,
+  incrementGuestDailyMessageCount,
+  getOrCreateGuestSessionId,
+  fetchChildProfile,
+  saveChildProfileToSupabase,
+  fetchSubscriptionFromSupabase,
+  signOutUser
+} from './services/supabaseService';
+import { Navbar } from './components/Navbar';
+import { BottomNav } from './components/BottomNav';
+import { AuthScreen } from './components/AuthScreen';
+import { PricingModal } from './components/PricingModal';
+import { ScholarProfileModal } from './components/ScholarProfileModal';
+import { VoiceKeyModal } from './components/VoiceKeyModal';
+import { NaijaWordCrush } from './components/NaijaWordCrush';
+import { LandingPage } from './pages/LandingPage';
+import { OnboardingPage } from './pages/OnboardingPage';
+import { ChatPage } from './pages/ChatPage';
+import { NaijaLingoPage } from './pages/NaijaLingoPage';
+import { LeaderboardPage } from './pages/LeaderboardPage';
+import { SmartNotebookPage } from './pages/SmartNotebookPage';
+import { ParentDashboardPage } from './pages/ParentDashboardPage';
+import { ProfilePage } from './pages/ProfilePage';
+
+export default function App() {
+  const [profile, setProfile] = useState<UserProfile>(() => getStoredProfile());
+  const [view, setView] = useState<'landing' | 'auth' | 'onboarding' | 'app'>('landing');
+  const [activeTab, setActiveTab] = useState<string>('home');
+
+  // Authentication & Subscription States
+  const [user, setUser] = useState<any | null>(null);
+  const [isGuest, setIsGuest] = useState<boolean>(false);
+  const [subscription, setSubscription] = useState<UserSubscription>(() => getStoredSubscription());
+  const [isPricingOpen, setIsPricingOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [isVoiceKeyModalOpen, setIsVoiceKeyModalOpen] = useState<boolean>(false);
+  const [dailyMessagesCount, setDailyMessagesCount] = useState<number>(() => getGuestDailyMessageCount().count);
+
+  // Initialize Supabase Auth Session listener
+  useEffect(() => {
+    if (!supabase) return;
+
+    // Check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        handlePostAuthFlow(session.user);
+      }
+    });
+
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        handlePostAuthFlow(session.user);
+      } else if (!isGuest) {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      authSub.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    saveStoredProfile(profile);
+    const userId = user?.id || getOrCreateGuestSessionId();
+    saveChildProfileToSupabase(profile, userId);
+  }, [profile, user]);
+
+  const handlePostAuthFlow = async (authUser: any) => {
+    const userId = authUser.id;
+    // 1. Fetch child profile from Supabase
+    const dbProfile = await fetchChildProfile(userId);
+    if (dbProfile) {
+      setProfile(dbProfile);
+      saveStoredProfile(dbProfile);
+      setView('app');
+    } else {
+      // New user without profile -> go to onboarding
+      setView('onboarding');
+    }
+
+    // 2. Fetch subscription
+    const dbSub = await fetchSubscriptionFromSupabase(userId);
+    if (dbSub) {
+      setSubscription(dbSub);
+    }
+  };
+
+  const handleProfileUpdate = (updated: UserProfile) => {
+    setProfile(updated);
+    saveStoredProfile(updated);
+    const userId = user?.id || getOrCreateGuestSessionId();
+    saveChildProfileToSupabase(updated, userId);
+  };
+
+  const handleStartLearning = () => {
+    if (user || isGuest) {
+      setView('onboarding');
+    } else {
+      setView('auth');
+    }
+  };
+
+  const handleStartCatchingUp = () => {
+    setProfile(prev => ({ ...prev, isOutOfSchool: true }));
+    if (user || isGuest) {
+      setView('onboarding');
+    } else {
+      setView('auth');
+    }
+  };
+
+  const handleAuthSuccess = async (authUser: any) => {
+    setUser(authUser);
+    setIsGuest(false);
+    await handlePostAuthFlow(authUser);
+  };
+
+  const handleContinueAsGuest = () => {
+    setIsGuest(true);
+    setUser(null);
+    getOrCreateGuestSessionId();
+    // Route to onboarding or chat app
+    setView('onboarding');
+  };
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    setUser(null);
+    setIsGuest(false);
+    setView('landing');
+  };
+
+  const handleOnboardingComplete = (updatedProfile: UserProfile) => {
+    handleProfileUpdate(updatedProfile);
+    setView('app');
+    setActiveTab('chat');
+  };
+
+  const handleIncrementDailyMessages = () => {
+    const newCount = incrementGuestDailyMessageCount();
+    setDailyMessagesCount(newCount);
+    return newCount;
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FFFBF5] text-slate-900 flex flex-col font-sans selection:bg-[#FF6B35] selection:text-white">
+      
+      {/* Top Navbar when inside the main app view */}
+      {view === 'app' && (
+        <Navbar
+          profile={profile}
+          onProfileUpdate={handleProfileUpdate}
+          onNavigateLanding={() => setView('landing')}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onOpenPricingModal={() => setIsPricingOpen(true)}
+          onOpenProfileModal={() => setIsProfileModalOpen(true)}
+          onOpenVoiceKeyModal={() => setIsVoiceKeyModalOpen(true)}
+        />
+      )}
+
+      {/* Main Content Area */}
+      <main className="flex-1">
+        {view === 'landing' && (
+          <LandingPage
+            onStartLearning={handleStartLearning}
+            onStartCatchingUp={handleStartCatchingUp}
+          />
+        )}
+
+        {view === 'auth' && (
+          <AuthScreen
+            onAuthSuccess={handleAuthSuccess}
+            onContinueAsGuest={handleContinueAsGuest}
+          />
+        )}
+
+        {view === 'onboarding' && (
+          <OnboardingPage
+            initialProfile={profile}
+            onComplete={handleOnboardingComplete}
+            onExit={() => setView('landing')}
+          />
+        )}
+
+        {view === 'app' && (
+          <>
+            {(activeTab === 'home' || activeTab === 'chat') && (
+              <ChatPage
+                profile={profile}
+                subscription={subscription}
+                dailyMessagesCount={dailyMessagesCount}
+                onIncrementDailyMessages={handleIncrementDailyMessages}
+                onProfileUpdate={handleProfileUpdate}
+                onOpenPricingModal={() => setIsPricingOpen(true)}
+                isGuest={isGuest}
+              />
+            )}
+
+            {activeTab === 'lingo' && (
+              <NaijaLingoPage
+                profile={profile}
+                onProfileUpdate={handleProfileUpdate}
+                onOpenWordCrushPreview={() => setActiveTab('word_crush')}
+              />
+            )}
+
+            {activeTab === 'word_crush' && (
+              <NaijaWordCrush
+                onBackToApp={() => setActiveTab('lingo')}
+                isStandalonePreview={true}
+              />
+            )}
+
+            {activeTab === 'board' && (
+              <LeaderboardPage
+                profile={profile}
+                onGoToHomework={() => setActiveTab('chat')}
+              />
+            )}
+
+            {activeTab === 'me' && (
+              <ProfilePage
+                profile={profile}
+                subscription={subscription}
+                userEmail={user?.email}
+                onProfileUpdate={handleProfileUpdate}
+                onOpenPricingModal={() => setIsPricingOpen(true)}
+                onSignOut={handleSignOut}
+                onOpenNotebook={() => setActiveTab('notebook')}
+                onOpenParentDashboard={() => setActiveTab('parent')}
+              />
+            )}
+
+            {activeTab === 'notebook' && (
+              <SmartNotebookPage profile={profile} />
+            )}
+
+            {activeTab === 'parent' && (
+              <ParentDashboardPage profile={profile} onProfileUpdate={handleProfileUpdate} />
+            )}
+          </>
+        )}
+      </main>
+
+      {/* Pricing / Upgrade Modal */}
+      <PricingModal
+        isOpen={isPricingOpen}
+        onClose={() => setIsPricingOpen(false)}
+        profile={profile}
+        currentSubscription={subscription}
+        onSubscriptionUpdated={(newSub) => setSubscription(newSub)}
+        userEmail={user?.email || 'scholar@funlylearn.ng'}
+        userId={user?.id || getOrCreateGuestSessionId()}
+      />
+
+      {/* Scholar Profile Settings Modal */}
+      <ScholarProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        profile={profile}
+        userEmail={user?.email}
+        onProfileUpdate={handleProfileUpdate}
+        onSignOut={handleSignOut}
+      />
+
+      {/* YarnGPT Voice Secret Key Modal */}
+      <VoiceKeyModal
+        isOpen={isVoiceKeyModalOpen}
+        onClose={() => setIsVoiceKeyModalOpen(false)}
+      />
+
+      {/* Bottom Navigation Bar */}
+      {view === 'app' && (
+        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      )}
+
+    </div>
+  );
+}

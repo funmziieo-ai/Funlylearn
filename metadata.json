@@ -1,0 +1,6 @@
+{
+  "name": "FunlyLearn",
+  "description": "AI homework companion for Nigerian children from Primary 3 to SS3 featuring Mama Titi, NERDC curriculum stories, YarnGPT voice narration, Naija Lingo, and parent tools.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
