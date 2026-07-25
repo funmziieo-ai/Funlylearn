@@ -108,7 +108,7 @@ export async function fetchAudioTTS(text: string, language: string): Promise<{ a
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+        'apikey': SUPABASE_PUBLISHABLE_KEY
       },
       body: JSON.stringify({ text, voice: 'Idera' })
     });
