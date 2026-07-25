@@ -29,21 +29,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 referrerPolicy="no-referrer"
               />
             </div>
-            <div>
-              <span className="font-bold text-xl sm:text-2xl tracking-tight text-emerald-900 block leading-tight">
-                FunlyLearn
-              </span>
-              <span className="text-[10px] sm:text-xs text-emerald-600 font-semibold block">
-                Official NERDC AI Companion
-              </span>
-            </div>
+            <span className="font-bold text-xl sm:text-2xl tracking-tight text-emerald-900 leading-tight">
+              FunlyLearn
+            </span>
           </div>
 
           <button
             onClick={onStartLearning}
             className="px-5 py-2.5 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-bold text-xs sm:text-sm shadow-[0_4px_0_rgba(0,0,0,0.15)] active:translate-y-1 active:shadow-none transition-all"
           >
-            Start Free 🚀
+            Start Free
           </button>
         </div>
       </header>
@@ -62,11 +57,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             Meet Mama Titi! 🇳🇬
           </h1>
 
-          <div className="flex items-start gap-4 mb-4">
-            <p className="flex-1 text-emerald-50 text-sm leading-relaxed">
-              Step-by-step Primary 3 to SS3 curriculum help through fun Nigerian stories. Available 24/7 — no expensive private lesson teacher needed!
-            </p>
-            <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-full overflow-hidden border-4 border-white/40 shadow-lg">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4">
+            <div className="w-40 h-40 sm:w-48 sm:h-48 shrink-0 rounded-full overflow-hidden border-4 border-white/40 shadow-lg order-1 sm:order-2">
               <img
                 src="/assets/images/updated-mama-titi.png"
                 alt="Mama Titi"
@@ -74,13 +66,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 referrerPolicy="no-referrer"
               />
             </div>
+            <p className="flex-1 text-emerald-50 text-sm leading-relaxed text-center sm:text-left order-2 sm:order-1">
+              Step-by-step Primary 3 to SS3 curriculum help through fun Nigerian stories. Available 24/7 — no expensive private lesson teacher needed!
+            </p>
           </div>
 
           <button
             onClick={onStartLearning}
             className="px-6 py-3 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-bold text-sm shadow-[0_4px_0_rgba(0,0,0,0.15)] active:translate-y-1 active:shadow-none transition-all"
           >
-            Start Learning Free 🚀
+            Start Learning Free
           </button>
         </div>
 
@@ -118,7 +113,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Snap any textbook question or type your topic. Mama Titi breaks down difficult concepts using relatable Nigerian stories and step-by-step examples.
             </p>
             <div className="w-full bg-white/20 backdrop-blur-md border border-white/30 font-bold py-2.5 px-4 rounded-full text-center text-sm">
-              Open Camera 📸
+              Open Camera
             </div>
           </div>
 
@@ -131,7 +126,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Master official Nigerian curriculum Yoruba (Abidi Yoruba), Igbo, and Hausa alphabets through fun Candy Crush-style letter matching games!
             </p>
             <div className="w-full bg-white/20 backdrop-blur-md border border-white/30 font-bold py-2.5 px-4 rounded-full text-center text-sm">
-              Start Playing 🌍
+              Start Playing
             </div>
           </div>
 
@@ -144,7 +139,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Generate instant summary notes, key formula flashcards, and practice past questions for Common Entrance, BECE, WAEC, and NECO exams.
             </p>
             <div className="w-full bg-white/20 backdrop-blur-md border border-white/30 font-bold py-2.5 px-4 rounded-full text-center text-sm">
-              Practice Now 📝
+              Practice Now
             </div>
           </div>
 
@@ -152,26 +147,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Catch Up Program */}
         <div className="w-full rounded-3xl bg-white border-2 border-emerald-100 shadow-lg p-5 sm:p-6 mb-6">
-          <div className="flex items-start gap-4 mb-3">
-            <div className="flex-1">
-              <span className="inline-block bg-emerald-600 text-white text-[11px] font-bold px-3 py-1 rounded-full mb-2">
-                Special Initiative
-              </span>
-              <h2 className="text-xl font-bold text-emerald-700 mb-1 flex items-center gap-2">
-                <Heart className="w-5 h-5 text-orange-400 fill-orange-400" />
-                Catch Up Program
-              </h2>
-              <p className="text-sm font-semibold text-orange-500 italic">
-                "It's Never Too Late to Learn!"
-              </p>
-            </div>
-            <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-full overflow-hidden border-4 border-emerald-100 shadow-md">
+          <div className="flex flex-col sm:flex-row items-center gap-4 mb-3">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 rounded-full overflow-hidden border-4 border-emerald-100 shadow-md">
               <img
                 src="/assets/images/mama-titi-2.png"
                 alt="Mama Titi"
                 className="w-full h-full object-cover object-top"
                 referrerPolicy="no-referrer"
               />
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <span className="inline-block bg-emerald-600 text-white text-[11px] font-bold px-3 py-1 rounded-full mb-2">
+                Special Initiative
+              </span>
+              <h2 className="text-xl font-bold text-emerald-700 mb-1 flex items-center justify-center sm:justify-start gap-2">
+                <Heart className="w-5 h-5 text-orange-400 fill-orange-400" />
+                Catch Up Program
+              </h2>
+              <p className="text-sm font-semibold text-orange-500 italic">
+                "It's Never Too Late to Learn!"
+              </p>
             </div>
           </div>
 
