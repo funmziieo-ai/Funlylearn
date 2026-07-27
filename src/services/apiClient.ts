@@ -41,13 +41,6 @@ export function saveStoredProfile(profile: UserProfile): void {
   }
 }
 
-const WELCOME_MESSAGE: ChatMessage = {
-  id: 'welcome-1',
-  sender: 'mama_titi',
-  text: 'E kaaro! I am Mama Titi! Tell me what you are studying today and I will explain through a fun Nigerian story! What topic are we solving together?',
-  timestamp: 'Just now'
-};
-
 export function getStoredChat(): ChatMessage[] {
   try {
     const saved = localStorage.getItem(CHAT_KEY);
@@ -60,7 +53,7 @@ export function getStoredChat(): ChatMessage[] {
   } catch (e) {
     console.warn('Error reading local chat:', e);
   }
-  return [WELCOME_MESSAGE];
+  return [getWelcomeMessage()];
 }
 
 export function saveStoredChat(messages: ChatMessage[]): void {
@@ -83,7 +76,7 @@ export function getWelcomeMessage(): ChatMessage {
   return {
     id: 'welcome-' + Date.now(),
     sender: 'mama_titi',
-    text: 'E kaaro! I am Mama Titi! Tell me what you are studying today and I will explain through a fun Nigerian story! What topic are we solving together?',
+    text: 'Welcome! I am Mama Titi, your Nigerian AI teacher. I teach the official Nigerian NERDC curriculum from Primary 3 to SS3 covering Mathematics, English, Sciences, Social Studies and exam preparation for Common Entrance, BECE, WAEC and JAMB. What class are you in and what would you like to study today?',
     timestamp: new Date().toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit'
@@ -117,18 +110,16 @@ export async function sendMessageToMamaTiti(params: {
         })
       }
     );
+
     if (!res.ok) {
       throw new Error('Chat network error: ' + res.status);
     }
+
     return await res.json();
   } catch (err) {
-    console.warn(
-      'Mama Titi server call failed:',
-      err
-    );
+    console.warn('Mama Titi server call failed:', err);
     return {
-      reply:
-        'Connection problem. Please check your internet and try again!',
+      reply: 'Connection problem. Please check your internet and try again!',
       timestamp: new Date().toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
@@ -158,9 +149,11 @@ export async function fetchAudioTTS(
         body: JSON.stringify({ text, voice: 'Idera' })
       }
     );
+
     if (!res.ok) {
       throw new Error('TTS network error: ' + res.status);
     }
+
     const blob = await res.blob();
     const audioBase64 = await new Promise<string>(
       (resolve, reject) => {
@@ -171,6 +164,7 @@ export async function fetchAudioTTS(
         reader.readAsDataURL(blob);
       }
     );
+
     return { audioBase64, voice: 'Idera' };
   } catch (err) {
     console.error('YarnGPT call failed:', err);
