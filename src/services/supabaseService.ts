@@ -11,7 +11,6 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
 // Guest Session Key
 const GUEST_SESSION_KEY = 'funlylearn_guest_session_id';
 const LOCAL_SUB_KEY = 'funlylearn_user_subscription_v1';
-const GUEST_DAILY_MSG_KEY = 'funlylearn_guest_daily_msgs_v1';
 
 export function getOrCreateGuestSessionId(): string {
   let id = localStorage.getItem(GUEST_SESSION_KEY);
@@ -22,31 +21,20 @@ export function getOrCreateGuestSessionId(): string {
   return id;
 }
 
-// Track guest daily message count
+// DAILY LIMIT COMPLETELY REMOVED
+// All users can send unlimited messages
+// Guest daily message functions removed
+// isLimitReached always returns false
 export function getGuestDailyMessageCount(): { count: number; date: string } {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const stored = localStorage.getItem(GUEST_DAILY_MSG_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed.date === today) {
-        return parsed;
-      }
-    }
-    return { count: 0, date: today };
-  } catch (e) {
-    return { count: 0, date: new Date().toISOString().split('T')[0] };
-  }
+  return { count: 0, date: new Date().toISOString().split('T')[0] };
 }
 
 export function incrementGuestDailyMessageCount(): number {
-  const current = getGuestDailyMessageCount();
-  const newCount = current.count + 1;
-  localStorage.setItem(GUEST_DAILY_MSG_KEY, JSON.stringify({
-    count: newCount,
-    date: current.date
-  }));
-  return newCount;
+  return 0;
+}
+
+export function isGuestLimitReached(): boolean {
+  return false;
 }
 
 // Subscription Local Cache Helper
@@ -57,7 +45,6 @@ export function getStoredSubscription(): UserSubscription {
   } catch (e) {
     console.warn('Error reading stored subscription:', e);
   }
-  // Default free trial (7 days)
   const now = new Date();
   const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   return {
@@ -78,51 +65,88 @@ export function saveStoredSubscription(sub: UserSubscription): void {
 }
 
 // AUTH FUNCTIONS
-export async function signUpWithEmail(email: string, pass: string): Promise<{ user: User | null; session: Session | null; error: string | null }> {
+export async function signUpWithEmail(
+  email: string,
+  pass: string
+): Promise<{ user: User | null; session: Session | null; error: string | null }> {
   if (!supabase) {
-    // Demo mock auth fallback when Supabase keys are not set
     const mockUser: any = { id: `usr_${Date.now()}`, email };
     return { user: mockUser, session: null, error: null };
   }
   try {
-    const { data, error } = await supabase.auth.signUp({ email, password: pass });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: pass
+    });
     if (error) {
       if (error.message.includes('already registered')) {
-        return { user: null, session: null, error: 'Account already exists. Please sign in instead!' };
+        return {
+          user: null,
+          session: null,
+          error: 'Account already exists. Please sign in instead!'
+        };
       }
       return { user: null, session: null, error: error.message };
     }
     return { user: data.user, session: data.session, error: null };
   } catch (e: any) {
-    return { user: null, session: null, error: e.message || 'Connection failed. Please check your internet.' };
+    return {
+      user: null,
+      session: null,
+      error: e.message || 'Connection failed. Please check your internet.'
+    };
   }
 }
 
-export async function signInWithEmail(email: string, pass: string): Promise<{ user: User | null; session: Session | null; error: string | null }> {
+export async function signInWithEmail(
+  email: string,
+  pass: string
+): Promise<{ user: User | null; session: Session | null; error: string | null }> {
   if (!supabase) {
     const mockUser: any = { id: `usr_${Date.now()}`, email };
     return { user: mockUser, session: null, error: null };
   }
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password: pass
+    });
     if (error) {
       if (error.message.includes('Invalid login credentials')) {
-        return { user: null, session: null, error: 'Incorrect password. Please try again or reset.' };
+        return {
+          user: null,
+          session: null,
+          error: 'Incorrect password. Please try again or reset.'
+        };
       }
       if (error.message.includes('User not found')) {
-        return { user: null, session: null, error: 'No account found. Please sign up first.' };
+        return {
+          user: null,
+          session: null,
+          error: 'No account found. Please sign up first.'
+        };
       }
       return { user: null, session: null, error: error.message };
     }
     return { user: data.user, session: data.session, error: null };
   } catch (e: any) {
-    return { user: null, session: null, error: e.message || 'Connection failed. Please check your internet.' };
+    return {
+      user: null,
+      session: null,
+      error: e.message || 'Connection failed. Please check your internet.'
+    };
   }
 }
 
-export async function signInWithGoogleOAuth(): Promise<{ user?: any; error: string | null }> {
+export async function signInWithGoogleOAuth(): Promise<{
+  user?: any;
+  error: string | null;
+}> {
   if (!supabase) {
-    const mockUser: any = { id: `google_usr_${Date.now()}`, email: 'scholar@funlylearn.ng' };
+    const mockUser: any = {
+      id: `google_usr_${Date.now()}`,
+      email: 'scholar@funlylearn.ng'
+    };
     return { user: mockUser, error: null };
   }
   try {
@@ -140,7 +164,8 @@ export async function signInWithGoogleOAuth(): Promise<{ user?: any; error: stri
         (error as any).code === 'validation_failed'
       ) {
         return {
-          error: 'Google Sign-In is not enabled on this Supabase instance yet. Please sign in with Email & Password below or Continue as Guest!'
+          error:
+            'Google Sign-In is not enabled yet. Please sign in with Email and Password or Continue as Guest!'
         };
       }
       return { error: error.message };
@@ -152,14 +177,17 @@ export async function signInWithGoogleOAuth(): Promise<{ user?: any; error: stri
       e?.message?.includes('Unsupported provider')
     ) {
       return {
-        error: 'Google Sign-In is not enabled on this Supabase instance yet. Please sign in with Email & Password below or Continue as Guest!'
+        error:
+          'Google Sign-In is not enabled yet. Please sign in with Email and Password or Continue as Guest!'
       };
     }
     return { error: e.message || 'OAuth initialization failed' };
   }
 }
 
-export async function resetPasswordForEmail(email: string): Promise<{ success: boolean; message: string }> {
+export async function resetPasswordForEmail(
+  email: string
+): Promise<{ success: boolean; message: string }> {
   if (!supabase) {
     return { success: true, message: 'Password reset email sent (Demo Mode).' };
   }
@@ -168,9 +196,15 @@ export async function resetPasswordForEmail(email: string): Promise<{ success: b
       redirectTo: `${window.location.origin}/reset-password`
     });
     if (error) return { success: false, message: error.message };
-    return { success: true, message: 'Password reset link sent to your email! Check your inbox, ọmọ mi.' };
+    return {
+      success: true,
+      message: 'Password reset link sent! Check your inbox my dear.'
+    };
   } catch (e: any) {
-    return { success: false, message: e.message || 'Reset failed. Check internet connection.' };
+    return {
+      success: false,
+      message: e.message || 'Reset failed. Check internet connection.'
+    };
   }
 }
 
@@ -181,8 +215,10 @@ export async function signOutUser(): Promise<void> {
   localStorage.removeItem(LOCAL_SUB_KEY);
 }
 
-// FETCH CHILD PROFILE FOR LOGGED IN USER OR GUEST
-export async function fetchChildProfile(userId: string): Promise<UserProfile | null> {
+// FETCH CHILD PROFILE
+export async function fetchChildProfile(
+  userId: string
+): Promise<UserProfile | null> {
   if (!supabase) return null;
   try {
     const { data, error } = await supabase
@@ -190,9 +226,7 @@ export async function fetchChildProfile(userId: string): Promise<UserProfile | n
       .select('*')
       .eq('user_id', userId)
       .single();
-
     if (error || !data) return null;
-
     return {
       id: data.id || userId,
       name: data.name || 'Scholar',
@@ -208,37 +242,48 @@ export async function fetchChildProfile(userId: string): Promise<UserProfile | n
       createdAt: data.created_at || new Date().toISOString()
     };
   } catch (e) {
-    console.warn('Error fetching profile from Supabase:', e);
+    console.warn('Error fetching profile:', e);
     return null;
   }
 }
 
-// SAVE CHILD PROFILE TO SUPABASE WITH user_id / session_id
-export async function saveChildProfileToSupabase(profile: UserProfile, userId: string): Promise<void> {
+// SAVE CHILD PROFILE
+export async function saveChildProfileToSupabase(
+  profile: UserProfile,
+  userId: string
+): Promise<void> {
   if (!supabase) return;
   try {
-    await supabase.from('child_profiles').upsert({
-      id: profile.id,
-      user_id: userId,
-      name: profile.name,
-      class_level: profile.classLevel,
-      language: profile.language,
-      is_out_of_school: profile.isOutOfSchool,
-      stars: profile.stars,
-      streak_days: profile.streakDays,
-      level: profile.level,
-      parent_approved_count: profile.parentApprovedCount,
-      unlocked_rewards: profile.unlockedRewards,
-      parent_whatsapp: profile.parentWhatsApp,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'user_id' });
+    await supabase
+      .from('child_profiles')
+      .upsert(
+        {
+          id: profile.id,
+          user_id: userId,
+          name: profile.name,
+          class_level: profile.classLevel,
+          language: profile.language,
+          is_out_of_school: profile.isOutOfSchool,
+          stars: profile.stars,
+          streak_days: profile.streakDays,
+          level: profile.level,
+          parent_approved_count: profile.parentApprovedCount,
+          unlocked_rewards: profile.unlockedRewards,
+          parent_whatsapp: profile.parentWhatsApp,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'user_id' }
+      );
   } catch (e) {
-    console.warn('Error upserting child profile to Supabase:', e);
+    console.warn('Error saving profile:', e);
   }
 }
 
-// SAVE SUBSCRIPTION TO SUPABASE TABLE 'subscriptions'
-export async function saveSubscriptionToSupabase(sub: UserSubscription, userId: string): Promise<void> {
+// SAVE SUBSCRIPTION
+export async function saveSubscriptionToSupabase(
+  sub: UserSubscription,
+  userId: string
+): Promise<void> {
   saveStoredSubscription(sub);
   if (!supabase) return;
   try {
@@ -253,12 +298,14 @@ export async function saveSubscriptionToSupabase(sub: UserSubscription, userId: 
       expires_at: sub.expiresAt || null
     });
   } catch (e) {
-    console.warn('Error saving subscription to Supabase:', e);
+    console.warn('Error saving subscription:', e);
   }
 }
 
-// FETCH USER SUBSCRIPTION FROM SUPABASE
-export async function fetchSubscriptionFromSupabase(userId: string): Promise<UserSubscription | null> {
+// FETCH SUBSCRIPTION
+export async function fetchSubscriptionFromSupabase(
+  userId: string
+): Promise<UserSubscription | null> {
   if (!supabase) return null;
   try {
     const { data, error } = await supabase
@@ -268,9 +315,7 @@ export async function fetchSubscriptionFromSupabase(userId: string): Promise<Use
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
-
     if (error || !data) return null;
-
     const sub: UserSubscription = {
       id: data.id,
       userId: data.user_id,
