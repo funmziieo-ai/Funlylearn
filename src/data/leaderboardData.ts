@@ -1,10 +1,5 @@
 import { LeaderboardUser } from '../types';
 
-// Import image assets directly from src/assets/images
-import girlAvatar from '../assets/images/3d_nigerian_girl_avatar_1784829212783.jpg';
-import boyAvatar from '../assets/images/3d_nigerian_boy_avatar_1784829225940.jpg';
-import childGlassesAvatar from '../assets/images/3d_nigerian_child_avatar_1784829240662.jpg';
-
 export const INITIAL_LEADERBOARD: LeaderboardUser[] = [
   {
     rank: 1,
@@ -12,7 +7,7 @@ export const INITIAL_LEADERBOARD: LeaderboardUser[] = [
     name: 'Amara',
     stars: 1850,
     classLevel: 'JSS 2',
-    avatarUrl: girlAvatar,
+    avatarUrl: '/assets/images/3d_nigerian_girl_avatar_1784829212783.jpg',
     levelBadge: 'LEVEL 18'
   },
   {
@@ -21,7 +16,7 @@ export const INITIAL_LEADERBOARD: LeaderboardUser[] = [
     name: 'Tunde',
     stars: 1420,
     classLevel: 'Primary 5',
-    avatarUrl: boyAvatar,
+    avatarUrl: '/assets/images/3d_nigerian_boy_avatar_1784829225940.jpg',
     levelBadge: 'LEVEL 15'
   },
   {
@@ -30,7 +25,7 @@ export const INITIAL_LEADERBOARD: LeaderboardUser[] = [
     name: 'Chidi',
     stars: 1280,
     classLevel: 'SS 1',
-    avatarUrl: childGlassesAvatar,
+    avatarUrl: '/assets/images/3d_nigerian_child_avatar_1784829240662.jpg',
     levelBadge: 'LEVEL 14'
   },
   {
@@ -39,17 +34,17 @@ export const INITIAL_LEADERBOARD: LeaderboardUser[] = [
     name: 'Zainab',
     stars: 985,
     classLevel: 'Primary 4',
-    avatarUrl: girlAvatar,
+    avatarUrl: '/assets/images/3d_nigerian_girl_avatar_1784829212783.jpg',
     levelBadge: 'LEVEL 12'
   },
   {
     rank: 5,
     id: 'user-self',
-    name: 'You (Tobi)',
+    name: 'You',
     stars: 942,
     classLevel: 'JSS 1',
     isUser: true,
-    avatarUrl: boyAvatar,
+    avatarUrl: '/assets/images/3d_nigerian_boy_avatar_1784829225940.jpg',
     levelBadge: 'LEVEL 12'
   },
   {
@@ -58,7 +53,7 @@ export const INITIAL_LEADERBOARD: LeaderboardUser[] = [
     name: 'Bayo',
     stars: 890,
     classLevel: 'Primary 6',
-    avatarUrl: childGlassesAvatar,
+    avatarUrl: '/assets/images/3d_nigerian_child_avatar_1784829240662.jpg',
     levelBadge: 'LEVEL 11'
   },
   {
@@ -67,7 +62,34 @@ export const INITIAL_LEADERBOARD: LeaderboardUser[] = [
     name: 'Nneka',
     stars: 810,
     classLevel: 'SS 2',
-    avatarUrl: girlAvatar,
+    avatarUrl: '/assets/images/3d_nigerian_girl_avatar_1784829212783.jpg',
     levelBadge: 'LEVEL 10'
+  },
+  {
+    rank: 8,
+    id: 'u7',
+    name: 'Emeka',
+    stars: 765,
+    classLevel: 'JSS 3',
+    avatarUrl: '/assets/images/3d_nigerian_boy_avatar_1784829225940.jpg',
+    levelBadge: 'LEVEL 9'
+  },
+  {
+    rank: 9,
+    id: 'u8',
+    name: 'Fatima',
+    stars: 720,
+    classLevel: 'Primary 5',
+    avatarUrl: '/assets/images/3d_nigerian_girl_avatar_1784829212783.jpg',
+    levelBadge: 'LEVEL 9'
+  },
+  {
+    rank: 10,
+    id: 'u9',
+    name: 'Seun',
+    stars: 680,
+    classLevel: 'Primary 3',
+    avatarUrl: '/assets/images/3d_nigerian_child_avatar_1784829240662.jpg',
+    levelBadge: 'LEVEL 8'
   }
 ];
