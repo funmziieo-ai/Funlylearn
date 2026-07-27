@@ -84,12 +84,15 @@ export function getWelcomeMessage(): ChatMessage {
   };
 }
 
-export async function sendMessageToMamaTiti(params: {
-  message: string;
-  profile: UserProfile;
-  imageBase64?: string;
-  conversationHistory?: ChatMessage[];
-}): Promise<{ reply: string; timestamp: string }> {
+async function sendWithRetry(
+  params: {
+    message: string;
+    profile: UserProfile;
+    imageBase64?: string;
+    conversationHistory?: ChatMessage[];
+  },
+  retries = 2
+): Promise<{ reply: string; timestamp: string }> {
   try {
     const res = await fetch(
       SUPABASE_FUNCTIONS_URL + '/mama-titi-chat',
@@ -111,15 +114,41 @@ export async function sendMessageToMamaTiti(params: {
       }
     );
 
+    if (res.status === 429 && retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      return sendWithRetry(params, retries - 1);
+    }
+
     if (!res.ok) {
       throw new Error('Chat network error: ' + res.status);
     }
 
     return await res.json();
   } catch (err) {
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return sendWithRetry(params, retries - 1);
+    }
+    throw err;
+  }
+}
+
+export async function sendMessageToMamaTiti(params: {
+  message: string;
+  profile: UserProfile;
+  imageBase64?: string;
+  conversationHistory?: ChatMessage[];
+}): Promise<{ reply: string; timestamp: string }> {
+  try {
+    return await sendWithRetry(params);
+  } catch (err) {
     console.warn('Mama Titi server call failed:', err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    const is429 = errorMsg.includes('429');
     return {
-      reply: 'Connection problem. Please check your internet and try again!',
+      reply: is429
+        ? 'Mama Titi is very busy right now! Please wait a moment and try again.'
+        : 'Connection problem. Please check your internet and try again!',
       timestamp: new Date().toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
