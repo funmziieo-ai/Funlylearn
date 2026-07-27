@@ -100,7 +100,8 @@ async function sendWithRetry(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': SUPABASE_PUBLISHABLE_KEY
+          'apikey': SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_PUBLISHABLE_KEY
         },
         body: JSON.stringify({
           message: params.message,
@@ -167,23 +168,47 @@ export async function fetchAudioTTS(
   voice?: string;
 }> {
   try {
+    if (!text || text.trim().length === 0) {
+      return { useClientSpeech: true, textToSpeak: text };
+    }
+
+    const cleanText = text
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/`{1,3}(.*?)`{1,3}/g, '$1')
+      .replace(/[✅❌⭐🌟📚🎮🇳🇬🇬🇧👍💪🔊📝🎯🏆🎉]/gu, '')
+      .trim();
+
     const res = await fetch(
       SUPABASE_FUNCTIONS_URL + '/yarngpt-proxy',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': SUPABASE_PUBLISHABLE_KEY
+          'apikey': SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_PUBLISHABLE_KEY
         },
-        body: JSON.stringify({ text, voice: 'Idera' })
+        body: JSON.stringify({
+          text: cleanText,
+          voice: 'Idera',
+          response_format: 'mp3'
+        })
       }
     );
 
     if (!res.ok) {
+      const errText = await res.text();
+      console.error('YarnGPT error:', res.status, errText);
       throw new Error('TTS network error: ' + res.status);
     }
 
     const blob = await res.blob();
+
+    if (blob.size < 100) {
+      throw new Error('Audio blob too small');
+    }
+
     const audioBase64 = await new Promise<string>(
       (resolve, reject) => {
         const reader = new FileReader();
