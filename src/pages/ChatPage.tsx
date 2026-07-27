@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Camera, Sparkles, Loader2, X, Upload, Crop } from 'lucide-react';
+import { Send, Camera, Loader2, X, Upload, Crop, RefreshCw } from 'lucide-react';
 import { UserProfile, ChatMessage, UserSubscription } from '../types';
 import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
 import { SyncedReadAlong } from '../components/SyncedReadAlong';
 import { CameraUploadModal } from '../components/CameraUploadModal';
 import { HomeworkCropModal } from '../components/HomeworkCropModal';
-import { sendMessageToMamaTiti, getStoredChat, saveStoredChat } from '../services/apiClient';
+import { sendMessageToMamaTiti, getStoredChat, saveStoredChat, clearStoredChat, getWelcomeMessage } from '../services/apiClient';
 
 interface ChatPageProps {
   profile: UserProfile;
@@ -36,21 +36,27 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
   const [croppedImage, setCroppedImage] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(
-    null
-  );
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Daily limit REMOVED — all users have unlimited messages
   const isLimitReached = false;
-  const remainingMessages = 999;
 
   useEffect(() => {
     saveStoredChat(messages);
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const handleNewChat = () => {
+    if (window.confirm('Start a fresh new chat with Mama Titi? Your current chat will be cleared.')) {
+      clearStoredChat();
+      setMessages([getWelcomeMessage()]);
+      setInputText('');
+      setCroppedImage(null);
+      setRawImageSrc(null);
+    }
+  };
 
   const handleSend = async (
     overrideText?: string,
@@ -61,11 +67,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     if (!textToSend.trim() && !imgToSend) return;
 
     const userMsg: ChatMessage = {
-      id: `u-${Date.now()}`,
+      id: 'u-' + Date.now(),
       sender: 'user',
-      text:
-        textToSend.trim() ||
-        'Mama Titi, please analyze this cropped homework photo for me!',
+      text: textToSend.trim() || 'Mama Titi, please analyze this homework photo for me!',
       timestamp: new Date().toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
@@ -89,15 +93,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       });
 
       const mamaMsg: ChatMessage = {
-        id: `m-${Date.now()}`,
+        id: 'm-' + Date.now(),
         sender: 'mama_titi',
         text: response.reply,
-        timestamp:
-          response.timestamp ||
-          new Date().toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-          })
+        timestamp: response.timestamp || new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
       };
 
       setMessages(prev => [...prev, mamaMsg]);
@@ -108,6 +110,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       });
     } catch (err) {
       console.error('Error getting response from Mama Titi:', err);
+      const errorMsg: ChatMessage = {
+        id: 'err-' + Date.now(),
+        sender: 'mama_titi',
+        text: 'Connection problem. Please check your internet and try again!',
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      };
+      setMessages(prev => [...prev, errorMsg]);
     } finally {
       setIsLoading(false);
     }
@@ -118,9 +130,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setIsCropperOpen(true);
   };
 
-  const handleDirectFileChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleDirectFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -133,10 +143,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     }
   };
 
-  const handleCropComplete = (
-    croppedBase64: string,
-    originalBase64: string
-  ) => {
+  const handleCropComplete = (croppedBase64: string, originalBase64: string) => {
     setCroppedImage(croppedBase64);
     setRawImageSrc(originalBase64);
   };
@@ -182,12 +189,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       />
 
       {isDraggingOver && (
-        <div className="absolute inset-0 z-50 bg-[#064E3B]/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-white text-center animate-fadeIn border-4 border-dashed border-amber-400">
+        <div className="absolute inset-0 z-50 bg-[#064E3B]/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-white text-center border-4 border-dashed border-amber-400">
           <div className="w-16 h-16 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-xl mb-3 animate-bounce">
             <Upload className="w-8 h-8" />
           </div>
           <h3 className="font-serif font-bold text-xl text-amber-300">
-            Drop Homework Photo Here 📸
+            Drop Homework Photo Here
           </h3>
           <p className="text-sm text-emerald-100 max-w-xs mt-1">
             Mama Titi will help you crop and analyze the question!
@@ -208,7 +215,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               Mama Titi
             </h2>
             <p className="text-xs text-emerald-200">
-              Nigerian AI Teacher 🇳🇬 · {profile.classLevel}
+              Nigerian AI Teacher {profile.classLevel}
             </p>
           </div>
         </div>
@@ -216,18 +223,26 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           <span className="px-2.5 py-1 rounded-full bg-[#022C22] text-amber-300 text-[11px] font-semibold border border-amber-400/30">
             {profile.language === 'yo' ? 'Yoruba Mode' : 'English Mode'}
           </span>
+          <button
+            onClick={handleNewChat}
+            className="px-2.5 py-1 rounded-full bg-red-900/40 text-red-300 text-[11px] font-semibold border border-red-400/30 hover:bg-red-800/50 flex items-center space-x-1"
+            title="Start a new chat"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>New Chat</span>
+          </button>
         </div>
       </div>
 
       {/* Snap Homework Bar */}
       <div className="bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2.5 px-3.5 sm:px-4 shadow-sm flex items-center justify-between shrink-0 border-b border-amber-500">
         <div className="flex items-center space-x-2">
-          <div className="p-1.5 bg-slate-950 text-amber-300 rounded-xl shadow-xs">
+          <div className="p-1.5 bg-slate-950 text-amber-300 rounded-xl">
             <Camera className="w-4 h-4" />
           </div>
           <div>
             <p className="font-serif font-bold text-xs sm:text-sm leading-tight text-slate-950">
-              Snap Your Homework 📸
+              Snap Your Homework
             </p>
             <p className="text-[10px] sm:text-[11px] text-slate-800 font-sans">
               Snap or upload photo for step-by-step help
@@ -237,14 +252,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         <div className="flex items-center space-x-1.5">
           <button
             onClick={() => setIsCameraOpen(true)}
-            className="px-3 py-1.5 rounded-full bg-slate-950 hover:bg-slate-800 text-amber-300 font-bold text-xs shadow-xs transition-all flex items-center space-x-1"
+            className="px-3 py-1.5 rounded-full bg-slate-950 hover:bg-slate-800 text-amber-300 font-bold text-xs transition-all flex items-center space-x-1"
           >
             <Camera className="w-3.5 h-3.5" />
             <span>Snap</span>
           </button>
           <button
             onClick={() => directFileInputRef.current?.click()}
-            className="px-3 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs shadow-xs transition-all flex items-center space-x-1"
+            className="px-3 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs transition-all flex items-center space-x-1"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Upload</span>
@@ -259,16 +274,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           return (
             <React.Fragment key={msg.id}>
               <div
-                className={`flex flex-col ${
-                  isMama ? 'items-start' : 'items-end'
-                } space-y-1`}
+                className={'flex flex-col ' + (isMama ? 'items-start' : 'items-end') + ' space-y-1'}
               >
                 <div
-                  className={`max-w-[88%] sm:max-w-[80%] rounded-3xl p-4 shadow-md transition-all ${
-                    isMama
-                      ? 'bg-white text-slate-900 rounded-tl-xs border-2 border-emerald-600/30'
-                      : 'bg-[#FFE8DE] text-slate-900 rounded-tr-xs border border-[#FF6B35]/30'
-                  }`}
+                  className={'max-w-[88%] sm:max-w-[80%] rounded-3xl p-4 shadow-md transition-all ' + (isMama ? 'bg-white text-slate-900 rounded-tl-xs border-2 border-emerald-600/30' : 'bg-[#FFE8DE] text-slate-900 rounded-tr-xs border border-[#FF6B35]/30')}
                 >
                   {msg.imagePath && (
                     <div className="mb-3 rounded-2xl overflow-hidden border border-amber-300/60 max-h-56 bg-slate-900 flex items-center justify-center p-1">
@@ -282,8 +291,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   {isMama ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-emerald-100">
-                        <span className="font-serif font-bold text-xs text-[#064E3B] flex items-center space-x-1">
-                          <span>Mama Titi 🇳🇬</span>
+                        <span className="font-serif font-bold text-xs text-[#064E3B]">
+                          Mama Titi
                         </span>
                         <span className="text-[10px] bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded-full font-bold">
                           AI Teacher Voice
@@ -292,15 +301,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                       <SyncedReadAlong
                         text={msg.text}
                         language={profile.language}
-                        autoPlay={
-                          isMama &&
-                          idx === messages.length - 1 &&
-                          !isLoading
-                        }
+                        autoPlay={isMama && idx === messages.length - 1 && !isLoading}
                         onSpeechStateChange={speaking =>
-                          setSpeakingMessageId(
-                            speaking ? msg.id : null
-                          )
+                          setSpeakingMessageId(speaking ? msg.id : null)
                         }
                       />
                     </div>
@@ -311,27 +314,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   )}
                 </div>
                 <span className="text-[10px] text-slate-400 font-sans px-2">
-                  {isMama ? 'Mama Titi · ' : 'You · '}
-                  {msg.timestamp}
+                  {isMama ? 'Mama Titi · ' : 'You · '}{msg.timestamp}
                 </span>
               </div>
             </React.Fragment>
           );
         })}
 
-        {/* Loading Indicator */}
         {isLoading && (
           <div className="flex items-center space-x-2 text-slate-500 text-xs italic p-2">
-            <MamaTitiAvatar
-              size="sm"
-              isSpeaking={true}
-              showOnlineStatus={false}
-            />
+            <MamaTitiAvatar size="sm" isSpeaking={true} showOnlineStatus={false} />
             <div className="flex items-center space-x-1 text-[#064E3B] font-semibold">
               <Loader2 className="w-4 h-4 animate-spin text-[#FF6B35]" />
-              <span>
-                Mama Titi is thinking of a Nigerian story for you...
-              </span>
+              <span>Mama Titi is thinking of a Nigerian story for you...</span>
             </div>
           </div>
         )}
@@ -341,7 +336,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       {/* Cropped Image Preview */}
       {croppedImage && (
         <div className="fixed bottom-[130px] sm:bottom-[135px] left-0 right-0 max-w-2xl mx-auto px-3 z-30">
-          <div className="bg-slate-900/95 backdrop-blur-md text-white p-2.5 px-3.5 rounded-2xl border-2 border-amber-400 shadow-xl flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="bg-slate-900/95 backdrop-blur-md text-white p-2.5 px-3.5 rounded-2xl border-2 border-amber-400 shadow-xl flex items-center justify-between gap-3">
             <div className="flex items-center space-x-3 overflow-hidden">
               <div className="relative w-12 h-12 rounded-xl overflow-hidden border-2 border-amber-300 bg-black/40 shrink-0">
                 <img
@@ -399,7 +394,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           </button>
           <button
             onClick={() => setIsCameraOpen(true)}
-            className="p-2.5 rounded-full bg-[#FFE8DE] hover:bg-[#FFD0BE] text-[#FF6B35] font-bold transition-all flex items-center space-x-1"
+            className="p-2.5 rounded-full bg-[#FFE8DE] hover:bg-[#FFD0BE] text-[#FF6B35] font-bold transition-all"
             title="Snap photo with camera"
           >
             <Camera className="w-4 h-4" />
@@ -411,7 +406,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             onKeyDown={e => e.key === 'Enter' && handleSend()}
             placeholder={
               croppedImage
-                ? "Ask Mama Titi a question about this photo..."
+                ? "Ask Mama Titi about this photo..."
                 : "Ask Mama Titi anything or snap homework..."
             }
             className="flex-1 bg-transparent border-none outline-none font-sans text-sm text-slate-800 placeholder:text-slate-400 px-2"
