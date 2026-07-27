@@ -24,9 +24,21 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const words = text.split(/\s+/);
 
-  // Pre-load Web Speech API voices as fallback
+  // Fix missing spaces by normalizing the text
+  const normalizeText = (raw: string): string => {
+    return raw
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/([.,!?:;])([A-Za-z])/g, '$1 $2')
+      .replace(/([A-Za-z])([0-9])/g, '$1 $2')
+      .replace(/([0-9])([A-Za-z])/g, '$1 $2')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  };
+
+  const cleanText = normalizeText(text);
+  const words = cleanText.split(/\s+/).filter(w => w.length > 0);
+
   useEffect(() => {
     const loadVoices = () => {
       if ('speechSynthesis' in window) {
@@ -34,7 +46,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         setVoices(available);
       }
     };
-
     loadVoices();
     if ('speechSynthesis' in window) {
       window.speechSynthesis.onvoiceschanged = loadVoices;
@@ -69,21 +80,19 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       stopSpeech();
       return;
     }
-
     setHasError(false);
     setIsLoading(true);
 
     try {
-      // Step 1: Call server API for YarnGPT Idera TTS
-      const ttsData = await fetchAudioTTS(text, language);
+      const ttsData = await fetchAudioTTS(cleanText, language);
 
       if (ttsData.audioBase64) {
         const audio = new Audio(ttsData.audioBase64);
         audioRef.current = audio;
 
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve) => {
           audio.onloadedmetadata = () => resolve();
-          audio.onerror = () => reject(new Error('Audio playback error'));
+          audio.onerror = () => resolve();
           setTimeout(() => resolve(), 600);
         });
 
@@ -91,13 +100,14 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         setIsPlaying(true);
         if (onSpeechStateChange) onSpeechStateChange(true);
 
-        const totalDurationMs = (audio.duration && !isNaN(audio.duration) && audio.duration > 0)
-          ? audio.duration * 1000
-          : words.length * 280;
+        const totalDurationMs =
+          audio.duration && !isNaN(audio.duration) && audio.duration > 0
+            ? audio.duration * 1000
+            : words.length * 280;
 
         const wordIntervalMs = Math.max(140, totalDurationMs / words.length);
-
         let currentIdx = 0;
+
         const interval = setInterval(() => {
           if (currentIdx < words.length) {
             setActiveWordIndex(currentIdx);
@@ -127,27 +137,31 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         return;
       }
     } catch (_e) {
-      // Fallback below
+      // Fall through to browser speech
     }
 
-    // Step 2: Fallback to Browser Speech Synthesis
+    // Fallback to Browser Speech Synthesis
     if ('speechSynthesis' in window) {
       try {
         window.speechSynthesis.cancel();
         window.speechSynthesis.resume();
 
-        const utterance = new SpeechSynthesisUtterance(text);
+        const utterance = new SpeechSynthesisUtterance(cleanText);
         speechUtteranceRef.current = utterance;
 
-        const availVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
-        const preferredVoice = availVoices.find(
-          v => v.lang.toLowerCase().includes('yo') ||
-               v.lang.toLowerCase().includes('en-ng') ||
-               v.name.toLowerCase().includes('nigeria')
-        ) || availVoices[0];
+        const availVoices =
+          voices.length > 0 ? voices : window.speechSynthesis.getVoices();
+
+        const preferredVoice =
+          availVoices.find(
+            v =>
+              v.lang.toLowerCase().includes('en-gb') ||
+              v.lang.toLowerCase().includes('en-us') ||
+              v.name.toLowerCase().includes('female')
+          ) || availVoices[0];
 
         if (preferredVoice) utterance.voice = preferredVoice;
-        utterance.rate = 0.9;
+        utterance.rate = 0.85;
         utterance.pitch = 1.05;
 
         utterance.onstart = () => {
@@ -156,7 +170,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           if (onSpeechStateChange) onSpeechStateChange(true);
         };
 
-        utterance.onboundary = (event) => {
+        utterance.onboundary = event => {
           if (event.name === 'word') {
             const charIndex = event.charIndex;
             let accumulated = 0;
@@ -186,11 +200,17 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
         window.speechSynthesis.speak(utterance);
 
-        // Word interval timer
         let currentIdx = 0;
-        const intervalMs = Math.max(200, (text.length * 55) / words.length);
+        const intervalMs = Math.max(
+          200,
+          (cleanText.length * 55) / words.length
+        );
+
         const fallbackTimer = setInterval(() => {
-          if (window.speechSynthesis.speaking && currentIdx < words.length) {
+          if (
+            window.speechSynthesis.speaking &&
+            currentIdx < words.length
+          ) {
             setActiveWordIndex(currentIdx);
             currentIdx++;
           } else {
@@ -200,7 +220,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
         return;
       } catch (_err) {
-        // Continue to error state
+        // Fall through to error state
       }
     }
 
@@ -211,52 +231,56 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   };
 
   return (
-    <div className={`space-y-2.5 ${className}`}>
+    <div className={'space-y-2.5 ' + className}>
       {/* Words display with active word highlight */}
       <div className="leading-relaxed text-slate-900 text-sm sm:text-base font-sans">
         {words.map((word, idx) => {
           const isActive = activeWordIndex === idx;
           return (
-            <span
-              key={idx}
-              className={`transition-all duration-150 inline-block mr-1 my-0.5 ${
-                isActive
-                  ? 'bg-amber-200 text-amber-950 font-bold px-1.5 py-0.5 rounded scale-105 ring-2 ring-amber-400'
-                  : ''
-              }`}
-            >
-              {word}
-            </span>
+            <React.Fragment key={idx}>
+              <span
+                className={
+                  'transition-all duration-150 inline ' +
+                  (isActive
+                    ? 'bg-amber-200 text-amber-950 font-bold px-0.5 rounded ring-1 ring-amber-400'
+                    : '')
+                }
+              >
+                {word}
+              </span>
+              {idx < words.length - 1 ? ' ' : ''}
+            </React.Fragment>
           );
         })}
       </div>
 
-      {/* Audio narration Listen button & states */}
+      {/* Listen button */}
       <div className="pt-1 flex items-center space-x-2">
         {isLoading ? (
-          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-jakarta font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-xs">
+          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
-            <span>Generating Idera Voice...</span>
+            <span>Loading Idera Voice...</span>
           </div>
         ) : hasError ? (
           <button
             onClick={handlePlay}
             type="button"
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-jakarta font-bold bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 transition-all shadow-xs"
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 transition-all"
           >
             <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-            <span>Couldn't load audio, try again</span>
+            <span>Try again</span>
             <RotateCcw className="w-3 h-3 ml-0.5" />
           </button>
         ) : (
           <button
             onClick={handlePlay}
             type="button"
-            className={`inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-jakarta font-bold transition-all shadow-xs ${
-              isPlaying
+            className={
+              'inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ' +
+              (isPlaying
                 ? 'bg-[#FF6B35] text-white hover:bg-[#E85523] ring-2 ring-amber-300'
-                : 'bg-[#064E3B] text-white hover:bg-[#022C22]'
-            }`}
+                : 'bg-[#064E3B] text-white hover:bg-[#022C22]')
+            }
           >
             {isPlaying ? (
               <>
@@ -266,7 +290,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
             ) : (
               <>
                 <Volume2 className="w-3.5 h-3.5 text-amber-300" />
-                <span>Listen to Voice 🔊</span>
+                <span>Listen to Voice</span>
               </>
             )}
           </button>
