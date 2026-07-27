@@ -1,8 +1,9 @@
 import { LeaderboardUser } from '../types';
 
-const girlAvatar = '/assets/images/3d_nigerian_girl_avatar_1784829212783.jpg';
-const boyAvatar = '/assets/images/3d_nigerian_boy_avatar_1784829225940.jpg';
-const childGlassesAvatar = '/assets/images/3d_nigerian_child_avatar_1784829240662.jpg';
+// Import image assets directly from src/assets/images
+import girlAvatar from '../assets/images/3d_nigerian_girl_avatar_1784829212783.jpg';
+import boyAvatar from '../assets/images/3d_nigerian_boy_avatar_1784829225940.jpg';
+import childGlassesAvatar from '../assets/images/3d_nigerian_child_avatar_1784829240662.jpg';
 
 export const INITIAL_LEADERBOARD: LeaderboardUser[] = [
   {
