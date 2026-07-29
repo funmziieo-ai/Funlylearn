@@ -22,7 +22,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   const [hasError, setHasError] = useState(false);
   const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [currentSentenceIdx, setCurrentSentenceIdx] = useState(0);
 
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -41,11 +40,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
   const cleanText = normalizeText(text);
   const words = cleanText.split(/\s+/).filter(w => w.length > 0);
-
-  const sentences = cleanText
-    .split(/(?<=[.!?])\s+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 2);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -85,17 +79,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     setIsPlaying(false);
     setIsLoading(false);
     setActiveWordIndex(null);
-    setCurrentSentenceIdx(0);
     if (onSpeechStateChange) onSpeechStateChange(false);
-  };
-
-  const getWordOffset = (sentenceIdx: number): number => {
-    let offset = 0;
-    for (let i = 0; i < sentenceIdx; i++) {
-      const sentWords = sentences[i].split(/\s+/).filter(w => w.length > 0);
-      offset += sentWords.length;
-    }
-    return offset;
   };
 
   const playWithBrowserSpeech = (fullText: string) => {
@@ -164,131 +148,22 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     window.speechSynthesis.speak(utterance);
 
     let currentIdx = 0;
-    const intervalMs = Math.max(180, (cleanText.length * 50) / words.length);
+    const intervalMs = Math.max(
+      180,
+      (cleanText.length * 50) / words.length
+    );
     intervalRef.current = setInterval(() => {
-      if (!stoppedRef.current && window.speechSynthesis.speaking && currentIdx < words.length) {
+      if (
+        !stoppedRef.current &&
+        window.speechSynthesis.speaking &&
+        currentIdx < words.length
+      ) {
         setActiveWordIndex(currentIdx);
         currentIdx++;
       } else {
         if (intervalRef.current) clearInterval(intervalRef.current);
       }
     }, intervalMs);
-  };
-
-  const playSentencesWithIdera = async () => {
-    stoppedRef.current = false;
-
-    for (let i = 0; i < sentences.length; i++) {
-      if (stoppedRef.current) break;
-
-      setCurrentSentenceIdx(i);
-      const wordOffset = getWordOffset(i);
-      const sentWords = sentences[i].split(/\s+/).filter(w => w.length > 0);
-
-      try {
-        const ttsData = await fetchAudioTTS(sentences[i], language);
-
-        if (stoppedRef.current) break;
-
-        if (ttsData.audioBase64) {
-          await new Promise<void>((resolve) => {
-            const audio = new Audio(ttsData.audioBase64);
-            audioRef.current = audio;
-
-            audio.onloadedmetadata = () => {
-              const totalDurationMs =
-                audio.duration && !isNaN(audio.duration) && audio.duration > 0
-                  ? audio.duration * 1000
-                  : sentWords.length * 350;
-
-              const wordIntervalMs = Math.max(
-                200,
-                totalDurationMs / sentWords.length
-              );
-
-              let wordIdx = 0;
-              intervalRef.current = setInterval(() => {
-                if (stoppedRef.current) {
-                  if (intervalRef.current) clearInterval(intervalRef.current);
-                  resolve();
-                  return;
-                }
-                if (wordIdx < sentWords.length) {
-                  setActiveWordIndex(wordOffset + wordIdx);
-                  wordIdx++;
-                } else {
-                  if (intervalRef.current) clearInterval(intervalRef.current);
-                }
-              }, wordIntervalMs);
-            };
-
-            audio.onended = () => {
-              if (intervalRef.current) clearInterval(intervalRef.current);
-              audioRef.current = null;
-              resolve();
-            };
-
-            audio.onerror = () => {
-              if (intervalRef.current) clearInterval(intervalRef.current);
-              audioRef.current = null;
-              resolve();
-            };
-
-            audio.play().catch(() => resolve());
-          });
-        } else {
-          await new Promise<void>((resolve) => {
-            const sentWordCount = sentWords.length;
-            const msPerWord = 350;
-            let wordIdx = 0;
-            intervalRef.current = setInterval(() => {
-              if (stoppedRef.current) {
-                if (intervalRef.current) clearInterval(intervalRef.current);
-                resolve();
-                return;
-              }
-              if (wordIdx < sentWordCount) {
-                setActiveWordIndex(wordOffset + wordIdx);
-                wordIdx++;
-              } else {
-                if (intervalRef.current) clearInterval(intervalRef.current);
-                resolve();
-              }
-            }, msPerWord);
-          });
-        }
-      } catch {
-        if (stoppedRef.current) break;
-        const sentWordCount = sentWords.length;
-        let wordIdx = 0;
-        await new Promise<void>((resolve) => {
-          intervalRef.current = setInterval(() => {
-            if (stoppedRef.current) {
-              if (intervalRef.current) clearInterval(intervalRef.current);
-              resolve();
-              return;
-            }
-            if (wordIdx < sentWordCount) {
-              setActiveWordIndex(wordOffset + wordIdx);
-              wordIdx++;
-            } else {
-              if (intervalRef.current) clearInterval(intervalRef.current);
-              resolve();
-            }
-          }, 300);
-        });
-      }
-
-      if (i < sentences.length - 1 && !stoppedRef.current) {
-        await new Promise(r => setTimeout(r, 200));
-      }
-    }
-
-    if (!stoppedRef.current) {
-      setIsPlaying(false);
-      setActiveWordIndex(null);
-      if (onSpeechStateChange) onSpeechStateChange(false);
-    }
   };
 
   const handlePlay = async () => {
@@ -302,15 +177,67 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     setIsLoading(true);
 
     try {
-      const firstTts = await fetchAudioTTS(sentences[0] || cleanText, language);
+      const ttsData = await fetchAudioTTS(cleanText, language);
 
       if (stoppedRef.current) return;
 
-      if (firstTts.audioBase64) {
+      if (ttsData.audioBase64) {
+        const audio = new Audio(ttsData.audioBase64);
+        audioRef.current = audio;
+
+        const totalDurationMs = await new Promise<number>((resolve) => {
+          audio.onloadedmetadata = () => {
+            resolve(
+              audio.duration && !isNaN(audio.duration) && audio.duration > 0
+                ? audio.duration * 1000
+                : words.length * 320
+            );
+          };
+          setTimeout(() => resolve(words.length * 320), 800);
+        });
+
+        if (stoppedRef.current) return;
+
         setIsLoading(false);
         setIsPlaying(true);
         if (onSpeechStateChange) onSpeechStateChange(true);
-        await playSentencesWithIdera();
+
+        const wordIntervalMs = Math.max(
+          180,
+          totalDurationMs / words.length
+        );
+
+        let currentIdx = 0;
+        intervalRef.current = setInterval(() => {
+          if (stoppedRef.current) {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            return;
+          }
+          if (currentIdx < words.length) {
+            setActiveWordIndex(currentIdx);
+            currentIdx++;
+          } else {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+          }
+        }, wordIntervalMs);
+
+        audio.onended = () => {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          setIsPlaying(false);
+          setActiveWordIndex(null);
+          audioRef.current = null;
+          if (onSpeechStateChange) onSpeechStateChange(false);
+        };
+
+        audio.onerror = () => {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          setIsPlaying(false);
+          setIsLoading(false);
+          setHasError(true);
+          if (onSpeechStateChange) onSpeechStateChange(false);
+        };
+
+        await audio.play();
       } else {
         setIsLoading(false);
         setIsPlaying(true);
