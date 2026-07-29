@@ -6,6 +6,8 @@ import { SyncedReadAlong } from '../components/SyncedReadAlong';
 import { CameraUploadModal } from '../components/CameraUploadModal';
 import { HomeworkCropModal } from '../components/HomeworkCropModal';
 import { sendMessageToMamaTiti, getStoredChat, saveStoredChat, clearStoredChat, getWelcomeMessage } from '../services/apiClient';
+import { getUnlockedLevels } from '../utils/coinsSystem';
+import { StoryVisual } from '../components/StoryVisual';
 
 interface ChatPageProps {
   profile: UserProfile;
@@ -27,7 +29,7 @@ const FUN_LOADING_MESSAGES = [
   'Checking the NERDC curriculum',
   'Packing wisdom from Lagos',
   'Almost ready my dear scholar',
-  'Mama Titi says e kaaro',
+  'Mama Titi says good morning',
 ];
 
 export const ChatPage: React.FC<ChatPageProps> = ({
@@ -53,12 +55,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [loadingMessage, setLoadingMessage] = useState(FUN_LOADING_MESSAGES[0]);
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationCount, setCelebrationCount] = useState(0);
+  const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isLimitReached = false;
+  const userCoins = profile.coins || 0;
 
   useEffect(() => {
     saveStoredChat(messages);
@@ -154,9 +158,28 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
       setMessages(prev => [...prev, mamaMsg]);
 
+      const isCorrect = response.reply.toLowerCase().includes('ehhh');
+      const currentStreak = isCorrect ? (profile.correctStreak || 0) + 1 : 0;
+      const streakBonus = isCorrect && currentStreak % 3 === 0 ? 20 : 0;
+      const coinsEarned = isCorrect ? 10 + streakBonus : imgToSend ? 5 : 0;
+
+      if (coinsEarned > 0) {
+        setCoinsEarnedToast(coinsEarned);
+        setTimeout(() => setCoinsEarnedToast(null), 2500);
+      }
+
       onProfileUpdate({
         ...profile,
-        stars: profile.stars + 10
+        stars: profile.stars + (isCorrect ? 10 : 0),
+        coins: (profile.coins || 0) + coinsEarned,
+        correctStreak: isCorrect ? currentStreak : 0,
+        totalCorrect: (profile.totalCorrect || 0) + (isCorrect ? 1 : 0),
+        homeworksSnapped: imgToSend
+          ? (profile.homeworksSnapped || 0) + 1
+          : profile.homeworksSnapped || 0,
+        lingoLevel: getUnlockedLevels(
+          (profile.coins || 0) + coinsEarned
+        ).length
       });
     } catch (err) {
       console.error('Error getting response from Mama Titi:', err);
@@ -229,6 +252,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     'Gold star for you!',
     'You are a superstar!',
     'JAMB and WAEC are not your mate!',
+    'Brilliant Nigerian scholar!',
+    'Your parents will be so proud!',
   ];
 
   return (
@@ -241,8 +266,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       {/* Celebration Splash */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-8 text-center space-y-4 mx-6 shadow-2xl border-4 border-amber-400 animate-bounce-in">
-            <div className="text-7xl">🎉</div>
+          <div className="bg-white rounded-3xl p-8 text-center space-y-4 mx-6 shadow-2xl border-4 border-amber-400">
+            <div className="text-7xl animate-bounce">🎉</div>
             <h2 className="font-serif font-bold text-2xl text-[#064E3B]">
               Ehhh! You Got It!
             </h2>
@@ -253,6 +278,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               <span className="animate-bounce" style={{ animationDelay: '0ms' }}>⭐</span>
               <span className="animate-bounce" style={{ animationDelay: '150ms' }}>⭐</span>
               <span className="animate-bounce" style={{ animationDelay: '300ms' }}>⭐</span>
+            </div>
+            <div className="bg-amber-50 rounded-2xl px-4 py-2 border border-amber-200">
+              <p className="text-amber-700 font-bold text-sm">
+                +10 coins earned! 🪙
+              </p>
+              <p className="text-amber-600 text-xs">
+                Total: {userCoins + 10} coins
+              </p>
             </div>
             <div className="flex justify-center space-x-2 text-2xl">
               <span>🇳🇬</span>
@@ -266,6 +299,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               Keep Going!
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Coins Toast */}
+      {coinsEarnedToast && (
+        <div className="fixed top-20 right-4 z-40 bg-amber-400 text-slate-900 px-4 py-2 rounded-full shadow-lg font-bold text-sm animate-bounce">
+          +{coinsEarnedToast} 🪙 coins earned!
         </div>
       )}
 
@@ -306,8 +346,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1 bg-amber-400 text-slate-900 rounded-full px-2.5 py-1 text-[11px] font-bold">
+            <span>🪙</span>
+            <span>{userCoins}</span>
+          </div>
           <span className="px-2.5 py-1 rounded-full bg-[#022C22] text-amber-300 text-[11px] font-semibold border border-amber-400/30">
-            {profile.language === 'yo' ? 'Yoruba Mode' : 'English Mode'}
+            {profile.language === 'yo' ? 'Yoruba' : 'English'}
           </span>
           <button
             onClick={handleNewChat}
@@ -330,7 +374,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               Snap Your Homework
             </p>
             <p className="text-[10px] sm:text-[11px] text-slate-800 font-sans">
-              Snap or upload photo for step-by-step help
+              Earn 5 coins per homework snap!
             </p>
           </div>
         </div>
@@ -391,6 +435,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                           setSpeakingMessageId(speaking ? msg.id : null)
                         }
                       />
+                      <StoryVisual text={msg.text} />
                     </div>
                   ) : (
                     <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
@@ -406,7 +451,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           );
         })}
 
-        {/* Fun Loading Indicator */}
+        {/* Fun Loading */}
         {isLoading && (
           <div className="flex items-start space-x-2">
             <MamaTitiAvatar size="sm" isSpeaking={false} showOnlineStatus={false} />
@@ -435,7 +480,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               <div className="relative w-12 h-12 rounded-xl overflow-hidden border-2 border-amber-300 bg-black/40 shrink-0">
                 <img
                   src={croppedImage}
-                  alt="Cropped Homework Preview"
+                  alt="Cropped Homework"
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -493,8 +538,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             onKeyDown={e => e.key === 'Enter' && handleSend()}
             placeholder={
               croppedImage
-                ? "Ask Mama Titi about this photo..."
-                : "Ask Mama Titi anything or snap homework..."
+                ? 'Ask Mama Titi about this photo...'
+                : 'Ask Mama Titi anything or snap homework...'
             }
             className="flex-1 bg-transparent border-none outline-none font-sans text-sm text-slate-800 placeholder:text-slate-400 px-2"
           />
