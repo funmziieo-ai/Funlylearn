@@ -41,7 +41,22 @@ export function saveStoredProfile(profile: UserProfile): void {
   }
 }
 
-export function getStoredChat(): ChatMessage[] {
+export function getWelcomeMessage(language?: string): ChatMessage {
+  const isYoruba = language === 'yo';
+  return {
+    id: 'welcome-' + Date.now(),
+    sender: 'mama_titi',
+    text: isYoruba
+      ? 'Ẹ kaaro! Orukọ mi ni Mama Titi. Mo jẹ olukọ AI ara Naijiria rẹ ninu FunlyLearn. Mo n kọ ẹkọ ile iwe lati Primary 3 si SS3 pẹlu Mathematics, English, Science, Social Studies ati igbaradi fun Common Entrance, BECE, WAEC ati JAMB. Kini kilasi rẹ ati kini o fẹ kọ loni?'
+      : 'Welcome! I am Mama Titi, your Nigerian AI teacher. I teach the official Nigerian NERDC curriculum from Primary 3 to SS3 covering Mathematics, English, Sciences, Social Studies and exam preparation for Common Entrance, BECE, WAEC and JAMB. What class are you in and what would you like to study today?',
+    timestamp: new Date().toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  };
+}
+
+export function getStoredChat(language?: string): ChatMessage[] {
   try {
     const saved = localStorage.getItem(CHAT_KEY);
     if (saved) {
@@ -53,7 +68,7 @@ export function getStoredChat(): ChatMessage[] {
   } catch (e) {
     console.warn('Error reading local chat:', e);
   }
-  return [getWelcomeMessage()];
+  return [getWelcomeMessage(language)];
 }
 
 export function saveStoredChat(messages: ChatMessage[]): void {
@@ -70,18 +85,6 @@ export function clearStoredChat(): void {
   } catch (e) {
     console.warn('Error clearing local chat:', e);
   }
-}
-
-export function getWelcomeMessage(): ChatMessage {
-  return {
-    id: 'welcome-' + Date.now(),
-    sender: 'mama_titi',
-    text: 'Welcome! I am Mama Titi, your Nigerian AI teacher. I teach the official Nigerian NERDC curriculum from Primary 3 to SS3 covering Mathematics, English, Sciences, Social Studies and exam preparation for Common Entrance, BECE, WAEC and JAMB. What class are you in and what would you like to study today?',
-    timestamp: new Date().toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  };
 }
 
 async function sendWithRetry(
@@ -146,10 +149,15 @@ export async function sendMessageToMamaTiti(params: {
     console.warn('Mama Titi server call failed:', err);
     const errorMsg = err instanceof Error ? err.message : String(err);
     const is429 = errorMsg.includes('429');
+    const isYoruba = params.profile.language === 'yo';
     return {
       reply: is429
-        ? 'Mama Titi is very busy right now! Please wait a moment and try again.'
-        : 'Connection problem. Please check your internet and try again!',
+        ? isYoruba
+          ? 'Mama Titi ti n ṣiṣẹ pupọ lọwọlọwọ! Jọwọ duro fun igba diẹ ki o tun gbiyanju.'
+          : 'Mama Titi is very busy right now! Please wait a moment and try again.'
+        : isYoruba
+          ? 'Iṣoro asopọ wa. Jọwọ ṣayẹwo intanẹẹti rẹ ki o tun gbiyanju!'
+          : 'Connection problem. Please check your internet and try again!',
       timestamp: new Date().toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
@@ -209,15 +217,12 @@ export async function fetchAudioTTS(
       throw new Error('Audio blob too small');
     }
 
-    const audioBase64 = await new Promise<string>(
-      (resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () =>
-          resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      }
-    );
+    const audioBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
 
     return { audioBase64, voice: 'Idera' };
   } catch (err) {
