@@ -25,6 +25,11 @@ export interface UserProfile {
   unlockedRewards: string[];
   parentWhatsApp?: string;
   createdAt: string;
+  coins?: number;
+  lingoLevel?: number;
+  correctStreak?: number;
+  totalCorrect?: number;
+  homeworksSnapped?: number;
 }
 
 export interface CurriculumTopic {
@@ -115,3 +120,19 @@ export interface AuthState {
   isLoading: boolean;
 }
 
+export interface LingoLevel {
+  id: number;
+  name: string;
+  description: string;
+  coinsRequired: number;
+  emoji: string;
+  color: string;
+  bgColor: string;
+}
+
+export interface CoinTransaction {
+  id: string;
+  amount: number;
+  reason: string;
+  timestamp: string;
+}
