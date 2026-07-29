@@ -32,6 +32,17 @@ const FUN_LOADING_MESSAGES = [
   'Mama Titi says good morning',
 ];
 
+const CELEBRATION_MESSAGES = [
+  'You are a genius!',
+  'Mama Titi is so proud of you!',
+  'Gold star for you today!',
+  'You are an absolute superstar!',
+  'JAMB and WAEC are not your mate!',
+  'Brilliant Nigerian scholar!',
+  'Your parents will be so proud!',
+  'You are going to the top!',
+];
+
 export const ChatPage: React.FC<ChatPageProps> = ({
   profile,
   subscription,
@@ -61,24 +72,51 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const directFileInputRef = useRef<HTMLInputElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const isLimitReached = false;
   const userCoins = profile.coins || 0;
+
+  const playCelebrationSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const notes = [523, 659, 784, 1047];
+      notes.forEach((freq, i) => {
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.frequency.value = freq;
+        oscillator.type = 'sine';
+        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + i * 0.15);
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.001,
+          audioCtx.currentTime + i * 0.15 + 0.3
+        );
+        oscillator.start(audioCtx.currentTime + i * 0.15);
+        oscillator.stop(audioCtx.currentTime + i * 0.15 + 0.3);
+      });
+    } catch (_e) {}
+  };
 
   useEffect(() => {
     saveStoredChat(messages);
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
-    if (messages.length > 0) {
-      const lastMsg = messages[messages.length - 1];
-      if (
-        lastMsg.sender === 'mama_titi' &&
-        lastMsg.text &&
-        lastMsg.text.toLowerCase().includes('ehhh')
-      ) {
-        setShowCelebration(true);
-        setCelebrationCount(c => c + 1);
-        setTimeout(() => setShowCelebration(false), 4000);
-      }
+    if (messages.length < 3) return;
+
+    const lastMsg = messages[messages.length - 1];
+    const secondLastMsg = messages[messages.length - 2];
+
+    const childAnswered = secondLastMsg?.sender === 'user';
+    const mamaReplied = lastMsg?.sender === 'mama_titi';
+    const isCorrect =
+      lastMsg?.text?.toLowerCase().includes('ehhh') &&
+      !lastMsg?.text?.toLowerCase().includes('welcome') &&
+      !lastMsg?.text?.toLowerCase().includes('what class');
+
+    if (childAnswered && mamaReplied && isCorrect) {
+      setShowCelebration(true);
+      setCelebrationCount(c => c + 1);
+      playCelebrationSound();
+      setTimeout(() => setShowCelebration(false), 5000);
     }
   }, [messages]);
 
@@ -122,7 +160,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     const userMsg: ChatMessage = {
       id: 'u-' + Date.now(),
       sender: 'user',
-      text: textToSend.trim() || 'Mama Titi please analyze this homework photo for me!',
+      text:
+        textToSend.trim() ||
+        'Mama Titi please analyze this homework photo for me!',
       timestamp: new Date().toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
@@ -150,18 +190,27 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         id: 'm-' + Date.now(),
         sender: 'mama_titi',
         text: response.reply,
-        timestamp: response.timestamp || new Date().toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
-        })
+        timestamp:
+          response.timestamp ||
+          new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
       };
 
       setMessages(prev => [...prev, mamaMsg]);
 
       const isCorrect = response.reply.toLowerCase().includes('ehhh');
-      const currentStreak = isCorrect ? (profile.correctStreak || 0) + 1 : 0;
-      const streakBonus = isCorrect && currentStreak % 3 === 0 ? 20 : 0;
-      const coinsEarned = isCorrect ? 10 + streakBonus : imgToSend ? 5 : 0;
+      const currentStreak = isCorrect
+        ? (profile.correctStreak || 0) + 1
+        : 0;
+      const streakBonus =
+        isCorrect && currentStreak % 3 === 0 ? 20 : 0;
+      const coinsEarned = isCorrect
+        ? 10 + streakBonus
+        : imgToSend
+        ? 5
+        : 0;
 
       if (coinsEarned > 0) {
         setCoinsEarnedToast(coinsEarned);
@@ -173,7 +222,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         stars: profile.stars + (isCorrect ? 10 : 0),
         coins: (profile.coins || 0) + coinsEarned,
         correctStreak: isCorrect ? currentStreak : 0,
-        totalCorrect: (profile.totalCorrect || 0) + (isCorrect ? 1 : 0),
+        totalCorrect:
+          (profile.totalCorrect || 0) + (isCorrect ? 1 : 0),
         homeworksSnapped: imgToSend
           ? (profile.homeworksSnapped || 0) + 1
           : profile.homeworksSnapped || 0,
@@ -203,7 +253,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setIsCropperOpen(true);
   };
 
-  const handleDirectFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDirectFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -216,7 +268,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     }
   };
 
-  const handleCropComplete = (croppedBase64: string, originalBase64: string) => {
+  const handleCropComplete = (
+    croppedBase64: string,
+    originalBase64: string
+  ) => {
     setCroppedImage(croppedBase64);
     setRawImageSrc(originalBase64);
   };
@@ -245,16 +300,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       reader.readAsDataURL(file);
     }
   };
-
-  const CELEBRATION_MESSAGES = [
-    'You are a genius!',
-    'Mama Titi is so proud!',
-    'Gold star for you!',
-    'You are a superstar!',
-    'JAMB and WAEC are not your mate!',
-    'Brilliant Nigerian scholar!',
-    'Your parents will be so proud!',
-  ];
 
   return (
     <div
@@ -403,10 +448,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           return (
             <React.Fragment key={msg.id}>
               <div
-                className={'flex flex-col ' + (isMama ? 'items-start' : 'items-end') + ' space-y-1'}
+                className={
+                  'flex flex-col ' +
+                  (isMama ? 'items-start' : 'items-end') +
+                  ' space-y-1'
+                }
               >
                 <div
-                  className={'max-w-[88%] sm:max-w-[80%] rounded-3xl p-4 shadow-md transition-all ' + (isMama ? 'bg-white text-slate-900 rounded-tl-xs border-2 border-emerald-600/30' : 'bg-[#FFE8DE] text-slate-900 rounded-tr-xs border border-[#FF6B35]/30')}
+                  className={
+                    'max-w-[88%] sm:max-w-[80%] rounded-3xl p-4 shadow-md transition-all ' +
+                    (isMama
+                      ? 'bg-white text-slate-900 rounded-tl-xs border-2 border-emerald-600/30'
+                      : 'bg-[#FFE8DE] text-slate-900 rounded-tr-xs border border-[#FF6B35]/30')
+                  }
                 >
                   {msg.imagePath && (
                     <div className="mb-3 rounded-2xl overflow-hidden border border-amber-300/60 max-h-56 bg-slate-900 flex items-center justify-center p-1">
@@ -430,9 +484,15 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                       <SyncedReadAlong
                         text={msg.text}
                         language={profile.language}
-                        autoPlay={isMama && idx === messages.length - 1 && !isLoading}
+                        autoPlay={
+                          isMama &&
+                          idx === messages.length - 1 &&
+                          !isLoading
+                        }
                         onSpeechStateChange={speaking =>
-                          setSpeakingMessageId(speaking ? msg.id : null)
+                          setSpeakingMessageId(
+                            speaking ? msg.id : null
+                          )
                         }
                       />
                       <StoryVisual text={msg.text} />
@@ -444,7 +504,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   )}
                 </div>
                 <span className="text-[10px] text-slate-400 font-sans px-2">
-                  {isMama ? 'Mama Titi · ' : 'You · '}{msg.timestamp}
+                  {isMama ? 'Mama Titi · ' : 'You · '}
+                  {msg.timestamp}
                 </span>
               </div>
             </React.Fragment>
@@ -454,13 +515,26 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         {/* Fun Loading */}
         {isLoading && (
           <div className="flex items-start space-x-2">
-            <MamaTitiAvatar size="sm" isSpeaking={false} showOnlineStatus={false} />
+            <MamaTitiAvatar
+              size="sm"
+              isSpeaking={false}
+              showOnlineStatus={false}
+            />
             <div className="bg-white rounded-3xl rounded-tl-xs border-2 border-emerald-600/30 px-4 py-3 shadow-md max-w-[80%]">
               <div className="flex items-center space-x-2 mb-2">
                 <div className="flex space-x-1">
-                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span
+                    className="w-2 h-2 bg-amber-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '0ms' }}
+                  />
+                  <span
+                    className="w-2 h-2 bg-amber-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '150ms' }}
+                  />
+                  <span
+                    className="w-2 h-2 bg-amber-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '300ms' }}
+                  />
                 </div>
               </div>
               <p className="text-xs text-emerald-700 font-medium italic">
