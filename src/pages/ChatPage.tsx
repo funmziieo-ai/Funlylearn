@@ -1,13 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Camera, Loader2, X, Upload, Crop, RefreshCw } from 'lucide-react';
+import { Send, Camera, X, Upload, Crop, RefreshCw } from 'lucide-react';
 import { UserProfile, ChatMessage, UserSubscription } from '../types';
 import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
 import { SyncedReadAlong } from '../components/SyncedReadAlong';
 import { CameraUploadModal } from '../components/CameraUploadModal';
 import { HomeworkCropModal } from '../components/HomeworkCropModal';
-import { sendMessageToMamaTiti, getStoredChat, saveStoredChat, clearStoredChat, getWelcomeMessage } from '../services/apiClient';
-import { getUnlockedLevels } from '../utils/coinsSystem';
 import { StoryVisual } from '../components/StoryVisual';
+import {
+  sendMessageToMamaTiti,
+  getStoredChat,
+  saveStoredChat,
+  clearStoredChat,
+  getWelcomeMessage
+} from '../services/apiClient';
+import { getUnlockedLevels } from '../utils/coinsSystem';
 
 interface ChatPageProps {
   profile: UserProfile;
@@ -16,10 +22,11 @@ interface ChatPageProps {
   onIncrementDailyMessages: () => number;
   onProfileUpdate: (profile: UserProfile) => void;
   onOpenPricingModal: () => void;
+  onGoToLingo?: () => void;
   isGuest?: boolean;
 }
 
-const FUN_LOADING_MESSAGES = [
+const FUN_LOADING_MESSAGES_EN = [
   'Mama Titi is cooking up a story for you',
   'Getting a Nigerian story ready',
   'Mama Titi is thinking of Tunde and Amaka',
@@ -32,7 +39,20 @@ const FUN_LOADING_MESSAGES = [
   'Mama Titi says good morning',
 ];
 
-const CELEBRATION_MESSAGES = [
+const FUN_LOADING_MESSAGES_YO = [
+  'Mama Titi n pese itan fun e',
+  'A n lọ si oja Balogun fun imọran',
+  'Mama Titi n ronu nipa Tunde ati Amaka',
+  'N ṣe eba ati egusi ti imo',
+  'Mama Titi n bọ wa',
+  'N ṣayẹwo eto ẹkọ NERDC',
+  'N ko ọgbọn lati Lagos wa',
+  'Fẹrẹ ti pari ọmọ mi olooye',
+  'Mama Titi n wa pẹlu itan',
+  'Suuru ọmọ mi olooye',
+];
+
+const CELEBRATION_MESSAGES_EN = [
   'You are a genius!',
   'Mama Titi is so proud of you!',
   'Gold star for you today!',
@@ -43,6 +63,17 @@ const CELEBRATION_MESSAGES = [
   'You are going to the top!',
 ];
 
+const CELEBRATION_MESSAGES_YO = [
+  'Ọmọ olooye ni e!',
+  'Mama Titi ni igberaga fun e gan an!',
+  'Irawọ wura fun e loni!',
+  'E jẹ ẹlẹgàn nla kan!',
+  'JAMB ati WAEC kii ṣe ẹlẹgàn rẹ!',
+  'Akẹkọ Naijiria ti o ni ọgbọn!',
+  'Awọn obi rẹ yoo ni igberaga!',
+  'O n lọ si oke!',
+];
+
 export const ChatPage: React.FC<ChatPageProps> = ({
   profile,
   subscription,
@@ -50,10 +81,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   onIncrementDailyMessages,
   onProfileUpdate,
   onOpenPricingModal,
+  onGoToLingo,
   isGuest = false
 }) => {
+  const isYoruba = profile.language === 'yo';
+
   const [messages, setMessages] = useState<ChatMessage[]>(
-    () => getStoredChat()
+    () => getStoredChat(profile.language)
   );
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -63,7 +97,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [croppedImage, setCroppedImage] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
-  const [loadingMessage, setLoadingMessage] = useState(FUN_LOADING_MESSAGES[0]);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationCount, setCelebrationCount] = useState(0);
   const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
@@ -73,6 +107,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const userCoins = profile.coins || 0;
+  const loadingMessages = isYoruba ? FUN_LOADING_MESSAGES_YO : FUN_LOADING_MESSAGES_EN;
+  const celebrationMessages = isYoruba ? CELEBRATION_MESSAGES_YO : CELEBRATION_MESSAGES_EN;
 
   const playCelebrationSound = () => {
     try {
@@ -108,9 +144,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     const childAnswered = secondLastMsg?.sender === 'user';
     const mamaReplied = lastMsg?.sender === 'mama_titi';
     const isCorrect =
-      lastMsg?.text?.toLowerCase().includes('ehhh') &&
+      (lastMsg?.text?.toLowerCase().includes('ehhh') ||
+        lastMsg?.text?.toLowerCase().includes('o ti gba a')) &&
       !lastMsg?.text?.toLowerCase().includes('welcome') &&
-      !lastMsg?.text?.toLowerCase().includes('what class');
+      !lastMsg?.text?.toLowerCase().includes('kaaro') &&
+      messages.length > 2;
 
     if (childAnswered && mamaReplied && isCorrect) {
       setShowCelebration(true);
@@ -123,9 +161,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   useEffect(() => {
     if (isLoading) {
       let idx = 0;
+      setLoadingMessage(loadingMessages[0]);
       loadingIntervalRef.current = setInterval(() => {
-        idx = (idx + 1) % FUN_LOADING_MESSAGES.length;
-        setLoadingMessage(FUN_LOADING_MESSAGES[idx]);
+        idx = (idx + 1) % loadingMessages.length;
+        setLoadingMessage(loadingMessages[idx]);
       }, 1800);
     } else {
       if (loadingIntervalRef.current) {
@@ -140,9 +179,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   }, [isLoading]);
 
   const handleNewChat = () => {
-    if (window.confirm('Start a fresh new chat with Mama Titi?')) {
+    const confirmMsg = isYoruba
+      ? 'Ṣe o fẹ bẹrẹ ibaraẹnisọrọ tuntun pẹlu Mama Titi?'
+      : 'Start a fresh new chat with Mama Titi?';
+    if (window.confirm(confirmMsg)) {
       clearStoredChat();
-      setMessages([getWelcomeMessage()]);
+      setMessages([getWelcomeMessage(profile.language)]);
       setInputText('');
       setCroppedImage(null);
       setRawImageSrc(null);
@@ -157,12 +199,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     const imgToSend = imagePayload || croppedImage;
     if (!textToSend.trim() && !imgToSend) return;
 
+    const defaultImageText = isYoruba
+      ? 'Mama Titi jọwọ wo aworan iṣẹ ile mi ki o ran mi lọwọ!'
+      : 'Mama Titi please analyze this homework photo for me!';
+
     const userMsg: ChatMessage = {
       id: 'u-' + Date.now(),
       sender: 'user',
-      text:
-        textToSend.trim() ||
-        'Mama Titi please analyze this homework photo for me!',
+      text: textToSend.trim() || defaultImageText,
       timestamp: new Date().toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
@@ -176,7 +220,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setCroppedImage(null);
     setRawImageSrc(null);
     setIsLoading(true);
-    setLoadingMessage(FUN_LOADING_MESSAGES[0]);
+    setLoadingMessage(loadingMessages[0]);
 
     try {
       const response = await sendMessageToMamaTiti({
@@ -200,7 +244,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
       setMessages(prev => [...prev, mamaMsg]);
 
-      const isCorrect = response.reply.toLowerCase().includes('ehhh');
+      const isCorrect =
+        response.reply.toLowerCase().includes('ehhh') ||
+        response.reply.toLowerCase().includes('o ti gba a');
+
       const currentStreak = isCorrect
         ? (profile.correctStreak || 0) + 1
         : 0;
@@ -236,7 +283,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       const errorMsg: ChatMessage = {
         id: 'err-' + Date.now(),
         sender: 'mama_titi',
-        text: 'Connection problem. Please check your internet and try again!',
+        text: isYoruba
+          ? 'Iṣoro asopọ wa. Jọwọ ṣayẹwo intanẹẹti rẹ ki o tun gbiyanju!'
+          : 'Connection problem. Please check your internet and try again!',
         timestamp: new Date().toLocaleTimeString([], {
           hour: '2-digit',
           minute: '2-digit'
@@ -308,16 +357,17 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       onDrop={handleDrop}
       className="flex flex-col h-[calc(100vh-64px)] max-w-2xl mx-auto bg-[#FFFBF5] relative overflow-hidden"
     >
+
       {/* Celebration Splash */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-8 text-center space-y-4 mx-6 shadow-2xl border-4 border-amber-400">
             <div className="text-7xl animate-bounce">🎉</div>
             <h2 className="font-serif font-bold text-2xl text-[#064E3B]">
-              Ehhh! You Got It!
+              {isYoruba ? 'Ehhh! O Ti Gba A!' : 'Ehhh! You Got It!'}
             </h2>
             <p className="text-slate-600 font-sans text-sm">
-              {CELEBRATION_MESSAGES[celebrationCount % CELEBRATION_MESSAGES.length]}
+              {celebrationMessages[celebrationCount % celebrationMessages.length]}
             </p>
             <div className="flex justify-center space-x-3 text-4xl">
               <span className="animate-bounce" style={{ animationDelay: '0ms' }}>⭐</span>
@@ -326,10 +376,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             </div>
             <div className="bg-amber-50 rounded-2xl px-4 py-2 border border-amber-200">
               <p className="text-amber-700 font-bold text-sm">
-                +10 coins earned! 🪙
+                {isYoruba ? '+10 owó ere! 🪙' : '+10 coins earned! 🪙'}
               </p>
               <p className="text-amber-600 text-xs">
-                Total: {userCoins + 10} coins
+                {isYoruba ? 'Apapọ: ' : 'Total: '}{userCoins + 10} {isYoruba ? 'owó' : 'coins'}
               </p>
             </div>
             <div className="flex justify-center space-x-2 text-2xl">
@@ -337,12 +387,26 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               <span>🏆</span>
               <span>🇳🇬</span>
             </div>
-            <button
-              onClick={() => setShowCelebration(false)}
-              className="mt-2 px-6 py-2 rounded-full bg-[#064E3B] text-white text-sm font-bold"
-            >
-              Keep Going!
-            </button>
+            <div className="flex flex-col space-y-2">
+              {onGoToLingo && (
+                <button
+                  onClick={() => {
+                    setShowCelebration(false);
+                    onGoToLingo();
+                  }}
+                  className="px-6 py-2 rounded-full bg-[#5B21B6] text-white text-sm font-bold flex items-center justify-center space-x-2"
+                >
+                  <span>🌍</span>
+                  <span>{isYoruba ? 'Lọ Kọ Yoruba!' : 'Go Learn Yoruba!'}</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowCelebration(false)}
+                className="px-6 py-2 rounded-full bg-[#064E3B] text-white text-sm font-bold"
+              >
+                {isYoruba ? 'Tẹsiwaju!' : 'Keep Going!'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -350,7 +414,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       {/* Coins Toast */}
       {coinsEarnedToast && (
         <div className="fixed top-20 right-4 z-40 bg-amber-400 text-slate-900 px-4 py-2 rounded-full shadow-lg font-bold text-sm animate-bounce">
-          +{coinsEarnedToast} 🪙 coins earned!
+          +{coinsEarnedToast} 🪙 {isYoruba ? 'owó ere!' : 'coins earned!'}
         </div>
       )}
 
@@ -368,7 +432,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             <Upload className="w-8 h-8" />
           </div>
           <h3 className="font-serif font-bold text-xl text-amber-300">
-            Drop Homework Photo Here
+            {isYoruba ? 'Sọ Aworan Iṣẹ Ile Silẹ Nibi' : 'Drop Homework Photo Here'}
           </h3>
         </div>
       )}
@@ -386,7 +450,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               Mama Titi
             </h2>
             <p className="text-xs text-emerald-200">
-              Nigerian AI Teacher {profile.classLevel}
+              {isYoruba
+                ? 'Olukọ AI Naijiria ' + profile.classLevel
+                : 'Nigerian AI Teacher ' + profile.classLevel}
             </p>
           </div>
         </div>
@@ -396,14 +462,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             <span>{userCoins}</span>
           </div>
           <span className="px-2.5 py-1 rounded-full bg-[#022C22] text-amber-300 text-[11px] font-semibold border border-amber-400/30">
-            {profile.language === 'yo' ? 'Yoruba' : 'English'}
+            {isYoruba ? 'Yoruba' : 'English'}
           </span>
           <button
             onClick={handleNewChat}
             className="px-2.5 py-1 rounded-full bg-red-900/40 text-red-300 text-[11px] font-semibold border border-red-400/30 hover:bg-red-800/50 flex items-center space-x-1"
           >
             <RefreshCw className="w-3 h-3" />
-            <span>New</span>
+            <span>{isYoruba ? 'Tuntun' : 'New'}</span>
           </button>
         </div>
       </div>
@@ -416,10 +482,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           </div>
           <div>
             <p className="font-serif font-bold text-xs sm:text-sm leading-tight text-slate-950">
-              Snap Your Homework
+              {isYoruba ? 'Ṣe Aworan Iṣẹ Ile Rẹ' : 'Snap Your Homework'}
             </p>
             <p className="text-[10px] sm:text-[11px] text-slate-800 font-sans">
-              Earn 5 coins per homework snap!
+              {isYoruba
+                ? 'Gba owó ere 5 fun aworan iṣẹ ile kọọkan!'
+                : 'Earn 5 coins per homework snap!'}
             </p>
           </div>
         </div>
@@ -429,14 +497,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             className="px-3 py-1.5 rounded-full bg-slate-950 hover:bg-slate-800 text-amber-300 font-bold text-xs transition-all flex items-center space-x-1"
           >
             <Camera className="w-3.5 h-3.5" />
-            <span>Snap</span>
+            <span>{isYoruba ? 'Yaworan' : 'Snap'}</span>
           </button>
           <button
             onClick={() => directFileInputRef.current?.click()}
             className="px-3 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs transition-all flex items-center space-x-1"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Upload</span>
+            <span>{isYoruba ? 'Gbe Soke' : 'Upload'}</span>
           </button>
         </div>
       </div>
@@ -478,7 +546,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                           Mama Titi
                         </span>
                         <span className="text-[10px] bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded-full font-bold">
-                          AI Teacher Voice
+                          {isYoruba ? 'Ohun Idera' : 'AI Teacher Voice'}
                         </span>
                       </div>
                       <SyncedReadAlong
@@ -504,7 +572,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   )}
                 </div>
                 <span className="text-[10px] text-slate-400 font-sans px-2">
-                  {isMama ? 'Mama Titi · ' : 'You · '}
+                  {isMama ? 'Mama Titi · ' : (isYoruba ? 'Iwọ · ' : 'You · ')}
                   {msg.timestamp}
                 </span>
               </div>
@@ -523,18 +591,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             <div className="bg-white rounded-3xl rounded-tl-xs border-2 border-emerald-600/30 px-4 py-3 shadow-md max-w-[80%]">
               <div className="flex items-center space-x-2 mb-2">
                 <div className="flex space-x-1">
-                  <span
-                    className="w-2 h-2 bg-amber-400 rounded-full animate-bounce"
-                    style={{ animationDelay: '0ms' }}
-                  />
-                  <span
-                    className="w-2 h-2 bg-amber-400 rounded-full animate-bounce"
-                    style={{ animationDelay: '150ms' }}
-                  />
-                  <span
-                    className="w-2 h-2 bg-amber-400 rounded-full animate-bounce"
-                    style={{ animationDelay: '300ms' }}
-                  />
+                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
               </div>
               <p className="text-xs text-emerald-700 font-medium italic">
@@ -561,10 +620,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               <div className="truncate space-y-0.5">
                 <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px] flex items-center space-x-1">
                   <Crop className="w-3 h-3 text-slate-950" />
-                  <span>Cropped Question Ready</span>
+                  <span>
+                    {isYoruba ? 'Ibeere Ti Ge Tan' : 'Cropped Question Ready'}
+                  </span>
                 </span>
                 <p className="text-[11px] text-emerald-300 font-medium">
-                  Ready for Mama Titi
+                  {isYoruba ? 'Ṣetan fun Mama Titi' : 'Ready for Mama Titi'}
                 </p>
               </div>
             </div>
@@ -574,7 +635,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                 className="p-2 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 font-bold text-xs transition-colors flex items-center space-x-1"
               >
                 <Crop className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Edit</span>
               </button>
               <button
                 onClick={() => {
@@ -611,7 +671,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             onChange={e => setInputText(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSend()}
             placeholder={
-              croppedImage
+              isYoruba
+                ? croppedImage
+                  ? 'Beere Mama Titi nipa aworan yii...'
+                  : 'Beere Mama Titi ohunkohun tabi ṣe aworan iṣẹ ile...'
+                : croppedImage
                 ? 'Ask Mama Titi about this photo...'
                 : 'Ask Mama Titi anything or snap homework...'
             }
