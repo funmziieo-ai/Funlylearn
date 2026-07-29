@@ -17,6 +17,19 @@ interface ChatPageProps {
   isGuest?: boolean;
 }
 
+const FUN_LOADING_MESSAGES = [
+  'Mama Titi is cooking up a story for you',
+  'Getting a Nigerian story ready',
+  'Mama Titi is thinking of Tunde and Amaka',
+  'Visiting Ojuelegba market for ideas',
+  'Stirring the egusi soup of knowledge',
+  'Mama Titi is on her way',
+  'Checking the NERDC curriculum',
+  'Packing wisdom from Lagos',
+  'Almost ready my dear scholar',
+  'Mama Titi says e kaaro',
+];
+
 export const ChatPage: React.FC<ChatPageProps> = ({
   profile,
   subscription,
@@ -37,19 +50,55 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [croppedImage, setCroppedImage] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState(FUN_LOADING_MESSAGES[0]);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationCount, setCelebrationCount] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
+  const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isLimitReached = false;
 
   useEffect(() => {
     saveStoredChat(messages);
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (
+        lastMsg.sender === 'mama_titi' &&
+        lastMsg.text &&
+        lastMsg.text.toLowerCase().includes('ehhh')
+      ) {
+        setShowCelebration(true);
+        setCelebrationCount(c => c + 1);
+        setTimeout(() => setShowCelebration(false), 4000);
+      }
+    }
   }, [messages]);
 
+  useEffect(() => {
+    if (isLoading) {
+      let idx = 0;
+      loadingIntervalRef.current = setInterval(() => {
+        idx = (idx + 1) % FUN_LOADING_MESSAGES.length;
+        setLoadingMessage(FUN_LOADING_MESSAGES[idx]);
+      }, 1800);
+    } else {
+      if (loadingIntervalRef.current) {
+        clearInterval(loadingIntervalRef.current);
+      }
+    }
+    return () => {
+      if (loadingIntervalRef.current) {
+        clearInterval(loadingIntervalRef.current);
+      }
+    };
+  }, [isLoading]);
+
   const handleNewChat = () => {
-    if (window.confirm('Start a fresh new chat with Mama Titi? Your current chat will be cleared.')) {
+    if (window.confirm('Start a fresh new chat with Mama Titi?')) {
       clearStoredChat();
       setMessages([getWelcomeMessage()]);
       setInputText('');
@@ -69,7 +118,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     const userMsg: ChatMessage = {
       id: 'u-' + Date.now(),
       sender: 'user',
-      text: textToSend.trim() || 'Mama Titi, please analyze this homework photo for me!',
+      text: textToSend.trim() || 'Mama Titi please analyze this homework photo for me!',
       timestamp: new Date().toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
@@ -83,6 +132,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setCroppedImage(null);
     setRawImageSrc(null);
     setIsLoading(true);
+    setLoadingMessage(FUN_LOADING_MESSAGES[0]);
 
     try {
       const response = await sendMessageToMamaTiti({
@@ -173,6 +223,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     }
   };
 
+  const CELEBRATION_MESSAGES = [
+    'You are a genius!',
+    'Mama Titi is so proud!',
+    'Gold star for you!',
+    'You are a superstar!',
+    'JAMB and WAEC are not your mate!',
+  ];
+
   return (
     <div
       onDragOver={handleDragOver}
@@ -180,6 +238,37 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       onDrop={handleDrop}
       className="flex flex-col h-[calc(100vh-64px)] max-w-2xl mx-auto bg-[#FFFBF5] relative overflow-hidden"
     >
+      {/* Celebration Splash */}
+      {showCelebration && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-8 text-center space-y-4 mx-6 shadow-2xl border-4 border-amber-400 animate-bounce-in">
+            <div className="text-7xl">🎉</div>
+            <h2 className="font-serif font-bold text-2xl text-[#064E3B]">
+              Ehhh! You Got It!
+            </h2>
+            <p className="text-slate-600 font-sans text-sm">
+              {CELEBRATION_MESSAGES[celebrationCount % CELEBRATION_MESSAGES.length]}
+            </p>
+            <div className="flex justify-center space-x-3 text-4xl">
+              <span className="animate-bounce" style={{ animationDelay: '0ms' }}>⭐</span>
+              <span className="animate-bounce" style={{ animationDelay: '150ms' }}>⭐</span>
+              <span className="animate-bounce" style={{ animationDelay: '300ms' }}>⭐</span>
+            </div>
+            <div className="flex justify-center space-x-2 text-2xl">
+              <span>🇳🇬</span>
+              <span>🏆</span>
+              <span>🇳🇬</span>
+            </div>
+            <button
+              onClick={() => setShowCelebration(false)}
+              className="mt-2 px-6 py-2 rounded-full bg-[#064E3B] text-white text-sm font-bold"
+            >
+              Keep Going!
+            </button>
+          </div>
+        </div>
+      )}
+
       <input
         type="file"
         ref={directFileInputRef}
@@ -196,9 +285,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           <h3 className="font-serif font-bold text-xl text-amber-300">
             Drop Homework Photo Here
           </h3>
-          <p className="text-sm text-emerald-100 max-w-xs mt-1">
-            Mama Titi will help you crop and analyze the question!
-          </p>
         </div>
       )}
 
@@ -226,10 +312,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           <button
             onClick={handleNewChat}
             className="px-2.5 py-1 rounded-full bg-red-900/40 text-red-300 text-[11px] font-semibold border border-red-400/30 hover:bg-red-800/50 flex items-center space-x-1"
-            title="Start a new chat"
           >
             <RefreshCw className="w-3 h-3" />
-            <span>New Chat</span>
+            <span>New</span>
           </button>
         </div>
       </div>
@@ -283,7 +368,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                     <div className="mb-3 rounded-2xl overflow-hidden border border-amber-300/60 max-h-56 bg-slate-900 flex items-center justify-center p-1">
                       <img
                         src={msg.imagePath}
-                        alt="Homework Question"
+                        alt="Homework"
                         className="w-full max-h-56 object-contain rounded-xl"
                       />
                     </div>
@@ -321,12 +406,21 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           );
         })}
 
+        {/* Fun Loading Indicator */}
         {isLoading && (
-          <div className="flex items-center space-x-2 text-slate-500 text-xs italic p-2">
-            <MamaTitiAvatar size="sm" isSpeaking={true} showOnlineStatus={false} />
-            <div className="flex items-center space-x-1 text-[#064E3B] font-semibold">
-              <Loader2 className="w-4 h-4 animate-spin text-[#FF6B35]" />
-              <span>Mama Titi is thinking of a Nigerian story for you...</span>
+          <div className="flex items-start space-x-2">
+            <MamaTitiAvatar size="sm" isSpeaking={false} showOnlineStatus={false} />
+            <div className="bg-white rounded-3xl rounded-tl-xs border-2 border-emerald-600/30 px-4 py-3 shadow-md max-w-[80%]">
+              <div className="flex items-center space-x-2 mb-2">
+                <div className="flex space-x-1">
+                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+              <p className="text-xs text-emerald-700 font-medium italic">
+                {loadingMessage}...
+              </p>
             </div>
           </div>
         )}
@@ -346,17 +440,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                 />
               </div>
               <div className="truncate space-y-0.5">
-                <div className="flex items-center space-x-1.5">
-                  <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px] flex items-center space-x-1">
-                    <Crop className="w-3 h-3 text-slate-950" />
-                    <span>Cropped Question</span>
-                  </span>
-                  <span className="text-[11px] text-emerald-300 font-medium">
-                    Ready for Mama Titi
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-300 truncate font-sans">
-                  Targeted question photo attached
+                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px] flex items-center space-x-1">
+                  <Crop className="w-3 h-3 text-slate-950" />
+                  <span>Cropped Question Ready</span>
+                </span>
+                <p className="text-[11px] text-emerald-300 font-medium">
+                  Ready for Mama Titi
                 </p>
               </div>
             </div>
@@ -366,7 +455,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                 className="p-2 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 font-bold text-xs transition-colors flex items-center space-x-1"
               >
                 <Crop className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Edit Crop</span>
+                <span className="hidden sm:inline">Edit</span>
               </button>
               <button
                 onClick={() => {
@@ -388,14 +477,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           <button
             onClick={() => directFileInputRef.current?.click()}
             className="p-2.5 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-[#064E3B] transition-all"
-            title="Upload homework photo"
           >
             <Upload className="w-4 h-4" />
           </button>
           <button
             onClick={() => setIsCameraOpen(true)}
             className="p-2.5 rounded-full bg-[#FFE8DE] hover:bg-[#FFD0BE] text-[#FF6B35] font-bold transition-all"
-            title="Snap photo with camera"
           >
             <Camera className="w-4 h-4" />
           </button>
