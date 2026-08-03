@@ -22,6 +22,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   const [hasError, setHasError] = useState(false);
   const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
 
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -174,6 +175,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
     stoppedRef.current = false;
     setHasError(false);
+    setQuotaMessage(null);
     setIsLoading(true);
 
     try {
@@ -239,6 +241,9 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
         await audio.play();
       } else {
+        if (ttsData.quotaMessage) {
+          setQuotaMessage(ttsData.quotaMessage);
+        }
         setIsLoading(false);
         setIsPlaying(true);
         if (onSpeechStateChange) onSpeechStateChange(true);
@@ -276,6 +281,12 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           );
         })}
       </div>
+
+      {quotaMessage && (
+        <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          {quotaMessage}
+        </div>
+      )}
 
       <div className="pt-1 flex items-center space-x-2">
         {isLoading ? (
