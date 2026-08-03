@@ -174,6 +174,7 @@ export async function fetchAudioTTS(
   useClientSpeech?: boolean;
   textToSpeak?: string;
   voice?: string;
+  quotaMessage?: string;
 }> {
   try {
     if (!text || text.trim().length === 0) {
@@ -208,7 +209,23 @@ export async function fetchAudioTTS(
     if (!res.ok) {
       const errText = await res.text();
       console.error('YarnGPT error:', res.status, errText);
-      throw new Error('TTS network error: ' + res.status);
+
+      // yarngpt-proxy sends back a friendly, actionable message with
+      // quotaLikely: true when the daily voice limit has been hit.
+      // Preserve that message instead of discarding it below.
+      let quotaMsg: string | undefined;
+      try {
+        const errJson = JSON.parse(errText);
+        if (errJson && errJson.quotaLikely) {
+          quotaMsg = errJson.error;
+        }
+      } catch {
+        // errText wasn't JSON — not a quota response, ignore.
+      }
+
+      throw new Error(
+        quotaMsg ? 'QUOTA:' + quotaMsg : 'TTS network error: ' + res.status
+      );
     }
 
     const blob = await res.blob();
@@ -227,6 +244,16 @@ export async function fetchAudioTTS(
     return { audioBase64, voice: 'Idera' };
   } catch (err) {
     console.error('YarnGPT call failed:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+
+    if (msg.startsWith('QUOTA:')) {
+      return {
+        useClientSpeech: true,
+        textToSpeak: text,
+        quotaMessage: msg.replace('QUOTA:', '')
+      };
+    }
+
     return { useClientSpeech: true, textToSpeak: text };
   }
 }
