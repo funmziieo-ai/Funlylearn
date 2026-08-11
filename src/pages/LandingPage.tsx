@@ -327,19 +327,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 desc: 'Homework help at 10pm Sunday night before Monday\'s test? No problem. Mama Titi never sleeps.'
               },
               {
-                icon: '💡',
-                title: 'For parents and teachers together',
-                desc: 'Whether you are a parent at home or a teacher in school Mama Titi is your perfect support partner. Use FunlyLearn to reinforce what was taught in class and watch your child or student grow.'
-              },
-              {
                 icon: '🏆',
                 title: 'Games that make children come back',
                 desc: 'Coins streaks and word games make learning feel like play. Children ask to use FunlyLearn not the other way around.'
-              },
-              {
-                icon: '🇳🇬',
-                title: 'Built entirely for Nigerian children',
-                desc: 'Every story uses Nigerian names like Tunde Amaka Chidi Fatima. Every example uses Naira. Every place is Lagos Ibadan Kano or Abuja.'
               },
             ].map((item, i) => (
               <div key={i} className="flex items-start space-x-3">
@@ -374,13 +364,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <span className="px-2 py-0.5 rounded-full bg-[#FF6B35] text-white text-[10px] font-black">Special</span>
           </div>
 
-          <div className="flex items-start space-x-4 mb-4">
-            <img
-              src={mamaTitiMain}
-              alt="Mama Titi"
-              className="w-20 h-20 rounded-2xl object-cover object-top shrink-0 shadow-md border-2 border-amber-200"
-              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
+          <div className="mb-4">
             <p className="text-sm text-slate-600 leading-relaxed">
               Not currently in school? Mama Titi teaches the full NERDC curriculum in your own language so you can catch up at your own pace from wherever you are.
             </p>
@@ -421,13 +405,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <p className="text-slate-500 text-sm mb-6">
             Join Nigerian children learning with Mama Titi today.
           </p>
-
-          {/* Three avatars above button */}
-          <div className="flex items-center justify-center mb-5">
-            <img src={girlAvatar} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-md" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-            <img src={boyAvatar} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-md -ml-2 z-10" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-            <img src={childAvatar} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-md -ml-2" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-          </div>
 
           <button
             onClick={onStartLearning}
