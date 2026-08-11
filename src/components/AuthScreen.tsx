@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { supabase } from '../services/supabaseService';
 import { MamaTitiAvatar } from './MamaTitiAvatar';
 
@@ -17,16 +17,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
-
-  const handleGoogleSignIn = async () => {
-    if (!supabase) return;
-    setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    });
-    if (error) setError(error.message);
-  };
 
   const handleEmailAuth = async () => {
     if (!supabase) return;
@@ -75,22 +65,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
         Learn, play, and grow with Mama Titi
       </p>
 
-      {/* Big primary actions */}
+      {/* Primary action */}
       <div className="w-full max-w-sm space-y-3">
-        <button
-          onClick={handleGoogleSignIn}
-          className="w-full flex items-center justify-center gap-3 bg-white rounded-2xl py-4 shadow-md active:scale-[0.98] transition-transform"
-        >
-          <svg width="22" height="22" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.2-.1-2.5-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 15.1 18.9 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.2C29.3 35.6 26.8 36 24 36c-5.3 0-9.7-3.4-11.3-8.1l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.6l6.3 5.2C40.8 36.6 44 31 44 24c0-1.2-.1-2.5-.4-3.5z"/></svg>
-          <span className="font-bold text-slate-800">Continue with Google</span>
-        </button>
-
         <button
           onClick={onContinueAsGuest}
           className="w-full flex items-center justify-center gap-2 bg-[#FFC107] rounded-2xl py-4 shadow-md active:scale-[0.98] transition-transform"
         >
-          <Sparkles className="w-5 h-5 text-emerald-900" />
-          <span className="font-bold text-emerald-900">Start Learning Now — No Sign Up</span>
+          <span className="font-bold text-emerald-900">Start Learning Now</span>
         </button>
 
         <p className="text-center text-emerald-200 text-xs px-4">
