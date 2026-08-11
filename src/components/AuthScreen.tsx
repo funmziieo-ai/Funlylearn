@@ -19,7 +19,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
   const handleEmailAuth = async () => {
-    if (!supabase) return;
+    if (!supabase) {
+      setError('Unable to connect right now. Please check your connection and try again.');
+      return;
+    }
     setError(null);
     setInfoMsg(null);
 
