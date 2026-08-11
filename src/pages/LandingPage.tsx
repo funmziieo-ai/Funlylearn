@@ -19,7 +19,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-slate-100 px-4 py-3">
-        <div className="max-w-lg mx-auto flex items-center">
+        <div className="max-w-lg mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <div className="w-9 h-9 rounded-xl bg-[#00A651] flex items-center justify-center shadow-sm">
               <span className="text-white font-black text-lg">F</span>
@@ -28,6 +28,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Funly<span className="text-[#00A651]">Learn</span>
             </span>
           </div>
+          <button
+            onClick={onStartLearning}
+            className="text-sm font-bold text-slate-500 hover:text-slate-800 underline"
+          >
+            Skip
+          </button>
         </div>
       </header>
 
