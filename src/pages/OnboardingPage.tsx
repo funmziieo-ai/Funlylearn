@@ -72,7 +72,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#FFFBF5] text-slate-800 font-sans flex flex-col justify-between p-4 sm:p-6">
+    <div className="h-screen overflow-hidden bg-[#FFFBF5] text-slate-800 font-sans flex flex-col p-4 sm:p-6">
 
       {/* Header */}
       <div className="max-w-md mx-auto w-full flex items-center justify-between py-2">
@@ -119,7 +119,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
       </div>
 
       {/* Main Content */}
-      <div className="max-w-md mx-auto w-full flex-1 flex flex-col justify-center py-6">
+      <div className="max-w-md mx-auto w-full flex-1 overflow-y-auto flex flex-col justify-center py-6">
 
         {/* STEP 1 — Name */}
         {step === 1 && (
@@ -427,7 +427,6 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
               className="w-full py-4 rounded-full bg-gradient-to-r from-[#064E3B] to-[#5B21B6] hover:opacity-95 text-white font-bold text-base shadow-lg transition-all flex items-center justify-center space-x-2"
             >
               <span>Start Learning with Mama Titi!</span>
-              <span>🚀</span>
             </button>
 
             <p className="text-[11px] text-slate-400">
