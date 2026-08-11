@@ -110,7 +110,6 @@ const getLetterItemsForWord = (targetWord: CrushWord | null, lang: Language): Le
   const wordLetters: { letter: string; phonetics: string }[] = [];
 
   if (targetWord && targetWord.word) {
-    // Normalize string to separate combining diacritics (like tone accents), then strip tone marks while preserving sub-dots
     const rawNormalized = targetWord.word.normalize('NFD').replace(/[\u0300\u0301\u0302\u0304]/g, '').normalize('NFC');
     const str = rawNormalized.toUpperCase();
     const digraphs = ['GB', 'KP', 'TS', 'CH', 'SH', 'GW', 'KW', 'NW', 'NY'];
@@ -150,7 +149,6 @@ const getLetterItemsForWord = (targetWord: CrushWord | null, lang: Language): Le
     });
   }
 
-  // Fill remaining slots up to 3-4 with language alphabet defaults for high match density
   const defaults = getLetterItemsForLanguage(lang);
   for (const def of defaults) {
     if (wordLetters.length >= 3) break;
@@ -254,7 +252,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
   onBackToApp,
   isStandalonePreview = true
 }) => {
-  // Game Setup State
   const [mode, setMode] = useState<GameMode>('fruit_match');
   const [language, setLanguage] = useState<Language>('Yoruba');
   const [score, setScore] = useState<number>(0);
@@ -266,26 +263,22 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
   const [level, setLevel] = useState<number>(1);
   const [comboCount, setComboCount] = useState<number>(0);
 
-  // Modals & Overlay States
   const [showLevelComplete, setShowLevelComplete] = useState<boolean>(false);
   const [showGameOver, setShowGameOver] = useState<boolean>(false);
   const [showGrandmaScript, setShowGrandmaScript] = useState<boolean>(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string>('Swap adjacent fruits to match 3 in a row!');
   const [shakingItemId, setShakingItemId] = useState<string | null>(null);
 
-  // --- MODE 1: CANDY CRUSH FRUIT MATCH STATES ---
   const [fruitTargetWord, setFruitTargetWord] = useState<CrushWord | null>(null);
   const [candyGrid, setCandyGrid] = useState<CandyCell[][]>([]);
   const [selectedCell, setSelectedCell] = useState<{ r: number; c: number } | null>(null);
   const [isProcessingMatch, setIsProcessingMatch] = useState<boolean>(false);
 
-  // --- MODE 2: LEGO WORD BUILDER STATES ---
   const [builderDifficulty, setBuilderDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
   const [builderWord, setBuilderWord] = useState<CrushWord | null>(null);
   const [jumbledBlocks, setJumbledBlocks] = useState<{ id: string; letter: string }[]>([]);
   const [placedSlots, setPlacedSlots] = useState<(string | null)[]>([]);
 
-  // --- MODE 3: SPEED CRUSH STATES ---
   const [speedTarget, setSpeedTarget] = useState<CrushWord | null>(null);
   const [fallingItems, setFallingItems] = useState<
     { id: string; word: CrushWord; top: number; left: number; speed: number }[]
@@ -294,11 +287,56 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
   const speedLoopRef = useRef<number | null>(null);
 
   // Web Audio Synth for Custom Sound Effects
-  const playSynthSound = useCallback((type: 'pop' | 'click' | 'crush' | 'win' | 'wrong') => {
+  const playSynthSound = useCallback((type: 'pop' | 'click' | 'crush' | 'win' | 'wrong' | 'splash') => {
     try {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
+
+      if (type === 'splash') {
+        // Layered noise burst + quick pitch-drop tone for a juicy, satisfying
+        // "splash" feel on every match, instead of a thin single-tone beep.
+        const now = ctx.currentTime;
+
+        const bufferSize = ctx.sampleRate * 0.25;
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+        }
+        const noiseSource = ctx.createBufferSource();
+        noiseSource.buffer = noiseBuffer;
+
+        const noiseFilter = ctx.createBiquadFilter();
+        noiseFilter.type = 'bandpass';
+        noiseFilter.frequency.setValueAtTime(1200, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(300, now + 0.2);
+        noiseFilter.Q.value = 0.8;
+
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.35, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+
+        noiseSource.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+        noiseSource.start(now);
+        noiseSource.stop(now + 0.25);
+
+        const tone = ctx.createOscillator();
+        const toneGain = ctx.createGain();
+        tone.connect(toneGain);
+        toneGain.connect(ctx.destination);
+        tone.type = 'sine';
+        tone.frequency.setValueAtTime(700, now);
+        tone.frequency.exponentialRampToValueAtTime(180, now + 0.18);
+        toneGain.gain.setValueAtTime(0.25, now);
+        toneGain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+        tone.start(now);
+        tone.stop(now + 0.18);
+        return;
+      }
+
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
@@ -331,9 +369,9 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         osc.stop(now + 0.2);
       } else if (type === 'win') {
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, now); // C5
-        osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
-        osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.setValueAtTime(659.25, now + 0.1);
+        osc.frequency.setValueAtTime(783.99, now + 0.2);
         gain.gain.setValueAtTime(0.3, now);
         gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
         osc.start(now);
@@ -352,7 +390,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     }
   }, []);
 
-  // Text-To-Speech Pronunciation using YarnGPT Idera for Yoruba
   const speakWord = async (text: string) => {
     try {
       const res = await fetchAudioTTS(text, language === 'Yoruba' ? 'yo' : 'en');
@@ -374,7 +411,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     }
   };
 
-  // Filter words by language (memoized to prevent infinite re-renders)
   const filteredWords = useMemo(
     () => WORD_CRUSH_VOCABULARY.filter(w => w.language === language),
     [language]
@@ -382,7 +418,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
 
   const touchStartRef = useRef<{ r: number; c: number; x: number; y: number } | null>(null);
 
-  // --- CANDY CRUSH MATCH & CASCADE HANDLER ---
   const processGridCascades = useCallback((
     gridToProcess: CandyCell[][],
     currentScore: number,
@@ -405,9 +440,18 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     });
 
     setCandyGrid(newGrid);
-    playSynthSound('crush');
+    playSynthSound('splash');
 
-    // Pronounce crushed letter sound
+    // Visual splash burst on EVERY match now, not just 4+ combos —
+    // small for a simple 3-match, bigger for larger ones.
+    confetti({
+      particleCount: matches.length >= 4 ? 50 : 22,
+      spread: matches.length >= 4 ? 60 : 40,
+      startVelocity: 28,
+      origin: { y: 0.55 },
+      colors: ['#00A651', '#FFC107', '#FF6B35', '#ffffff']
+    });
+
     const firstLetter = Array.from(matchedLetterNames)[0];
     if (firstLetter) {
       speakWord(firstLetter);
@@ -426,10 +470,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     ];
     const phrase = comboPhrases[Math.floor(Math.random() * comboPhrases.length)];
     setFeedbackMessage(`${phrase} ${firstLetter ? `'${firstLetter}'` : ''} +${pointsEarned} Pts!`);
-
-    if (matches.length >= 4) {
-      confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-    }
 
     setTimeout(() => {
       const droppedGrid: CandyCell[][] = Array.from({ length: GRID_SIZE }, () => []);
@@ -474,7 +514,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     }, 300);
   }, [playSynthSound, highScore, level, language]);
 
-  // Initialize Candy Crush Letter Match Mode
   const initFruitMatch = useCallback(() => {
     if (filteredWords.length === 0) return;
     const target = filteredWords[Math.floor(Math.random() * filteredWords.length)];
@@ -488,7 +527,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     setFeedbackMessage(`Swipe or tap adjacent letters to match '${target.word}'! 🍬`);
   }, [filteredWords, language]);
 
-  // Initialize Lego Builder Mode
   const initLegoBuilder = useCallback(() => {
     const candidates = filteredWords.filter(w => {
       const len = w.word.replace(/\s+/g, '').length;
@@ -503,7 +541,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
 
     setBuilderWord(target);
 
-    // Clean word letters
     const letters = target.word.toUpperCase().replace(/[^A-Z]/g, '').split('');
     const jumbled = letters
       .map((l, idx) => ({ id: `${l}-${idx}-${Math.random()}`, letter: l }))
@@ -515,7 +552,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     speakWord(target.word);
   }, [filteredWords, builderDifficulty]);
 
-  // Initialize Speed Crush Mode
   const initSpeedCrush = useCallback(() => {
     if (filteredWords.length === 0) return;
     const target = filteredWords[Math.floor(Math.random() * filteredWords.length)];
@@ -524,7 +560,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     setFeedbackMessage(`Tap the falling fruit that means "${target.english}"!`);
   }, [filteredWords]);
 
-  // Handle Mode Change or Language Toggle
   useEffect(() => {
     setLives(3);
     setStreak(0);
@@ -579,17 +614,16 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     const dy = e.clientY - yStart;
     const dist = Math.hypot(dx, dy);
 
-    // If drag threshold reached (>= 6px), swap immediately!
     if (dist >= 6) {
       let targetR = rStart;
       let targetC = cStart;
 
       if (Math.abs(dx) > Math.abs(dy)) {
-        if (dx > 6 && cStart < GRID_SIZE - 1) targetC = cStart + 1; // Right
-        else if (dx < -6 && cStart > 0) targetC = cStart - 1;       // Left
+        if (dx > 6 && cStart < GRID_SIZE - 1) targetC = cStart + 1;
+        else if (dx < -6 && cStart > 0) targetC = cStart - 1;
       } else {
-        if (dy > 6 && rStart < GRID_SIZE - 1) targetR = rStart + 1; // Down
-        else if (dy < -6 && rStart > 0) targetR = rStart - 1;       // Up
+        if (dy > 6 && rStart < GRID_SIZE - 1) targetR = rStart + 1;
+        else if (dy < -6 && rStart > 0) targetR = rStart - 1;
       }
 
       if (targetR !== rStart || targetC !== cStart) {
@@ -608,7 +642,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     const dy = e.clientY - yStart;
     const dist = Math.hypot(dx, dy);
 
-    // If dist < 6px, treat as Tap
     if (dist < 6) {
       if (!selectedCell) {
         setSelectedCell({ r: rStart, c: cStart });
@@ -627,16 +660,15 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
       return;
     }
 
-    // Swipe in 4 directions
     let targetR = rStart;
     let targetC = cStart;
 
     if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 6 && cStart < GRID_SIZE - 1) targetC = cStart + 1; // Right
-      else if (dx < -6 && cStart > 0) targetC = cStart - 1;       // Left
+      if (dx > 6 && cStart < GRID_SIZE - 1) targetC = cStart + 1;
+      else if (dx < -6 && cStart > 0) targetC = cStart - 1;
     } else {
-      if (dy > 6 && rStart < GRID_SIZE - 1) targetR = rStart + 1; // Down
-      else if (dy < -6 && rStart > 0) targetR = rStart - 1;       // Up
+      if (dy > 6 && rStart < GRID_SIZE - 1) targetR = rStart + 1;
+      else if (dy < -6 && rStart > 0) targetR = rStart - 1;
     }
 
     if (targetR !== rStart || targetC !== cStart) {
@@ -653,11 +685,9 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     setFeedbackMessage('Board shuffled! Swipe letters to match 3 in a row! 🔄');
   };
 
-  // --- LEGO BUILDER TAP / SLOT HANDLERS ---
   const handleLegoBlockTap = (block: { id: string; letter: string }) => {
     if (!builderWord) return;
 
-    // Find first empty slot
     const emptyIdx = placedSlots.findIndex(s => s === null);
     if (emptyIdx === -1) return;
 
@@ -666,16 +696,13 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     newPlaced[emptyIdx] = block.letter;
     setPlacedSlots(newPlaced);
 
-    // Remove block from jumbled bank
     setJumbledBlocks(prev => prev.filter(b => b.id !== block.id));
 
-    // Check if all slots filled
     if (emptyIdx === placedSlots.length - 1) {
       const spelledWord = newPlaced.join('');
       const targetClean = builderWord.word.toUpperCase().replace(/[^A-Z]/g, '');
 
       if (spelledWord === targetClean) {
-        // Correct Word Built!
         playSynthSound('win');
         confetti({ particleCount: 80, spread: 80, origin: { y: 0.6 } });
         speakWord(builderWord.word);
@@ -699,7 +726,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
           }
         }, 1500);
       } else {
-        // Incorrect spell
         playSynthSound('wrong');
         setFeedbackMessage('Oops! Let us try building again!');
         setTimeout(() => {
@@ -721,12 +747,10 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     setJumbledBlocks(prev => [...prev, { id: `${letterToReturn}-${Date.now()}`, letter: letterToReturn }]);
   };
 
-  // --- SPEED CRUSH SPANNER & LOOP ---
   useEffect(() => {
     if (mode !== 'speed_crush' || showGameOver || showLevelComplete || !speedTarget) return;
 
     const interval = setInterval(() => {
-      // Spawn falling fruit
       const randomWord = filteredWords[Math.floor(Math.random() * filteredWords.length)];
       const newItem = {
         id: `fall-${Date.now()}-${Math.random()}`,
@@ -742,7 +766,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     return () => clearInterval(interval);
   }, [mode, showGameOver, showLevelComplete, speedTarget, filteredWords, level]);
 
-  // Update falling items animation loop cleanly without fallingItems in dependencies
   useEffect(() => {
     if (mode !== 'speed_crush' || showGameOver || showLevelComplete) return;
 
@@ -794,8 +817,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     if (!speedTarget) return;
 
     if (item.word.id === speedTarget.id) {
-      // Hit correct falling fruit
-      playSynthSound('crush');
+      playSynthSound('splash');
       confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
       speakWord(item.word.word);
 
@@ -821,7 +843,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     }
   };
 
-  // Lego Vowel Color Finder
   const getBlockColor = (letter: string) => {
     const l = letter.toUpperCase();
     if (l === 'A') return 'bg-red-500 text-white border-red-700 shadow-red-700/50';
@@ -832,7 +853,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     return 'bg-slate-100 text-slate-900 border-slate-300 shadow-slate-300/50';
   };
 
-  // WhatsApp Share Handler
   const handleShareWhatsApp = () => {
     const text = `🏆 I scored ${score} Points in Naija Word Crush on Mama Titi AI! 🇳🇬 Can you beat my high score in Yoruba, Igbo & Hausa? Challenge me here: ${window.location.href}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
@@ -846,7 +866,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
   return (
     <div className="min-h-screen bg-[#FDF6EC] text-slate-900 font-jakarta flex flex-col relative overflow-hidden pb-12">
       
-      {/* STANDALONE PREVIEW BANNER HEADER */}
       {isStandalonePreview && (
         <div className="bg-amber-400 text-slate-950 px-4 py-2 font-bold text-xs flex items-center justify-between border-b-2 border-amber-500 shadow-xs z-50">
           <div className="flex items-center space-x-2">
@@ -866,11 +885,9 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
       )}
 
-      {/* GAME HEADER BAR (#005029 Ankara Deep Green) */}
       <header className="bg-[#005029] text-white p-3.5 sm:p-4 shadow-lg border-b-4 border-amber-400 shrink-0">
         <div className="max-w-xl mx-auto flex items-center justify-between">
           
-          {/* Left: Lives & Streak */}
           <div className="flex items-center space-x-2">
             <div className="flex items-center space-x-1 bg-[#023319] px-2.5 py-1 rounded-full border border-amber-400/30">
               {[...Array(3)].map((_, i) => (
@@ -890,7 +907,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
             )}
           </div>
 
-          {/* Center Title */}
           <div className="text-center">
             <h1 className="font-serif font-extrabold text-base sm:text-lg text-amber-300 flex items-center space-x-1 justify-center">
               <span>Naija Word Crush 🌍</span>
@@ -898,7 +914,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
             <span className="text-[10px] text-emerald-200 block font-medium">Level {level}</span>
           </div>
 
-          {/* Right: Score */}
           <div className="flex items-center space-x-1 bg-[#023319] px-3 py-1 rounded-full border border-amber-400/40 text-amber-300 font-extrabold text-xs">
             <Sparkles className="w-3.5 h-3.5 fill-amber-400" />
             <span>⭐ {score}</span>
@@ -906,7 +921,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
 
         </div>
 
-        {/* Language Switcher Bar */}
         <div className="max-w-xl mx-auto mt-2.5 flex items-center justify-between gap-2 border-t border-emerald-800/80 pt-2">
           <div className="flex items-center space-x-1">
             {(['Yoruba', 'Igbo', 'Hausa'] as Language[]).map(lang => (
@@ -937,7 +951,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
       </header>
 
-      {/* GAME MODE TABS */}
       <div className="max-w-xl mx-auto w-full px-3 pt-3">
         <div className="bg-amber-100/80 p-1 rounded-2xl border border-amber-300/80 grid grid-cols-3 gap-1 text-center font-bold text-xs">
           <button
@@ -973,7 +986,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
       </div>
 
-      {/* FEEDBACK & TIP BANNER */}
       <div className="max-w-xl mx-auto w-full px-3 mt-3">
         <div className="p-3 rounded-2xl bg-white border-2 border-amber-300 shadow-soft text-center font-bold text-xs text-slate-800 flex items-center justify-center space-x-2 animate-fadeIn">
           <Sparkles className="w-4 h-4 text-[#FF6B35] shrink-0" />
@@ -981,15 +993,10 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
       </div>
 
-      {/* MAIN GAME BOARD CONTAINER */}
       <main className="max-w-xl mx-auto w-full px-3 mt-3 flex-1 flex flex-col justify-center">
         
-        {/* ========================================================= */}
-        {/* MODE 1: CANDY CRUSH LETTER MATCH */}
-        {/* ========================================================= */}
         {mode === 'fruit_match' && (
           <div className="space-y-3 animate-fadeIn">
-            {/* Target & Goal Banner */}
             <div className="bg-gradient-to-r from-[#005029] via-[#026837] to-[#005029] p-3 sm:p-4 rounded-3xl border-2 border-amber-300 shadow-xl text-white text-center space-y-1 relative overflow-hidden">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-widest bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-400/40">
@@ -1025,7 +1032,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
               </p>
             </div>
 
-            {/* Candy Crush 6x6 Grid Container */}
             <div className="bg-slate-900/90 p-2 sm:p-3 rounded-3xl border-4 border-amber-400 shadow-2xl relative touch-none select-none">
               <div className="grid grid-cols-6 gap-1 sm:gap-1.5 justify-center">
                 {candyGrid.map((row, rIdx) =>
@@ -1062,7 +1068,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
                 )}
               </div>
 
-              {/* Candy Crush Rules Tip */}
               <div className="mt-2 text-center text-[10px] sm:text-xs font-bold text-amber-200/90 flex items-center justify-center space-x-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>Swipe finger/mouse on any letter block to swap & match 3 in a row! 🍬</span>
@@ -1071,13 +1076,9 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* MODE 2: LEGO WORD BUILDER */}
-        {/* ========================================================= */}
         {mode === 'lego_builder' && builderWord && (
           <div className="space-y-4 animate-fadeIn">
             
-            {/* Difficulty Bar */}
             <div className="flex items-center justify-center space-x-2 text-xs font-bold">
               <span className="text-slate-500">Difficulty:</span>
               {(['easy', 'medium', 'hard'] as const).map(d => (
@@ -1095,7 +1096,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
               ))}
             </div>
 
-            {/* Target Image & Word Cue Card */}
             <div className="bg-white p-4 rounded-3xl border-2 border-purple-300 shadow-md text-center space-y-1">
               <div className="text-4xl mb-1">{builderWord.itemEmoji}</div>
               <h3 className="font-serif font-bold text-lg text-slate-800">
@@ -1106,7 +1106,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
               </p>
             </div>
 
-            {/* Placed Lego Slots */}
             <div className="p-4 rounded-3xl bg-slate-950 border-4 border-amber-400 shadow-inner flex flex-wrap items-center justify-center gap-2 min-h-[90px]">
               {placedSlots.map((slot, idx) => (
                 <button
@@ -1123,7 +1122,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
               ))}
             </div>
 
-            {/* Jumbled Lego Blocks Bank */}
             <div className="bg-white p-4 rounded-3xl border-2 border-slate-200 shadow-md">
               <span className="block text-[11px] font-extrabold text-slate-400 uppercase text-center mb-2">
                 Available Lego Letters
@@ -1146,18 +1144,13 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* MODE 3: SPEED CRUSH */}
-        {/* ========================================================= */}
         {mode === 'speed_crush' && speedTarget && (
           <div className="relative h-96 bg-gradient-to-b from-slate-900 via-slate-950 to-emerald-950 rounded-3xl border-4 border-amber-400 overflow-hidden shadow-2xl flex flex-col justify-between p-4">
             
-            {/* Top Target Prompt */}
             <div className="bg-amber-400 text-slate-950 p-2.5 px-4 rounded-2xl text-center font-extrabold text-xs shadow-md z-10">
               ⚡ Tap falling fruit that means: <span className="text-base font-serif uppercase block text-emerald-950">"{speedTarget.english}"</span>
             </div>
 
-            {/* Falling Fruits Canvas Container */}
             <div className="relative flex-1">
               {fallingItems.map((item) => (
                 <button
@@ -1172,14 +1165,12 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
               ))}
             </div>
 
-            {/* Danger Floor Line */}
             <div className="w-full h-3 bg-gradient-to-r from-rose-500 via-amber-400 to-rose-500 rounded-full animate-pulse shadow-rose-500/50 shadow-lg z-10" />
           </div>
         )}
 
       </main>
 
-      {/* MAMA TITI ASSISTANT & PROGRESS FOOTER */}
       <footer className="max-w-xl mx-auto w-full px-3 mt-4">
         <div className="bg-[#005029] text-white p-3 rounded-2xl shadow-md border border-amber-400/40 flex items-center justify-between">
           
@@ -1203,9 +1194,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
       </footer>
 
-      {/* ========================================================= */}
-      {/* LEVEL COMPLETE OVERLAY MODAL */}
-      {/* ========================================================= */}
       {showLevelComplete && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-sm rounded-3xl border-4 border-amber-400 shadow-2xl p-6 text-center space-y-4 animate-scaleUp">
@@ -1241,9 +1229,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* GAME OVER OVERLAY MODAL */}
-      {/* ========================================================= */}
       {showGameOver && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-sm rounded-3xl border-4 border-rose-500 shadow-2xl p-6 text-center space-y-4 animate-scaleUp">
@@ -1291,9 +1276,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* GRANDMA SCRIPT REWARD MODAL */}
-      {/* ========================================================= */}
       {showGrandmaScript && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-md rounded-3xl border-4 border-amber-400 shadow-2xl overflow-hidden font-jakarta animate-scaleUp">
