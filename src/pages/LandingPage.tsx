@@ -1,7 +1,6 @@
 import React from 'react';
-import { ArrowRight, Camera, GraduationCap, Languages, Heart, CheckCircle } from 'lucide-react';
+import { ArrowRight, GraduationCap } from 'lucide-react';
 import mamaTitiMain from '../assets/images/mama_titi_official_1784860280943.jpg';
-import mamaTiti2 from '../assets/images/mama-titi-2.png';
 import girlAvatar from '../assets/images/3d_nigerian_girl_avatar_1784829212783.jpg';
 import boyAvatar from '../assets/images/3d_nigerian_boy_avatar_1784829225940.jpg';
 import childAvatar from '../assets/images/3d_nigerian_child_avatar_1784829240662.jpg';
@@ -20,7 +19,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-slate-100 px-4 py-3">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
+        <div className="max-w-lg mx-auto flex items-center">
           <div className="flex items-center space-x-2">
             <div className="w-9 h-9 rounded-xl bg-[#00A651] flex items-center justify-center shadow-sm">
               <span className="text-white font-black text-lg">F</span>
@@ -29,12 +28,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Funly<span className="text-[#00A651]">Learn</span>
             </span>
           </div>
-          <button
-            onClick={onStartLearning}
-            className="px-5 py-2 rounded-full bg-[#FF6B35] text-white font-black text-sm shadow-[0_4px_0_#c94e1f] active:shadow-none active:translate-y-1 transition-all"
-          >
-            Start Free
-          </button>
         </div>
       </header>
 
@@ -79,13 +72,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           >
             <span>Start Learning FREE</span>
             <ArrowRight className="w-6 h-6" />
-          </button>
-
-          <button
-            onClick={onStartCatchingUp}
-            className="w-full py-4 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:border-[#00A651] hover:text-[#00A651] transition-all"
-          >
-            I am out of school — Catch Up Programme
           </button>
 
           <p className="text-xs text-slate-400 mt-3">
@@ -151,17 +137,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             {/* Step 3 — Story example */}
             <div className="bg-purple-50 border-2 border-purple-200 rounded-3xl p-4">
-              <div className="flex items-center space-x-4 mb-3">
-                <img
-                  src={mamaTiti2}
-                  alt="Mama Titi teaching"
-                  className="w-20 h-20 rounded-2xl object-cover object-top shrink-0 shadow-md"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-                <div className="flex-1">
-                  <span className="text-[10px] font-black text-purple-500 uppercase tracking-widest">Step 3</span>
-                  <h3 className="font-black text-sm text-slate-900 mt-0.5">Mama Titi teaches through Nigerian stories</h3>
-                </div>
+              <div className="mb-3">
+                <span className="text-[10px] font-black text-purple-500 uppercase tracking-widest">Step 3</span>
+                <h3 className="font-black text-sm text-slate-900 mt-0.5">Mama Titi teaches through Nigerian stories</h3>
               </div>
               <div className="bg-white rounded-2xl p-3 border border-purple-100">
                 <p className="text-xs text-slate-500 italic mb-2">Instead of a boring explanation Mama Titi says:</p>
@@ -186,118 +164,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Step 4</span>
                 <h3 className="font-black text-sm text-slate-900 mt-0.5">Earn coins and unlock Yoruba games</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Answer correctly earn coins. Use coins to unlock Yoruba word games in Naija Lingo!
+                  Answer correctly to earn coins, then unlock Naija Lingo — flash cards, listen-and-pick, and speed rounds, each with a real Nigerian cultural note. Igbo and Hausa coming soon.
                 </p>
               </div>
             </div>
-          </div>
-        </section>
 
-        {/* FEATURES */}
-        <section className="mb-10">
-          <h2 className="font-black text-2xl text-slate-900 mb-5 text-center">
-            Everything your child needs
-          </h2>
-          <div className="space-y-4">
-
-            {/* Homework Snap */}
-            <div
-              onClick={onStartLearning}
-              className="bg-gradient-to-br from-[#FF6B35] to-[#c94e1f] rounded-3xl p-5 text-white cursor-pointer active:scale-95 transition-transform shadow-lg"
-            >
-              <div className="flex items-start space-x-4 mb-3">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-                  <Camera className="w-7 h-7 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-black text-base mb-1">Snap Your Homework</h3>
-                  <p className="text-xs text-orange-100 leading-relaxed">
-                    Take a photo of any textbook question. Mama Titi reads it identifies the topic then uses a relatable Nigerian story to explain it step by step. She never gives the answer directly. She guides your child to discover it themselves.
-                  </p>
-                </div>
+            {/* Step 5 */}
+            <div className="flex items-center space-x-4 bg-teal-50 border-2 border-teal-200 rounded-3xl p-4">
+              <div className="w-20 h-20 rounded-2xl bg-teal-500 flex items-center justify-center shrink-0 shadow-md">
+                <GraduationCap className="w-9 h-9 text-white" />
               </div>
-              <div className="flex items-center space-x-3">
-                <img
-                  src={boyAvatar}
-                  alt="Boy snapping homework"
-                  className="w-10 h-10 rounded-full object-cover border-2 border-white/40"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-                <div className="bg-white/20 rounded-xl px-3 py-2 flex-1">
-                  <p className="text-[11px] text-white/90 italic">
-                    "I can see in this photo a fraction question. Let me tell you about Amaka's birthday cake..."
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Naija Lingo */}
-            <div
-              onClick={onStartLearning}
-              className="bg-gradient-to-br from-[#5B21B6] to-[#3B0764] rounded-3xl p-5 text-white cursor-pointer active:scale-95 transition-transform shadow-lg"
-            >
-              <div className="flex items-start space-x-4 mb-3">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-                  <Languages className="w-7 h-7 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-black text-base mb-1">Naija Lingo Word Games</h3>
-                  <p className="text-xs text-purple-200 leading-relaxed">
-                    Learn Yoruba through fun word games with Mama Titi's voice. Flash cards. Listen and pick. Speed rounds. Every word comes with a real Nigerian cultural note. Igbo and Hausa coming soon.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <img
-                  src={girlAvatar}
-                  alt="Girl learning Yoruba"
-                  className="w-10 h-10 rounded-full object-cover border-2 border-white/40"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-                <div className="flex space-x-2">
-                  {['🇳🇬 Yoruba ✅', '🔒 Igbo', '🔒 Hausa'].map((lang, i) => (
-                    <span
-                      key={i}
-                      className={'text-[10px] font-bold px-2 py-1 rounded-full ' + (i === 0 ? 'bg-amber-400 text-slate-900' : 'bg-white/20 text-white/60')}
-                    >
-                      {lang}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Exam Prep */}
-            <div
-              onClick={onStartLearning}
-              className="bg-gradient-to-br from-[#00A651] to-[#005c2e] rounded-3xl p-5 text-white cursor-pointer active:scale-95 transition-transform shadow-lg"
-            >
-              <div className="flex items-start space-x-4 mb-3">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-                  <GraduationCap className="w-7 h-7 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-black text-base mb-1">Exam Preparation</h3>
-                  <p className="text-xs text-emerald-100 leading-relaxed">
-                    Mama Titi knows exactly what Common Entrance BECE and WAEC require. She prepares your child with the right format and practice questions for each specific exam.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <img
-                  src={childAvatar}
-                  alt="Child studying for exams"
-                  className="w-10 h-10 rounded-full object-cover border-2 border-white/40"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-                <div className="grid grid-cols-3 gap-2 flex-1">
-                  {['Common Entrance', 'BECE JSS3', 'WAEC SS3'].map((exam, i) => (
-                    <div key={i} className="bg-white/15 rounded-lg px-2 py-1.5 flex items-center space-x-1">
-                      <CheckCircle className="w-3 h-3 text-emerald-300 shrink-0" />
-                      <span className="text-[9px] font-bold text-white leading-tight">{exam}</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="flex-1">
+                <span className="text-[10px] font-black text-teal-600 uppercase tracking-widest">Step 5</span>
+                <h3 className="font-black text-sm text-slate-900 mt-0.5">Walk into exams ready</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Mama Titi knows exactly what Common Entrance, BECE, and WAEC require, with the right format and practice questions for each one.
+                </p>
               </div>
             </div>
           </div>
@@ -353,70 +235,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <p className="font-black text-sm text-slate-900">Nigerian children</p>
               <p className="text-xs text-slate-500">Primary 3 to SS3</p>
             </div>
-          </div>
-        </section>
-
-        {/* CATCH UP PROGRAMME */}
-        <section className="mb-10 bg-amber-50 border-2 border-amber-200 rounded-3xl p-5">
-          <div className="flex items-center space-x-2 mb-4">
-            <Heart className="w-5 h-5 text-[#FF6B35] fill-[#FF6B35]" />
-            <span className="font-black text-lg text-slate-900">Catch Up Programme</span>
-            <span className="px-2 py-0.5 rounded-full bg-[#FF6B35] text-white text-[10px] font-black">Special</span>
-          </div>
-
-          <div className="mb-4">
-            <p className="text-sm text-slate-600 leading-relaxed">
-              Not currently in school? Mama Titi teaches the full NERDC curriculum in your own language so you can catch up at your own pace from wherever you are.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 mb-5">
-            {[
-              { label: 'English', active: true },
-              { label: 'Yoruba', active: true },
-              { label: 'Igbo', active: false },
-              { label: 'Hausa', active: false },
-            ].map((lang, i) => (
-              <div
-                key={i}
-                className={'flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold ' + (lang.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400')}
-              >
-                <span className={'w-2 h-2 rounded-full shrink-0 ' + (lang.active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300')} />
-                <span>{lang.label}</span>
-                {!lang.active && <span className="ml-auto text-[9px] font-bold">Soon</span>}
-              </div>
-            ))}
-          </div>
-
-          <button
-            onClick={onStartCatchingUp}
-            className="w-full py-4 rounded-2xl bg-[#FF6B35] text-white font-black text-base shadow-[0_4px_0_#c94e1f] active:shadow-none active:translate-y-1 transition-all flex items-center justify-center space-x-2"
-          >
-            <span>Start Catching Up Free</span>
-            <ArrowRight className="w-5 h-5" />
-          </button>
-        </section>
-
-        {/* FINAL CTA */}
-        <section className="mb-10 text-center">
-          <h2 className="font-black text-3xl text-slate-900 mb-2">
-            Ready to start?
-          </h2>
-          <p className="text-slate-500 text-sm mb-6">
-            Join Nigerian children learning with Mama Titi today.
-          </p>
-
-          <button
-            onClick={onStartLearning}
-            className="w-full py-5 rounded-2xl bg-[#00A651] hover:bg-[#008f46] text-white font-black text-xl shadow-[0_6px_0_#005c2e] active:shadow-none active:translate-y-1.5 transition-all flex items-center justify-center space-x-3 mb-4"
-          >
-            <span>Start Learning FREE</span>
-            <ArrowRight className="w-6 h-6" />
-          </button>
-
-          <div className="flex items-center justify-center space-x-6 text-xs text-slate-400">
-            <span>✅ No credit card</span>
-            <span>✅ Free forever</span>
           </div>
         </section>
 
