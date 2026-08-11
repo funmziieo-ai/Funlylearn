@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { ArrowRight, Check, ChevronLeft, Sparkles, Heart } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, Heart, Volume2, Loader2 } from 'lucide-react';
 import { UserProfile, ClassLevel, LanguageCode } from '../types';
 import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
+import { fetchAudioTTS } from '../services/apiClient';
 
 interface OnboardingPageProps {
   initialProfile: UserProfile;
   onComplete: (profile: UserProfile) => void;
   onExit?: () => void;
 }
+
+const YORUBA_PREVIEW_TEXT = 'Ẹ kaaro! Orukọ mi ni Mama Titi. Jẹ ki a kọ ẹkọ papọ loni!';
 
 export const OnboardingPage: React.FC<OnboardingPageProps> = ({
   initialProfile,
@@ -16,9 +19,11 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState(initialProfile.name || '');
-  const [classLevel, setClassLevel] = useState<ClassLevel>(initialProfile.classLevel || 'JSS 1');
+  const [classLevel, setClassLevel] = useState<ClassLevel | null>(initialProfile.classLevel || null);
   const [isOutOfSchool, setIsOutOfSchool] = useState(initialProfile.isOutOfSchool || false);
   const [language, setLanguage] = useState<LanguageCode>(initialProfile.language || 'en');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
 
   const primaryClasses: ClassLevel[] = ['Primary 3', 'Primary 4', 'Primary 5', 'Primary 6'];
   const secondaryClasses: ClassLevel[] = ['JSS 1', 'JSS 2', 'JSS 3', 'SS 1', 'SS 2', 'SS 3'];
@@ -34,10 +39,36 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
     onComplete({
       ...initialProfile,
       name: name.trim() || 'Scholar',
-      classLevel,
+      classLevel: classLevel || 'JSS 1',
       isOutOfSchool,
       language
     });
+  };
+
+  const handlePlayYorubaPreview = async () => {
+    if (previewAudio) {
+      previewAudio.pause();
+      setPreviewAudio(null);
+      return;
+    }
+
+    setPreviewLoading(true);
+    try {
+      const ttsData = await fetchAudioTTS(YORUBA_PREVIEW_TEXT, 'yo');
+      if (ttsData.audioBase64) {
+        const audio = new Audio(ttsData.audioBase64);
+        audio.onended = () => setPreviewAudio(null);
+        setPreviewAudio(audio);
+        await audio.play();
+      } else if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(YORUBA_PREVIEW_TEXT);
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch {
+      // Preview failing quietly is fine — this is just a taste, not core functionality
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   return (
@@ -112,8 +143,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
               required
               className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-slate-200 focus:border-[#064E3B] text-slate-800 font-bold text-lg text-center shadow-sm outline-none transition-all"
             />
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-left flex items-start space-x-3">
-              <Sparkles className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-left">
               <p className="text-xs text-slate-700 leading-relaxed italic">
                 "Welcome my star! I am excited to guide you step by step through your school topics!" — Mama Titi
               </p>
@@ -166,53 +196,64 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
               </button>
             </div>
 
-            {/* Primary classes */}
-            <div>
-              <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
-                Primary School
-              </span>
-              <div className="grid grid-cols-3 gap-2.5 mt-2">
-                {primaryClasses.map(cls => (
-                  <button
-                    key={cls}
-                    type="button"
-                    onClick={() => setClassLevel(cls)}
-                    className={
-                      'py-3 px-2 rounded-full border-2 text-xs font-bold transition-all ' +
-                      (classLevel === cls
-                        ? 'border-[#064E3B] bg-[#064E3B] text-white shadow-md'
-                        : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300')
-                    }
-                  >
-                    {cls}
-                  </button>
-                ))}
+            {classLevel ? (
+              /* A class has been chosen — show only that one, with a way to change it */
+              <div className="p-4 rounded-2xl bg-[#064E3B] flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-7 h-7 rounded-full bg-white text-[#064E3B] flex items-center justify-center shrink-0">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <span className="font-bold text-white text-sm">{classLevel}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setClassLevel(null)}
+                  className="text-xs font-bold text-emerald-200 underline"
+                >
+                  Change
+                </button>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Primary classes */}
+                <div>
+                  <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
+                    Primary School
+                  </span>
+                  <div className="grid grid-cols-3 gap-2.5 mt-2">
+                    {primaryClasses.map(cls => (
+                      <button
+                        key={cls}
+                        type="button"
+                        onClick={() => setClassLevel(cls)}
+                        className="py-3 px-2 rounded-full border-2 text-xs font-bold transition-all border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                      >
+                        {cls}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            {/* Secondary classes */}
-            <div>
-              <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
-                Secondary School
-              </span>
-              <div className="grid grid-cols-3 gap-2.5 mt-2">
-                {secondaryClasses.map(cls => (
-                  <button
-                    key={cls}
-                    type="button"
-                    onClick={() => setClassLevel(cls)}
-                    className={
-                      'py-3 px-2 rounded-full border-2 text-xs font-bold transition-all ' +
-                      (classLevel === cls
-                        ? 'border-[#064E3B] bg-[#064E3B] text-white shadow-md'
-                        : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300')
-                    }
-                  >
-                    {cls}
-                  </button>
-                ))}
-              </div>
-            </div>
+                {/* Secondary classes */}
+                <div>
+                  <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
+                    Secondary School
+                  </span>
+                  <div className="grid grid-cols-3 gap-2.5 mt-2">
+                    {secondaryClasses.map(cls => (
+                      <button
+                        key={cls}
+                        type="button"
+                        onClick={() => setClassLevel(cls)}
+                        className="py-3 px-2 rounded-full border-2 text-xs font-bold transition-all border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                      >
+                        {cls}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Mama Titi bubble */}
             <div className="p-4 rounded-3xl bg-white border border-amber-200 shadow-sm flex items-start space-x-3">
@@ -229,7 +270,8 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
 
             <button
               onClick={handleNextStep2}
-              className="w-full py-4 rounded-full bg-[#064E3B] hover:bg-[#022C22] text-white font-bold text-base shadow-lg transition-all flex items-center justify-center space-x-2"
+              disabled={!classLevel}
+              className="w-full py-4 rounded-full bg-[#064E3B] hover:bg-[#022C22] disabled:opacity-40 text-white font-bold text-base shadow-lg transition-all flex items-center justify-center space-x-2"
             >
               <span>Continue</span>
               <ArrowRight className="w-5 h-5" />
@@ -304,9 +346,6 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
                   <p className="text-xs text-slate-500">
                     Mama Titi teaches in Yoruba
                   </p>
-                  <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold">
-                    🔊 Idera Voice Active
-                  </span>
                 </div>
                 {language === 'yo' && (
                   <div className="w-7 h-7 rounded-full bg-[#5B21B6] text-white flex items-center justify-center shrink-0">
@@ -315,14 +354,30 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
                 )}
               </button>
 
-              {/* Yoruba preview */}
+              {/* Yoruba voice preview — always visible to create anticipation, not just after selecting */}
+              <button
+                type="button"
+                onClick={handlePlayYorubaPreview}
+                disabled={previewLoading}
+                className="w-full p-3 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-center space-x-2 disabled:opacity-60"
+              >
+                {previewLoading ? (
+                  <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
+                ) : (
+                  <Volume2 className="w-4 h-4 text-purple-600" />
+                )}
+                <span className="text-sm font-bold text-purple-700">
+                  {previewAudio ? 'Playing... tap to stop' : "Hear Mama Titi's voice in Yoruba"}
+                </span>
+              </button>
+
               {language === 'yo' && (
                 <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 text-left">
                   <p className="text-xs font-bold text-purple-800 mb-1">
                     Preview of Yoruba mode:
                   </p>
                   <p className="text-sm text-purple-700 italic">
-                    "Ẹ kaaro! Orukọ mi ni Mama Titi. Jẹ ki a kọ ẹkọ papọ loni!"
+                    "{YORUBA_PREVIEW_TEXT}"
                   </p>
                   <p className="text-[10px] text-purple-500 mt-1">
                     Good morning! My name is Mama Titi. Let us learn together today!
