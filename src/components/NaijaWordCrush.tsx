@@ -2,23 +2,40 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import confetti from 'canvas-confetti';
 import {
   Sparkles, Flame, Trophy, Play, CheckCircle2, RotateCcw,
-  Volume2, Heart, Crown, Share2, Award, ArrowRight, RefreshCw, MessageCircle
+  Volume2, Heart, Crown, Share2, Award, ArrowRight, ArrowLeft, RefreshCw, MessageCircle
 } from 'lucide-react';
 import {
   WORD_CRUSH_VOCABULARY, NIGERIAN_ITEMS, GRANDMA_SCRIPTS,
   CrushWord, NigerianItem
 } from '../data/naijaWordCrushData';
 import { fetchAudioTTS } from '../services/apiClient';
+import { UserProfile, ClassLevel } from '../types';
 
 export interface NaijaWordCrushProps {
+  profile?: UserProfile;
   onBackToApp?: () => void;
   isStandalonePreview?: boolean;
+}
+
+// Maps a child's class level to the vocabulary difficulty band their
+// content should be filtered to.
+function getAgeBandForClassLevel(classLevel?: ClassLevel): 'primary' | 'jss' | 'ss' {
+  if (!classLevel) return 'primary';
+  if (classLevel.startsWith('Primary')) return 'primary';
+  if (classLevel.startsWith('JSS')) return 'jss';
+  return 'ss';
 }
 
 type GameMode = 'fruit_match' | 'lego_builder' | 'speed_crush';
 type Language = 'Yoruba' | 'Igbo' | 'Hausa';
 
 const GRID_SIZE = 6;
+
+// Real touchscreens register several pixels of finger jitter even on a
+// stationary tap — 6px was too small and caused ordinary taps to be
+// misread as intentional swipes, triggering accidental (and, with only
+// 3-4 letter types on the grid, near-guaranteed) matches.
+const SWIPE_THRESHOLD = 18;
 
 export interface LetterCandyItem {
   id: string;
@@ -249,6 +266,7 @@ const findGridMatches = (grid: CandyCell[][]): { r: number; c: number }[] => {
 };
 
 export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
+  profile,
   onBackToApp,
   isStandalonePreview = true
 }) => {
@@ -411,9 +429,13 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     }
   };
 
+  const ageBand = getAgeBandForClassLevel(profile?.classLevel);
+  const hasContentForAgeBand = WORD_CRUSH_VOCABULARY.some(w => w.ageBand === ageBand);
+  const effectiveAgeBand = hasContentForAgeBand ? ageBand : 'primary';
+
   const filteredWords = useMemo(
-    () => WORD_CRUSH_VOCABULARY.filter(w => w.language === language),
-    [language]
+    () => WORD_CRUSH_VOCABULARY.filter(w => w.language === language && w.ageBand === effectiveAgeBand),
+    [language, effectiveAgeBand]
   );
 
   const touchStartRef = useRef<{ r: number; c: number; x: number; y: number } | null>(null);
@@ -614,16 +636,16 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     const dy = e.clientY - yStart;
     const dist = Math.hypot(dx, dy);
 
-    if (dist >= 6) {
+    if (dist >= SWIPE_THRESHOLD) {
       let targetR = rStart;
       let targetC = cStart;
 
       if (Math.abs(dx) > Math.abs(dy)) {
-        if (dx > 6 && cStart < GRID_SIZE - 1) targetC = cStart + 1;
-        else if (dx < -6 && cStart > 0) targetC = cStart - 1;
+        if (dx > SWIPE_THRESHOLD && cStart < GRID_SIZE - 1) targetC = cStart + 1;
+        else if (dx < -SWIPE_THRESHOLD && cStart > 0) targetC = cStart - 1;
       } else {
-        if (dy > 6 && rStart < GRID_SIZE - 1) targetR = rStart + 1;
-        else if (dy < -6 && rStart > 0) targetR = rStart - 1;
+        if (dy > SWIPE_THRESHOLD && rStart < GRID_SIZE - 1) targetR = rStart + 1;
+        else if (dy < -SWIPE_THRESHOLD && rStart > 0) targetR = rStart - 1;
       }
 
       if (targetR !== rStart || targetC !== cStart) {
@@ -642,7 +664,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     const dy = e.clientY - yStart;
     const dist = Math.hypot(dx, dy);
 
-    if (dist < 6) {
+    if (dist < SWIPE_THRESHOLD) {
       if (!selectedCell) {
         setSelectedCell({ r: rStart, c: cStart });
         playSynthSound('click');
@@ -664,11 +686,11 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     let targetC = cStart;
 
     if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 6 && cStart < GRID_SIZE - 1) targetC = cStart + 1;
-      else if (dx < -6 && cStart > 0) targetC = cStart - 1;
+      if (dx > SWIPE_THRESHOLD && cStart < GRID_SIZE - 1) targetC = cStart + 1;
+      else if (dx < -SWIPE_THRESHOLD && cStart > 0) targetC = cStart - 1;
     } else {
-      if (dy > 6 && rStart < GRID_SIZE - 1) targetR = rStart + 1;
-      else if (dy < -6 && rStart > 0) targetR = rStart - 1;
+      if (dy > SWIPE_THRESHOLD && rStart < GRID_SIZE - 1) targetR = rStart + 1;
+      else if (dy < -SWIPE_THRESHOLD && rStart > 0) targetR = rStart - 1;
     }
 
     if (targetR !== rStart || targetC !== cStart) {
@@ -889,6 +911,15 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         <div className="max-w-xl mx-auto flex items-center justify-between">
           
           <div className="flex items-center space-x-2">
+            {onBackToApp && (
+              <button
+                onClick={onBackToApp}
+                className="p-1.5 rounded-full bg-[#023319] hover:bg-emerald-900 text-amber-300 transition-all"
+                title="Back to Naija Lingo"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
             <div className="flex items-center space-x-1 bg-[#023319] px-2.5 py-1 rounded-full border border-amber-400/30">
               {[...Array(3)].map((_, i) => (
                 <Heart
@@ -991,6 +1022,11 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
           <Sparkles className="w-4 h-4 text-[#FF6B35] shrink-0" />
           <span>{feedbackMessage}</span>
         </div>
+        {!hasContentForAgeBand && (
+          <p className="text-center text-[11px] text-slate-400 italic mt-1.5">
+            Harder words for your class level are coming soon — playing with beginner vocabulary for now!
+          </p>
+        )}
       </div>
 
       <main className="max-w-xl mx-auto w-full px-3 mt-3 flex-1 flex flex-col justify-center">
