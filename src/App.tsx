@@ -217,7 +217,7 @@ export default function App() {
             {activeTab === 'word_crush' && (
               <NaijaWordCrush
                 onBackToApp={() => setActiveTab('lingo')}
-                isStandalonePreview={true}
+                isStandalonePreview={false}
               />
             )}
 
