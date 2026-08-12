@@ -292,7 +292,17 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
   const [selectedCell, setSelectedCell] = useState<{ r: number; c: number } | null>(null);
   const [isProcessingMatch, setIsProcessingMatch] = useState<boolean>(false);
 
-  const [builderDifficulty, setBuilderDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
+  // Default the difficulty to match the child's age band, so a JSS/SS
+  // student isn't stuck on the same 'easy' default as a Primary child —
+  // they can still override it manually via the difficulty buttons.
+  const defaultDifficultyForAgeBand: Record<'primary' | 'jss' | 'ss', 'easy' | 'medium' | 'hard'> = {
+    primary: 'easy',
+    jss: 'medium',
+    ss: 'hard'
+  };
+  const [builderDifficulty, setBuilderDifficulty] = useState<'easy' | 'medium' | 'hard'>(
+    defaultDifficultyForAgeBand[getAgeBandForClassLevel(profile?.classLevel)]
+  );
   const [builderWord, setBuilderWord] = useState<CrushWord | null>(null);
   const [jumbledBlocks, setJumbledBlocks] = useState<{ id: string; letter: string }[]>([]);
   const [placedSlots, setPlacedSlots] = useState<(string | null)[]>([]);
@@ -550,16 +560,36 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
   }, [filteredWords, language]);
 
   const initLegoBuilder = useCallback(() => {
+    // Cap at 15 letters even on 'hard' — proverb-length entries (Igbo
+    // Wisdom words can run 40-50+ letters) would make Lego Builder
+    // generate an unplayable wall of blocks, so those are reserved for
+    // Letter Match and Speed Crush instead, not spelled letter-by-letter.
+    const MAX_BUILDER_LENGTH = 15;
     const candidates = filteredWords.filter(w => {
       const len = w.word.replace(/\s+/g, '').length;
+      if (len > MAX_BUILDER_LENGTH) return false;
       if (builderDifficulty === 'easy') return len <= 4;
       if (builderDifficulty === 'medium') return len > 4 && len <= 6;
       return len > 6;
     });
 
+    const shortFallbackPool = filteredWords.filter(
+      w => w.word.replace(/\s+/g, '').length <= MAX_BUILDER_LENGTH
+    );
+
+    if (candidates.length === 0 && shortFallbackPool.length === 0) {
+      // Every word in this pool (e.g. JSS Igbo Wisdom proverbs) is too
+      // long to spell letter-by-letter. Rather than force an unplayable
+      // 40+ block puzzle, be honest that this mode isn't suited to this
+      // content right now.
+      setBuilderWord(null);
+      setFeedbackMessage('These words are better for Letter Match or Speed Crush — try switching modes!');
+      return;
+    }
+
     const target = candidates.length > 0
       ? candidates[Math.floor(Math.random() * candidates.length)]
-      : filteredWords[Math.floor(Math.random() * filteredWords.length)];
+      : shortFallbackPool[Math.floor(Math.random() * shortFallbackPool.length)];
 
     setBuilderWord(target);
 
@@ -942,7 +972,13 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
             <h1 className="font-serif font-extrabold text-base sm:text-lg text-amber-300 flex items-center space-x-1 justify-center">
               <span>Naija Word Crush 🌍</span>
             </h1>
-            <span className="text-[10px] text-emerald-200 block font-medium">Level {level}</span>
+            <div className="flex items-center justify-center space-x-1.5 mt-0.5">
+              <span className="text-[10px] text-emerald-200 font-medium">Level {level}</span>
+              <span className="text-emerald-700">•</span>
+              <span className="text-[10px] text-amber-300 font-bold uppercase tracking-wide">
+                {ageBand === 'primary' ? 'Primary' : ageBand === 'jss' ? 'JSS' : 'SS'} Level
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center space-x-1 bg-[#023319] px-3 py-1 rounded-full border border-amber-400/40 text-amber-300 font-extrabold text-xs">
@@ -954,23 +990,27 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
 
         <div className="max-w-xl mx-auto mt-2.5 flex items-center justify-between gap-2 border-t border-emerald-800/80 pt-2">
           <div className="flex items-center space-x-1">
-            {(['Yoruba', 'Igbo', 'Hausa'] as Language[]).map(lang => (
-              <button
-                key={lang}
-                onClick={() => setLanguage(lang)}
-                className={`px-3 py-1 rounded-full font-bold text-xs transition-all ${
-                  language === lang
-                    ? lang === 'Yoruba'
-                      ? 'bg-[#005029] text-emerald-100 border-2 border-emerald-400 shadow-md scale-105'
-                      : lang === 'Igbo'
-                      ? 'bg-[#6B2FA0] text-purple-100 border-2 border-purple-300 shadow-md scale-105'
-                      : 'bg-[#F5A623] text-slate-950 border-2 border-amber-200 shadow-md scale-105'
-                    : 'bg-[#023319] text-emerald-200/80 hover:bg-emerald-900 border border-emerald-700/50'
-                }`}
-              >
-                {lang === 'Yoruba' ? '🟢 Yoruba' : lang === 'Igbo' ? '🟣 Igbo' : '🟡 Hausa'}
-              </button>
-            ))}
+            <button
+              className="px-3 py-1 rounded-full font-bold text-xs bg-[#005029] text-emerald-100 border-2 border-emerald-400 shadow-md scale-105"
+            >
+              🟢 Yoruba
+            </button>
+            <button
+              disabled
+              title="Igbo is coming soon"
+              className="px-3 py-1 rounded-full font-bold text-xs bg-[#023319]/50 text-emerald-200/40 border border-emerald-800/50 cursor-not-allowed flex items-center space-x-1"
+            >
+              <span>🟣 Igbo</span>
+              <span className="text-[9px] bg-amber-400/80 text-slate-900 px-1.5 rounded-full">Soon</span>
+            </button>
+            <button
+              disabled
+              title="Hausa is coming soon"
+              className="px-3 py-1 rounded-full font-bold text-xs bg-[#023319]/50 text-emerald-200/40 border border-emerald-800/50 cursor-not-allowed flex items-center space-x-1"
+            >
+              <span>🟡 Hausa</span>
+              <span className="text-[9px] bg-amber-400/80 text-slate-900 px-1.5 rounded-full">Soon</span>
+            </button>
           </div>
 
           <button
