@@ -451,7 +451,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
-      {/* Header */}
+      {/* Header — coins and language already shown in the app-wide Navbar above, so not repeated here */}
       <div className="bg-[#064E3B] text-white p-3 sm:p-4 shadow-sm flex items-center justify-between border-b border-[#0A5D46] shrink-0">
         <div className="flex items-center space-x-3">
           <MamaTitiAvatar
@@ -470,25 +470,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             </p>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <div className="flex items-center space-x-1 bg-amber-400 text-slate-900 rounded-full px-2.5 py-1 text-[11px] font-bold">
-            <span>🪙</span>
-            <span>{userCoins}</span>
-          </div>
-          <span className="px-2.5 py-1 rounded-full bg-[#022C22] text-amber-300 text-[11px] font-semibold border border-amber-400/30">
-            {isYoruba ? 'Yoruba' : 'English'}
-          </span>
-          <button
-            onClick={handleNewChat}
-            className="px-2.5 py-1 rounded-full bg-red-900/40 text-red-300 text-[11px] font-semibold border border-red-400/30 hover:bg-red-800/50 flex items-center space-x-1"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>{isYoruba ? 'Tuntun' : 'New'}</span>
-          </button>
-        </div>
       </div>
 
-      {/* Snap Homework Bar — tapping the banner itself opens Snap (camera), not Upload */}
+      {/* Snap Homework Bar — tapping the banner itself opens Snap (camera), not Upload. New Chat now lives here too, beside Snap/Upload. */}
       <div
         onClick={() => setIsCameraOpen(true)}
         className="bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2.5 px-3.5 sm:px-4 shadow-sm flex items-center justify-between shrink-0 border-b border-amber-500 cursor-pointer"
@@ -528,6 +512,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           >
             <Upload className="w-3.5 h-3.5" />
             <span>{isYoruba ? 'Gbe Soke' : 'Upload'}</span>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNewChat();
+            }}
+            className="px-3 py-1.5 rounded-full bg-red-900/80 hover:bg-red-800 text-red-100 font-bold text-xs transition-all flex items-center space-x-1"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>{isYoruba ? 'Ibaraẹnisọrọ Tuntun' : 'New Chat'}</span>
           </button>
         </div>
       </div>
