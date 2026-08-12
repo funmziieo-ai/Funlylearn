@@ -47,8 +47,8 @@ export function getWelcomeMessage(language?: string): ChatMessage {
     id: 'welcome-' + Date.now(),
     sender: 'mama_titi',
     text: isYoruba
-      ? 'Ẹ kaaro! Orukọ mi ni Mama Titi. Mo jẹ olukọ AI ara Naijiria rẹ ninu FunlyLearn. Mo n kọ ẹkọ ile iwe lati Primary 3 si SS3 pẹlu Mathematics, English, Science, Social Studies ati igbaradi fun Common Entrance, BECE, WAEC ati JAMB. Kini kilasi rẹ ati kini o fẹ kọ loni?'
-      : 'Welcome! I am Mama Titi, your Nigerian AI teacher. I teach the official Nigerian NERDC curriculum from Primary 3 to SS3 covering Mathematics, English, Sciences, Social Studies and exam preparation for Common Entrance, BECE, WAEC and JAMB. What class are you in and what would you like to study today?',
+      ? 'Ẹ kaaro! Orukọ mi ni Mama Titi. Mo jẹ olukọ AI ara Naijiria rẹ ninu FunlyLearn. Mo n kọ ẹ̀kọ́ ilé-ìwé oṣiṣẹ́ ìjọba Nàìjíríà láti Primary 3 sí SS3 pẹ̀lú Mathematics, English, Science, Social Studies àti ìmúrasílẹ̀ fún Common Entrance, BECE àti WAEC. Kí ni kíláàsì rẹ àti kíni o fẹ́ kọ́ lónìí?'
+      : 'Welcome! I am Mama Titi, your Nigerian AI teacher. I teach the official Nigerian school curriculum from Primary 3 to SS3 covering Mathematics, English, Sciences, Social Studies and exam preparation for Common Entrance, BECE and WAEC. What class are you in and what would you like to study today?',
     timestamp: new Date().toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit'
