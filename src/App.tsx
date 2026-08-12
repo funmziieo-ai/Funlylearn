@@ -33,6 +33,15 @@ export default function App() {
   const [view, setView] = useState<'landing' | 'auth' | 'onboarding' | 'app'>('landing');
   const [activeTab, setActiveTab] = useState<string>('home');
 
+  // If someone opened the app via an invite link (e.g. ?invite=word_crush),
+  // remember where they should land once they're through auth/onboarding,
+  // instead of dropping them on the generic home/chat tab.
+  const [inviteTarget] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const invite = params.get('invite');
+    return invite === 'word_crush' || invite === 'lingo' ? invite : null;
+  });
+
   // Authentication & Subscription States
   const [user, setUser] = useState<any | null>(null);
   const [isGuest, setIsGuest] = useState<boolean>(false);
@@ -82,6 +91,7 @@ export default function App() {
       setProfile(dbProfile);
       saveStoredProfile(dbProfile);
       setView('app');
+      if (inviteTarget) setActiveTab(inviteTarget);
     } else {
       // New user without profile -> go to onboarding
       setView('onboarding');
@@ -142,7 +152,7 @@ export default function App() {
   const handleOnboardingComplete = (updatedProfile: UserProfile) => {
     handleProfileUpdate(updatedProfile);
     setView('app');
-    setActiveTab('chat');
+    setActiveTab(inviteTarget || 'chat');
   };
 
   const handleIncrementDailyMessages = () => {
@@ -203,6 +213,7 @@ export default function App() {
                 onProfileUpdate={handleProfileUpdate}
                 onOpenPricingModal={() => setIsPricingOpen(true)}
                 isGuest={isGuest}
+                userId={user?.id || getOrCreateGuestSessionId()}
               />
             )}
 
@@ -247,7 +258,11 @@ export default function App() {
             )}
 
             {activeTab === 'parent' && (
-              <ParentDashboardPage profile={profile} onProfileUpdate={handleProfileUpdate} />
+              <ParentDashboardPage
+                profile={profile}
+                onProfileUpdate={handleProfileUpdate}
+                userId={user?.id || getOrCreateGuestSessionId()}
+              />
             )}
           </>
         )}
