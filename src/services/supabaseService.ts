@@ -333,3 +333,84 @@ export async function fetchSubscriptionFromSupabase(
     return null;
   }
 }
+
+// HOMEWORK RECORDS — real log of what Mama Titi actually helped with,
+// replacing the previous hardcoded "Send a ping" cards.
+export interface HomeworkRecord {
+  id: number;
+  subject: string | null;
+  topic: string;
+  wasCorrect: boolean | null;
+  createdAt: string;
+}
+
+export async function saveHomeworkRecord(
+  userId: string,
+  topic: string,
+  wasCorrect: boolean | null,
+  subject?: string
+): Promise<void> {
+  if (!supabase) return;
+  try {
+    await supabase.from('homework_records').insert({
+      user_id: userId,
+      subject: subject || null,
+      topic,
+      was_correct: wasCorrect
+    });
+  } catch (e) {
+    console.warn('Error saving homework record:', e);
+  }
+}
+
+export async function fetchHomeworkRecords(
+  userId: string,
+  limit: number = 5
+): Promise<HomeworkRecord[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('homework_records')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error || !data) return [];
+    return data.map((r: any) => ({
+      id: r.id,
+      subject: r.subject,
+      topic: r.topic,
+      wasCorrect: r.was_correct,
+      createdAt: r.created_at
+    }));
+  } catch (e) {
+    return [];
+  }
+}
+
+// LEADERBOARD — real users ranked by stars, scoped to the same class
+// level so a Primary 3 child isn't compared against an SS3 student.
+export async function fetchLeaderboard(
+  classLevel: string,
+  limit: number = 20
+): Promise<{ id: string; name: string; stars: number; classLevel: string; level: number }[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('child_profiles')
+      .select('user_id, name, stars, class_level, level')
+      .eq('class_level', classLevel)
+      .order('stars', { ascending: false })
+      .limit(limit);
+    if (error || !data) return [];
+    return data.map((r: any) => ({
+      id: r.user_id,
+      name: r.name || 'Scholar',
+      stars: r.stars || 0,
+      classLevel: r.class_level,
+      level: r.level || 1
+    }));
+  } catch (e) {
+    return [];
+  }
+}
