@@ -5,7 +5,6 @@ import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
 import { SyncedReadAlong } from '../components/SyncedReadAlong';
 import { CameraUploadModal } from '../components/CameraUploadModal';
 import { HomeworkCropModal } from '../components/HomeworkCropModal';
-import { StoryVisual } from '../components/StoryVisual';
 import {
   sendMessageToMamaTiti,
   getStoredChat,
@@ -13,6 +12,7 @@ import {
   clearStoredChat,
   getWelcomeMessage
 } from '../services/apiClient';
+import { saveHomeworkRecord } from '../services/supabaseService';
 import { getUnlockedLevels } from '../utils/coinsSystem';
 
 interface ChatPageProps {
@@ -24,6 +24,7 @@ interface ChatPageProps {
   onOpenPricingModal: () => void;
   onGoToLingo?: () => void;
   isGuest?: boolean;
+  userId: string;
 }
 
 const FUN_LOADING_MESSAGES_EN = [
@@ -82,7 +83,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   onProfileUpdate,
   onOpenPricingModal,
   onGoToLingo,
-  isGuest = false
+  isGuest = false,
+  userId
 }) => {
   const isYoruba = profile.language === 'yo';
 
@@ -278,6 +280,18 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           (profile.coins || 0) + coinsEarned
         ).length
       });
+
+      // Log a real record of what was actually worked on, so the
+      // Parent Dashboard can show genuine sessions instead of mock
+      // data. "topic" is the child's own message — we don't have real
+      // subject-detection yet, so this stays honest about only
+      // capturing what was actually typed, not inventing a subject.
+      saveHomeworkRecord(
+        userId,
+        userMsg.text.slice(0, 120),
+        isCorrect,
+        undefined
+      );
     } catch (err) {
       console.error('Error getting response from Mama Titi:', err);
       const errorMsg: ChatMessage = {
@@ -474,8 +488,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       </div>
 
-      {/* Snap Homework Bar */}
-      <div className="bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2.5 px-3.5 sm:px-4 shadow-sm flex items-center justify-between shrink-0 border-b border-amber-500">
+      {/* Snap Homework Bar — tapping the banner itself opens Snap (camera), not Upload */}
+      <div
+        onClick={() => setIsCameraOpen(true)}
+        className="bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2.5 px-3.5 sm:px-4 shadow-sm flex items-center justify-between shrink-0 border-b border-amber-500 cursor-pointer"
+      >
         <div className="flex items-center space-x-2">
           <div className="p-1.5 bg-slate-950 text-amber-300 rounded-xl">
             <Camera className="w-4 h-4" />
@@ -493,14 +510,20 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
         <div className="flex items-center space-x-1.5">
           <button
-            onClick={() => setIsCameraOpen(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsCameraOpen(true);
+            }}
             className="px-3 py-1.5 rounded-full bg-slate-950 hover:bg-slate-800 text-amber-300 font-bold text-xs transition-all flex items-center space-x-1"
           >
             <Camera className="w-3.5 h-3.5" />
             <span>{isYoruba ? 'Yaworan' : 'Snap'}</span>
           </button>
           <button
-            onClick={() => directFileInputRef.current?.click()}
+            onClick={(e) => {
+              e.stopPropagation();
+              directFileInputRef.current?.click();
+            }}
             className="px-3 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs transition-all flex items-center space-x-1"
           >
             <Upload className="w-3.5 h-3.5" />
@@ -563,7 +586,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                           )
                         }
                       />
-                      <StoryVisual text={msg.text} />
                     </div>
                   ) : (
                     <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
@@ -580,14 +602,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           );
         })}
 
-        {/* Fun Loading */}
+        {/* Fun Loading — avatar removed here, only the header avatar remains */}
         {isLoading && (
           <div className="flex items-start space-x-2">
-            <MamaTitiAvatar
-              size="sm"
-              isSpeaking={false}
-              showOnlineStatus={false}
-            />
             <div className="bg-white rounded-3xl rounded-tl-xs border-2 border-emerald-600/30 px-4 py-3 shadow-md max-w-[80%]">
               <div className="flex items-center space-x-2 mb-2">
                 <div className="flex space-x-1">
