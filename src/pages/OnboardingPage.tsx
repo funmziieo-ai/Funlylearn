@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ArrowRight, Check, ChevronLeft, Heart, Volume2, Loader2 } from 'lucide-react';
 import { UserProfile, ClassLevel, LanguageCode } from '../types';
 import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
-import { fetchAudioTTS } from '../services/apiClient';
+import { fetchAudioTTS, clearStoredChat } from '../services/apiClient';
 
 interface OnboardingPageProps {
   initialProfile: UserProfile;
@@ -36,12 +36,33 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
   const handleNextStep2 = () => setStep(3);
 
   const handleFinish = () => {
+    // Onboarding completion means "this is a fresh scholar" — reset every
+    // gamification/progress field to a true default instead of inheriting
+    // whatever was last cached on this device (e.g. from testing), and
+    // clear per-feature local data (chat history, Word Crush high score)
+    // so every new signup genuinely starts clean across all features.
+    clearStoredChat();
+    try {
+      localStorage.removeItem('naija_word_crush_highscore');
+    } catch (_e) {
+      // localStorage unavailable — nothing to clean up
+    }
+
     onComplete({
       ...initialProfile,
       name: name.trim() || 'Scholar',
       classLevel: classLevel || 'JSS 1',
       isOutOfSchool,
-      language
+      language,
+      coins: 0,
+      stars: 0,
+      streakDays: 1,
+      correctStreak: 0,
+      totalCorrect: 0,
+      homeworksSnapped: 0,
+      level: 1,
+      parentApprovedCount: 0,
+      unlockedRewards: ['r1']
     });
   };
 
