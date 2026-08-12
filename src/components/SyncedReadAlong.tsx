@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Pause, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
 import { fetchAudioTTS } from '../services/apiClient';
+import mamaTitiIconSrc from '../assets/images/mama_titi_official_1784860280943.jpg';
 
 interface SyncedReadAlongProps {
   text: string;
@@ -291,8 +292,23 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       <div className="pt-1 flex items-center space-x-2">
         {isLoading ? (
           <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+            <style>{`
+              @keyframes mama-dance-sm {
+                0%, 100% { transform: translateY(0) rotate(-8deg); }
+                25% { transform: translateY(-3px) rotate(8deg); }
+                50% { transform: translateY(0) rotate(-8deg); }
+                75% { transform: translateY(-3px) rotate(8deg); }
+              }
+              .mama-dancing-sm { animation: mama-dance-sm 0.7s ease-in-out infinite; }
+            `}</style>
+            <img
+              src={mamaTitiIconSrc}
+              alt=""
+              className="mama-dancing-sm w-4 h-4 rounded-full object-cover object-top shrink-0"
+              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
             <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
-            <span>Loading Idera Voice...</span>
+            <span>Loading Mama Titi's Voice...</span>
           </div>
         ) : hasError ? (
           <button
