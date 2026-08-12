@@ -22,10 +22,8 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
 
-  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stoppedRef = useRef(false);
@@ -42,19 +40,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
   const cleanText = normalizeText(text);
   const words = cleanText.split(/\s+/).filter(w => w.length > 0);
-
-  useEffect(() => {
-    const loadVoices = () => {
-      if ('speechSynthesis' in window) {
-        const available = window.speechSynthesis.getVoices();
-        setVoices(available);
-      }
-    };
-    loadVoices();
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.onvoiceschanged = loadVoices;
-    }
-  }, []);
 
   useEffect(() => {
     if (autoPlay) {
@@ -82,90 +67,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     setIsLoading(false);
     setActiveWordIndex(null);
     if (onSpeechStateChange) onSpeechStateChange(false);
-  };
-
-  const playWithBrowserSpeech = (fullText: string) => {
-    if (!('speechSynthesis' in window)) {
-      setIsPlaying(false);
-      setIsLoading(false);
-      setHasError(true);
-      if (onSpeechStateChange) onSpeechStateChange(false);
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.resume();
-
-    const utterance = new SpeechSynthesisUtterance(fullText);
-    speechUtteranceRef.current = utterance;
-
-    const availVoices =
-      voices.length > 0 ? voices : window.speechSynthesis.getVoices();
-
-    const preferredVoice =
-      availVoices.find(v => v.name.toLowerCase().includes('nigeria')) ||
-      availVoices.find(v => v.lang.toLowerCase().includes('en-gb')) ||
-      availVoices.find(v => v.lang.toLowerCase().includes('en-us')) ||
-      availVoices[0];
-
-    if (preferredVoice) utterance.voice = preferredVoice;
-    utterance.rate = 0.82;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    utterance.onstart = () => {
-      setIsLoading(false);
-      setIsPlaying(true);
-      if (onSpeechStateChange) onSpeechStateChange(true);
-    };
-
-    utterance.onboundary = event => {
-      if (event.name === 'word') {
-        const charIndex = event.charIndex;
-        let accumulated = 0;
-        for (let i = 0; i < words.length; i++) {
-          accumulated += words[i].length + 1;
-          if (accumulated >= charIndex) {
-            setActiveWordIndex(i);
-            break;
-          }
-        }
-      }
-    };
-
-    utterance.onend = () => {
-      setIsPlaying(false);
-      setIsLoading(false);
-      setActiveWordIndex(null);
-      if (onSpeechStateChange) onSpeechStateChange(false);
-    };
-
-    utterance.onerror = () => {
-      setIsPlaying(false);
-      setIsLoading(false);
-      setHasError(true);
-      if (onSpeechStateChange) onSpeechStateChange(false);
-    };
-
-    window.speechSynthesis.speak(utterance);
-
-    let currentIdx = 0;
-    const intervalMs = Math.max(
-      180,
-      (cleanText.length * 50) / words.length
-    );
-    intervalRef.current = setInterval(() => {
-      if (
-        !stoppedRef.current &&
-        window.speechSynthesis.speaking &&
-        currentIdx < words.length
-      ) {
-        setActiveWordIndex(currentIdx);
-        currentIdx++;
-      } else {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-      }
-    }, intervalMs);
   };
 
   const handlePlay = async () => {
@@ -242,20 +143,28 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
         await audio.play();
       } else {
-        if (ttsData.quotaMessage) {
-          setQuotaMessage(ttsData.quotaMessage);
-        }
+        // No real audio available — show an honest message instead of
+        // silently falling back to a robotic browser voice, since a
+        // wrong-sounding voice breaks the "real Nigerian teacher"
+        // experience worse than voice being briefly unavailable does.
         setIsLoading(false);
-        setIsPlaying(true);
-        if (onSpeechStateChange) onSpeechStateChange(true);
-        playWithBrowserSpeech(cleanText);
+        setIsPlaying(false);
+        setHasError(true);
+        setQuotaMessage(
+          ttsData.quotaMessage ||
+            "Mama Titi's voice is resting right now. Please try again in a moment — you can still read her reply above!"
+        );
+        if (onSpeechStateChange) onSpeechStateChange(false);
       }
     } catch {
       if (!stoppedRef.current) {
         setIsLoading(false);
-        setIsPlaying(true);
-        if (onSpeechStateChange) onSpeechStateChange(true);
-        playWithBrowserSpeech(cleanText);
+        setIsPlaying(false);
+        setHasError(true);
+        setQuotaMessage(
+          "Mama Titi's voice is resting right now. Please try again in a moment — you can still read her reply above!"
+        );
+        if (onSpeechStateChange) onSpeechStateChange(false);
       }
     }
   };
@@ -293,21 +202,60 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         {isLoading ? (
           <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
             <style>{`
-              @keyframes mama-dance-sm {
-                0%, 100% { transform: translateY(0) rotate(-8deg); }
-                25% { transform: translateY(-3px) rotate(8deg); }
-                50% { transform: translateY(0) rotate(-8deg); }
-                75% { transform: translateY(-3px) rotate(8deg); }
+              @keyframes mama-orbit-spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
               }
-              .mama-dancing-sm { animation: mama-dance-sm 0.7s ease-in-out infinite; }
+              @keyframes mama-glow-pulse {
+                0%, 100% { opacity: 0.35; transform: scale(1); }
+                50% { opacity: 0.75; transform: scale(1.2); }
+              }
+              .mama-orbit-wrap { position: relative; width: 28px; height: 28px; flex-shrink: 0; }
+              .mama-orbit-glow {
+                position: absolute;
+                inset: -3px;
+                border-radius: 9999px;
+                background: radial-gradient(circle, rgba(251,191,36,0.9) 0%, rgba(251,191,36,0) 70%);
+                animation: mama-glow-pulse 1.4s ease-in-out infinite;
+              }
+              .mama-orbit-photo {
+                position: absolute;
+                inset: 0;
+                border-radius: 9999px;
+                object-fit: cover;
+                z-index: 2;
+              }
+              .mama-orbit-dots {
+                position: absolute;
+                inset: -5px;
+                z-index: 3;
+                animation: mama-orbit-spin 1.1s linear infinite;
+              }
+              .mama-orbit-dot {
+                position: absolute;
+                width: 4px;
+                height: 4px;
+                border-radius: 9999px;
+                background: #064E3B;
+              }
+              .mama-orbit-dot:nth-child(1) { top: 0; left: 50%; margin-left: -2px; }
+              .mama-orbit-dot:nth-child(2) { bottom: 6%; right: 6%; }
+              .mama-orbit-dot:nth-child(3) { bottom: 6%; left: 6%; }
             `}</style>
-            <img
-              src={mamaTitiIconSrc}
-              alt=""
-              className="mama-dancing-sm w-4 h-4 rounded-full object-cover object-top shrink-0"
-              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+            <div className="mama-orbit-wrap">
+              <div className="mama-orbit-glow" />
+              <img
+                src={mamaTitiIconSrc}
+                alt=""
+                className="mama-orbit-photo"
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+              <div className="mama-orbit-dots">
+                <span className="mama-orbit-dot" />
+                <span className="mama-orbit-dot" />
+                <span className="mama-orbit-dot" />
+              </div>
+            </div>
             <span>Loading Mama Titi's Voice...</span>
           </div>
         ) : hasError ? (
