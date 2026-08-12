@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   BookOpen, 
   Printer, 
@@ -18,21 +18,67 @@ import {
   Edit3,
   ShieldCheck,
   Zap,
-  Bookmark
+  Bookmark,
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile } from '../types';
-import { EXAM_REVISION_DATA, ExamType, ExamSubject, ExamTopic } from '../data/examRevisionData';
+import { EXAM_REVISION_DATA, ExamType, ExamSubject, ExamTopic, ExamQuestion } from '../data/examRevisionData';
 import { MamaTitiAvatar } from './MamaTitiAvatar';
+import { fetchHomeworkRecords, HomeworkRecord } from '../services/supabaseService';
 
 interface SmartStudyNotebookAndRevisionProps {
   profile: UserProfile;
   onProfileUpdate: (updated: UserProfile) => void;
+  userId: string;
+}
+
+// Subjects that are planned but don't have real question content yet.
+// Shown as disabled "Coming Soon" buttons so the gap is honest instead
+// of just silently missing from the list. ALL subjects are here right
+// now, including previously-live ones, since every subject was pulled
+// pending individual verification against real fetched NERDC documents.
+const COMING_SOON_SUBJECTS: Record<string, { name: string; icon: string }[]> = {
+  fslc: [
+    { name: 'Mathematics', icon: '📐' },
+    { name: 'English Language', icon: '📖' },
+    { name: 'Basic Science', icon: '🔬' },
+    { name: 'Social Studies', icon: '🌍' },
+    { name: 'Yoruba Language', icon: '🇳🇬' }
+  ],
+  bece: [
+    { name: 'Mathematics', icon: '📐' },
+    { name: 'Basic Science & Technology', icon: '🔬' },
+    { name: 'English Language', icon: '📖' },
+    { name: 'Social Studies', icon: '🌍' },
+    { name: 'Yoruba Language', icon: '🇳🇬' }
+  ],
+  waec: [
+    { name: 'Mathematics (General)', icon: '📐' },
+    { name: 'English Language', icon: '📖' },
+    { name: 'Physics', icon: '⚛️' },
+    { name: 'Chemistry', icon: '🧪' },
+    { name: 'Biology', icon: '🧬' },
+    { name: 'Economics', icon: '💰' },
+    { name: 'Government', icon: '🏛️' },
+    { name: 'Yoruba Language', icon: '🇳🇬' }
+  ]
+};
+
+// How many questions to show per round — the rest of the topic's real
+// question pool stays available for the next "New Questions" refresh.
+const QUESTIONS_PER_ROUND = 8;
+
+function pickRandomQuestions(pool: ExamQuestion[], count: number): ExamQuestion[] {
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(count, pool.length));
 }
 
 export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisionProps> = ({
   profile,
-  onProfileUpdate
+  onProfileUpdate,
+  userId
 }) => {
   // Navigation & View States
   const [activeView, setActiveView] = useState<'hub' | 'notebook' | 'revision'>('hub');
@@ -47,41 +93,29 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [mode, setMode] = useState<'choose' | 'solve' | 'print'>('choose');
 
-  // Notebook compilation mock data based on child's homework activity
-  const compiledNotes = [
-    {
-      subject: 'Mathematics',
-      topic: 'Place Value & Whole Numbers up to 9,999',
-      date: '16/07/2026',
-      summary: 'Mama Titi explained place value using Naira notes (1,000s, 100s, 10s, 1s).',
-      keyPoints: [
-        'Thousands position represents blocks of 1,000.',
-        'Always start counting digits from right (Units) to left (Thousands).',
-        'In ₦4,520, 5 is in the Hundreds position.'
-      ]
-    },
-    {
-      subject: 'Yoruba Language',
-      topic: 'Ikini Yoruba (Greetings & Customs)',
-      date: '15/07/2026',
-      summary: 'Learned morning, afternoon, and evening greetings with proper Yoruba respect culture.',
-      keyPoints: [
-        'Morning greeting: Ẹ ku àárọ̀',
-        'Afternoon greeting: Ẹ kú ọ̀sán',
-        'Prostration (Dọ̀bálẹ̀) for boys, kneeling (Yíkún) for girls when greeting elders.'
-      ]
-    },
-    {
-      subject: 'Basic Science',
-      topic: 'Living and Non-Living Things',
-      date: '14/07/2026',
-      summary: 'Characteristics of living things (MR NIGER D) explained with examples from a Nigerian farm.',
-      keyPoints: [
-        'Living things move, respire, grow, and reproduce (e.g. goats, cassava plants).',
-        'Non-living things cannot grow or feed (e.g. Danfo bus, stones).'
-      ]
-    }
-  ];
+  // The current round of questions being shown, refreshable to pull a
+  // different random subset from the topic's full question pool.
+  const [displayedQuestions, setDisplayedQuestions] = useState<ExamQuestion[]>([]);
+  const [roundNumber, setRoundNumber] = useState(0);
+
+  // Real homework sessions from Supabase, replacing the previous
+  // hardcoded mock notebook entries.
+  const [compiledNotes, setCompiledNotes] = useState<HomeworkRecord[]>([]);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setIsLoadingNotes(true);
+    fetchHomeworkRecords(userId, 20).then(records => {
+      if (!cancelled) {
+        setCompiledNotes(records);
+        setIsLoadingNotes(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   // Action: Print Personal Notebook or Exam Revision
   const handlePrint = () => {
@@ -102,14 +136,11 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     content += `--------------------------------------------------------\n\n`;
 
     compiledNotes.forEach((note, idx) => {
-      content += `${idx + 1}. SUBJECT: ${note.subject.toUpperCase()}\n`;
-      content += `   Topic: ${note.topic}\n`;
-      content += `   Date Studied: ${note.date}\n`;
-      content += `   Mama Titi Summary: ${note.summary}\n`;
-      content += `   Key Takeaways:\n`;
-      note.keyPoints.forEach((kp) => {
-        content += `     - ${kp}\n`;
-      });
+      content += `${idx + 1}. ${note.topic}\n`;
+      content += `   Date: ${new Date(note.createdAt).toLocaleDateString()}\n`;
+      if (note.wasCorrect !== null) {
+        content += `   Result: ${note.wasCorrect ? 'Answered correctly' : 'Still practicing'}\n`;
+      }
       content += `\n--------------------------------------------------------\n\n`;
     });
 
@@ -144,12 +175,23 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     setMode('choose');
   };
 
-  // Select Topic
+  // Select Topic — pulls the first random round of questions
   const handleSelectTopic = (topic: ExamTopic) => {
     setSelectedTopic(topic);
     setSubmitted(false);
     setUserAnswers({});
     setMode('solve');
+    setDisplayedQuestions(pickRandomQuestions(topic.questions, QUESTIONS_PER_ROUND));
+    setRoundNumber(1);
+  };
+
+  // Refresh — pulls a new random round from the same topic's full pool
+  const handleRefreshQuestions = () => {
+    if (!selectedTopic) return;
+    setSubmitted(false);
+    setUserAnswers({});
+    setDisplayedQuestions(pickRandomQuestions(selectedTopic.questions, QUESTIONS_PER_ROUND));
+    setRoundNumber(r => r + 1);
   };
 
   // Select Quiz Answer Option
@@ -164,16 +206,15 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   // Submit Interactive Quiz
   const handleSubmitQuiz = () => {
     setSubmitted(true);
-    if (!selectedTopic) return;
     
     let correctCount = 0;
-    selectedTopic.questions.forEach((q) => {
+    displayedQuestions.forEach((q) => {
       if (userAnswers[q.id] === q.correctOptionIndex) {
         correctCount++;
       }
     });
 
-    if (correctCount === selectedTopic.questions.length) {
+    if (correctCount === displayedQuestions.length) {
       confetti({
         particleCount: 50,
         spread: 60,
@@ -188,15 +229,16 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
   // Calculate score
   const getScore = () => {
-    if (!selectedTopic) return { correct: 0, total: 0 };
     let correct = 0;
-    selectedTopic.questions.forEach((q) => {
+    displayedQuestions.forEach((q) => {
       if (userAnswers[q.id] === q.correctOptionIndex) {
         correct++;
       }
     });
-    return { correct, total: selectedTopic.questions.length };
+    return { correct, total: displayedQuestions.length };
   };
+
+  const comingSoonForExam = selectedExam ? (COMING_SOON_SUBJECTS[selectedExam.id] || []) : [];
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 pb-28 font-sans">
@@ -225,23 +267,27 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
             <h2 className="text-xl font-serif font-bold text-slate-900 border-b border-slate-300 pb-2">
               My Personal Study Notebook (Compiled from Mama Titi Homework Sessions)
             </h2>
-            {compiledNotes.map((note, i) => (
-              <div key={i} className="p-4 border border-slate-300 rounded-lg space-y-2">
-                <div className="flex justify-between font-bold text-sm">
-                  <span>{i + 1}. {note.subject} — {note.topic}</span>
-                  <span className="text-xs text-slate-500">{note.date}</span>
+            {compiledNotes.length === 0 ? (
+              <p className="text-sm text-slate-600 italic">
+                No homework sessions recorded yet. Chat with Mama Titi to build your notebook!
+              </p>
+            ) : (
+              compiledNotes.map((note, i) => (
+                <div key={note.id} className="p-4 border border-slate-300 rounded-lg space-y-2">
+                  <div className="flex justify-between font-bold text-sm">
+                    <span>{i + 1}. {note.topic}</span>
+                    <span className="text-xs text-slate-500">
+                      {new Date(note.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {note.wasCorrect !== null && (
+                    <p className="text-xs text-slate-700">
+                      {note.wasCorrect ? 'Answered correctly ✅' : 'Still practicing 💪'}
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-slate-700 italic">"{note.summary}"</p>
-                <div className="text-xs space-y-1">
-                  <strong>Key Points:</strong>
-                  <ul className="list-disc list-inside text-slate-800">
-                    {note.keyPoints.map((kp, k) => (
-                      <li key={k}>{kp}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         ) : selectedTopic ? (
           <div className="space-y-6">
@@ -268,7 +314,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               <h3 className="font-bold text-base border-b border-slate-300 pb-2">
                 Exam Revision Questions
               </h3>
-              {selectedTopic.questions.map((q, idx) => (
+              {displayedQuestions.map((q, idx) => (
                 <div key={q.id} className="p-4 border border-slate-300 rounded-lg space-y-3">
                   <p className="font-bold text-sm text-slate-900">
                     Question {idx + 1}: {q.question}
@@ -391,7 +437,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                 Exam Revision
               </h3>
               <p className={`text-xs leading-relaxed ${activeView === 'revision' ? 'text-emerald-100' : 'text-slate-600'}`}>
-                Practice official FSLC (Primary 6) and WAEC (SS3) past exam questions with instant feedback.
+                Practice official Common Entrance (Primary 6), BECE (JSS 3), and WAEC (SS3) past exam questions with instant feedback.
               </p>
             </div>
 
@@ -440,39 +486,41 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </div>
             </div>
 
-            {/* Compiled Note Cards */}
-            <div className="space-y-4">
-              {compiledNotes.map((note, idx) => (
-                <div key={idx} className="p-4 sm:p-5 rounded-2xl bg-[#FFFBF5] border border-amber-200 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-jakarta font-bold text-[#FF6B35] uppercase tracking-wide">
-                      {note.subject}
-                    </span>
-                    <span className="text-[11px] text-slate-400 font-mono font-medium">{note.date}</span>
-                  </div>
+            {/* Compiled Note Cards — real homework sessions from Supabase */}
+            {isLoadingNotes ? (
+              <div className="py-10 text-center text-sm text-slate-500">Loading your sessions...</div>
+            ) : compiledNotes.length === 0 ? (
+              <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-1">
+                <span className="text-3xl block">📚</span>
+                <p className="text-sm font-medium text-slate-600">No homework sessions yet</p>
+                <p className="text-xs text-slate-400">
+                  Chat with Mama Titi about your homework to start building your notebook!
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {compiledNotes.map((note, idx) => (
+                  <div key={note.id} className="p-4 sm:p-5 rounded-2xl bg-[#FFFBF5] border border-amber-200 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] text-slate-400 font-mono font-medium">
+                        {new Date(note.createdAt).toLocaleDateString()}
+                      </span>
+                      {note.wasCorrect !== null && (
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                          note.wasCorrect ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'
+                        }`}>
+                          {note.wasCorrect ? 'Correct ✅' : 'Practicing 💪'}
+                        </span>
+                      )}
+                    </div>
 
-                  <h3 className="font-serif text-base sm:text-lg font-bold text-slate-900">
-                    {idx + 1}. {note.topic}
-                  </h3>
-
-                  <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-xs text-slate-800 leading-relaxed font-sans">
-                    <strong>Mama Titi's Explanation:</strong> "{note.summary}"
+                    <h3 className="font-serif text-base sm:text-lg font-bold text-slate-900">
+                      {idx + 1}. {note.topic}
+                    </h3>
                   </div>
-
-                  <div className="space-y-1 pt-1">
-                    <span className="text-xs font-jakarta font-bold text-slate-800">Key Takeaways to Remember:</span>
-                    <ul className="space-y-1 text-xs text-slate-700">
-                      {note.keyPoints.map((kp, kIdx) => (
-                        <li key={kIdx} className="flex items-start space-x-2">
-                          <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                          <span>{kp}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
           </div>
         )}
@@ -590,7 +638,14 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </button>
                 </div>
 
-                {/* Subject Selector Buttons */}
+                {/* Honest status while every subject is being rebuilt with verified content */}
+                {selectedExam.subjects.length === 0 && (
+                  <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-xs text-amber-900 leading-relaxed">
+                    <strong>Rebuilding with verified curriculum:</strong> we removed all questions here to check each one against the real official Nigerian curriculum documents before bringing them back. Subjects below will unlock as they're verified.
+                  </div>
+                )}
+
+                {/* Subject Selector Buttons — real subjects + honest Coming Soon ones */}
                 <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar pb-1">
                   {selectedExam.subjects.map((subj) => (
                     <button
@@ -605,6 +660,21 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                       <span className="text-base">{subj.icon}</span>
                       <span>{subj.name}</span>
                     </button>
+                  ))}
+
+                  {comingSoonForExam.map((subj) => (
+                    <div
+                      key={subj.name}
+                      title={`${subj.name} — being verified against official curriculum`}
+                      className="px-4 py-2.5 rounded-2xl text-xs font-jakarta font-bold whitespace-nowrap flex items-center space-x-2 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shrink-0"
+                    >
+                      <span className="text-base opacity-50">{subj.icon}</span>
+                      <span>{subj.name}</span>
+                      <span className="flex items-center space-x-0.5 text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded-full">
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>Soon</span>
+                      </span>
+                    </div>
                   ))}
                 </div>
 
@@ -635,6 +705,9 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                             <h5 className="font-serif font-bold text-sm text-slate-900 group-hover:text-[#064E3B]">
                               {tIdx + 1}. {topic.name}
                             </h5>
+                            <span className="text-[10px] text-slate-400">
+                              {topic.questions.length} questions available
+                            </span>
                           </div>
                           <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#064E3B] group-hover:translate-x-1 transition-transform shrink-0" />
                         </button>
@@ -712,16 +785,27 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
                 {/* REVISION QUESTIONS LIST */}
                 <div className="space-y-6 pt-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <h3 className="font-serif font-bold text-lg text-slate-900">
                       Past Revision Questions
                     </h3>
-                    <span className="text-xs text-slate-500 font-mono">
-                      {selectedTopic.questions.length} Questions
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-slate-500 font-mono">
+                        Set {roundNumber} · {displayedQuestions.length} of {selectedTopic.questions.length} total
+                      </span>
+                      {selectedTopic.questions.length > QUESTIONS_PER_ROUND && (
+                        <button
+                          onClick={handleRefreshQuestions}
+                          className="px-3 py-1.5 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[11px] font-jakarta font-bold flex items-center space-x-1.5 transition-all"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>New Questions</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {selectedTopic.questions.map((q, qIdx) => {
+                  {displayedQuestions.map((q, qIdx) => {
                     const isSelected = userAnswers[q.id] !== undefined;
                     const isCorrect = userAnswers[q.id] === q.correctOptionIndex;
 
@@ -813,15 +897,26 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                         </p>
                       </div>
 
-                      <button
-                        onClick={() => {
-                          setSubmitted(false);
-                          setUserAnswers({});
-                        }}
-                        className="px-4 py-2 rounded-xl bg-[#FF6B35] text-white text-xs font-jakarta font-bold shadow-xs self-start sm:self-center"
-                      >
-                        Try Again
-                      </button>
+                      <div className="flex items-center space-x-2 self-start sm:self-center">
+                        {selectedTopic.questions.length > QUESTIONS_PER_ROUND && (
+                          <button
+                            onClick={handleRefreshQuestions}
+                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>New Questions</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            setSubmitted(false);
+                            setUserAnswers({});
+                          }}
+                          className="px-4 py-2 rounded-xl bg-[#FF6B35] text-white text-xs font-jakarta font-bold shadow-xs"
+                        >
+                          Try Again
+                        </button>
+                      </div>
                     </div>
                   )}
 
