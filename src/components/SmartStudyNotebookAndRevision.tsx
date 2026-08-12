@@ -41,7 +41,6 @@ interface SmartStudyNotebookAndRevisionProps {
 // pending individual verification against real fetched NERDC documents.
 const COMING_SOON_SUBJECTS: Record<string, { name: string; icon: string }[]> = {
   fslc: [
-    { name: 'Mathematics', icon: '📐' },
     { name: 'English Language', icon: '📖' },
     { name: 'Basic Science', icon: '🔬' },
     { name: 'Social Studies', icon: '🌍' },
