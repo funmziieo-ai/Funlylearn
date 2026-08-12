@@ -103,6 +103,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationCount, setCelebrationCount] = useState(0);
   const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
+  const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
@@ -181,16 +182,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   }, [isLoading]);
 
   const handleNewChat = () => {
-    const confirmMsg = isYoruba
-      ? 'Ṣe o fẹ bẹrẹ ibaraẹnisọrọ tuntun pẹlu Mama Titi?'
-      : 'Start a fresh new chat with Mama Titi?';
-    if (window.confirm(confirmMsg)) {
-      clearStoredChat();
-      setMessages([getWelcomeMessage(profile.language)]);
-      setInputText('');
-      setCroppedImage(null);
-      setRawImageSrc(null);
-    }
+    setShowNewChatConfirm(true);
+  };
+
+  const confirmNewChat = () => {
+    clearStoredChat();
+    setMessages([getWelcomeMessage(profile.language)]);
+    setInputText('');
+    setCroppedImage(null);
+    setRawImageSrc(null);
+    setShowNewChatConfirm(false);
   };
 
   const handleSend = async (
@@ -372,6 +373,37 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       className="flex flex-col h-[calc(100vh-64px)] max-w-2xl mx-auto bg-[#FFFBF5] relative overflow-hidden"
     >
 
+      {/* New Chat Confirmation — replaces the jarring native browser confirm() */}
+      {showNewChatConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-6">
+          <div className="bg-white rounded-3xl p-6 text-center space-y-4 max-w-sm w-full shadow-2xl border-2 border-emerald-200">
+            <div className="text-4xl">💬</div>
+            <h3 className="font-serif font-bold text-lg text-[#064E3B]">
+              {isYoruba ? 'Bẹrẹ Ibaraẹnisọrọ Tuntun?' : 'Start a New Chat?'}
+            </h3>
+            <p className="text-sm text-slate-500">
+              {isYoruba
+                ? 'Ìbáraẹnisọ̀rọ̀ yìí yóò parẹ́, a óò sì bẹ̀rẹ̀ tuntun pẹ̀lú Mama Titi.'
+                : 'This will clear your current chat and start fresh with Mama Titi.'}
+            </p>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowNewChatConfirm(false)}
+                className="flex-1 py-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all"
+              >
+                {isYoruba ? 'Fagilee' : 'Cancel'}
+              </button>
+              <button
+                onClick={confirmNewChat}
+                className="flex-1 py-3 rounded-full bg-[#064E3B] hover:bg-[#022C22] text-white font-bold text-sm transition-all"
+              >
+                {isYoruba ? 'Bẹ̀rẹ̀ Tuntun' : 'Start New'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Celebration Splash */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -454,11 +486,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       {/* Header — coins and language already shown in the app-wide Navbar above, so not repeated here */}
       <div className="bg-[#064E3B] text-white p-3 sm:p-4 shadow-sm flex items-center justify-between border-b border-[#0A5D46] shrink-0">
         <div className="flex items-center space-x-3">
-          <MamaTitiAvatar
-            size="md"
-            isSpeaking={speakingMessageId !== null}
-            showOnlineStatus={true}
-          />
+          <div className={isLoading ? 'animate-bounce' : ''}>
+            <MamaTitiAvatar
+              size="md"
+              isSpeaking={speakingMessageId !== null}
+              showOnlineStatus={true}
+            />
+          </div>
           <div>
             <h2 className="font-serif font-bold text-lg leading-tight">
               Mama Titi
