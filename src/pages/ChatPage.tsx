@@ -483,16 +483,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
-      {/* Header — coins and language already shown in the app-wide Navbar above, so not repeated here */}
+      {/* Header — avatar removed here since Navbar already shows Mama Titi's photo app-wide; coins/language also live in Navbar */}
       <div className="bg-[#064E3B] text-white p-3 sm:p-4 shadow-sm flex items-center justify-between border-b border-[#0A5D46] shrink-0">
         <div className="flex items-center space-x-3">
-          <div className={isLoading ? 'animate-bounce' : ''}>
-            <MamaTitiAvatar
-              size="md"
-              isSpeaking={speakingMessageId !== null}
-              showOnlineStatus={true}
-            />
-          </div>
           <div>
             <h2 className="font-serif font-bold text-lg leading-tight">
               Mama Titi
@@ -606,7 +599,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                         autoPlay={
                           isMama &&
                           idx === messages.length - 1 &&
-                          !isLoading
+                          !isLoading &&
+                          messages.some(m => m.sender === 'user')
                         }
                         onSpeechStateChange={speaking =>
                           setSpeakingMessageId(
@@ -633,6 +627,22 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         {/* Fun Loading — avatar removed here, only the header avatar remains */}
         {isLoading && (
           <div className="flex items-start space-x-2">
+            <style>{`
+              @keyframes mama-dance {
+                0%, 100% { transform: translateY(0) rotate(-8deg); }
+                25% { transform: translateY(-8px) rotate(8deg); }
+                50% { transform: translateY(0) rotate(-8deg); }
+                75% { transform: translateY(-8px) rotate(8deg); }
+              }
+              .mama-dancing { animation: mama-dance 0.7s ease-in-out infinite; }
+            `}</style>
+            <div className="mama-dancing shrink-0">
+              <MamaTitiAvatar
+                size="sm"
+                isSpeaking={false}
+                showOnlineStatus={false}
+              />
+            </div>
             <div className="bg-white rounded-3xl rounded-tl-xs border-2 border-emerald-600/30 px-4 py-3 shadow-md max-w-[80%]">
               <div className="flex items-center space-x-2 mb-2">
                 <div className="flex space-x-1">
