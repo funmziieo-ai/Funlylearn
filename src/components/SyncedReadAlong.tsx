@@ -147,12 +147,17 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         // silently falling back to a robotic browser voice, since a
         // wrong-sounding voice breaks the "real Nigerian teacher"
         // experience worse than voice being briefly unavailable does.
+        // This wording describes an action (tap to retry), not a
+        // promise about when she'll speak again, since we can't
+        // guarantee the retry will succeed either.
         setIsLoading(false);
         setIsPlaying(false);
         setHasError(true);
         setQuotaMessage(
           ttsData.quotaMessage ||
-            "Mama Titi's voice is resting right now. Please try again in a moment — you can still read her reply above!"
+            (language === 'yo'
+              ? "Ohùn Mama Titi ní ìṣòro díẹ̀ — tẹ ìsàlẹ̀ láti gbìyànjú lẹ́ẹ̀kansí tàbí ka ìdáhùn rẹ̀ nísàlẹ̀"
+              : "Mama Titi's voice had a little hiccup — tap below to try again or read her reply below")
         );
         if (onSpeechStateChange) onSpeechStateChange(false);
       }
@@ -162,7 +167,9 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         setIsPlaying(false);
         setHasError(true);
         setQuotaMessage(
-          "Mama Titi's voice is resting right now. Please try again in a moment — you can still read her reply above!"
+          language === 'yo'
+            ? "Ohùn Mama Titi ní ìṣòro díẹ̀ — tẹ ìsàlẹ̀ láti gbìyànjú lẹ́ẹ̀kansí tàbí ka ìdáhùn rẹ̀ nísàlẹ̀"
+            : "Mama Titi's voice had a little hiccup — tap below to try again or read her reply below"
         );
         if (onSpeechStateChange) onSpeechStateChange(false);
       }
