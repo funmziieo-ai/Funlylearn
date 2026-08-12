@@ -627,22 +627,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         {/* Fun Loading — avatar removed here, only the header avatar remains */}
         {isLoading && (
           <div className="flex items-start space-x-2">
-            <style>{`
-              @keyframes mama-dance {
-                0%, 100% { transform: translateY(0) rotate(-8deg); }
-                25% { transform: translateY(-8px) rotate(8deg); }
-                50% { transform: translateY(0) rotate(-8deg); }
-                75% { transform: translateY(-8px) rotate(8deg); }
-              }
-              .mama-dancing { animation: mama-dance 0.7s ease-in-out infinite; }
-            `}</style>
-            <div className="mama-dancing shrink-0">
-              <MamaTitiAvatar
-                size="sm"
-                isSpeaking={false}
-                showOnlineStatus={false}
-              />
-            </div>
             <div className="bg-white rounded-3xl rounded-tl-xs border-2 border-emerald-600/30 px-4 py-3 shadow-md max-w-[80%]">
               <div className="flex items-center space-x-2 mb-2">
                 <div className="flex space-x-1">
