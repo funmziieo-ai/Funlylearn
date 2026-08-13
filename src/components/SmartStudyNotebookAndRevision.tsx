@@ -24,9 +24,105 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile } from '../types';
-import { EXAM_REVISION_DATA, ExamType, ExamSubject, ExamTopic, ExamQuestion } from '../data/examRevisionData';
 import { MamaTitiAvatar } from './MamaTitiAvatar';
-import { fetchHomeworkRecords, HomeworkRecord } from '../services/supabaseService';
+import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow } from '../services/supabaseService';
+
+// Local types replacing the ones previously imported from the static
+// examRevisionData.ts file, now built at runtime from live Supabase rows.
+export interface ExamQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation: string;
+}
+export interface ExamTopic {
+  id: string;
+  name: string;
+  nerdcUnit: string;
+  objectives: string[];
+  questions: ExamQuestion[];
+}
+export interface ExamSubject {
+  id: string;
+  name: string;
+  icon: string;
+  topics: ExamTopic[];
+}
+export interface ExamType {
+  id: 'fslc' | 'bece' | 'waec';
+  title: string;
+  badge: string;
+  levelTarget: string;
+  description: string;
+  subjects: ExamSubject[];
+}
+
+// Stable structural metadata only — no actual questions/subjects here.
+// Real content is fetched live from Supabase and grouped in at runtime.
+const EXAM_META: Omit<ExamType, 'subjects'>[] = [
+  {
+    id: 'fslc',
+    title: 'First School Leaving Certificate',
+    badge: 'Primary 6 / JS1 Entry',
+    levelTarget: 'Primary 6',
+    description: 'For Primary 6 learners preparing for Common Entrance & secondary school transition. Subjects appear here as they are verified against real official NERDC curriculum documents.'
+  },
+  {
+    id: 'bece',
+    title: 'Basic Education Certificate Exam',
+    badge: 'JSS 3 / Junior WAEC',
+    levelTarget: 'JSS 3',
+    description: 'For JSS 3 students preparing for Junior WAEC and Senior Secondary placement. Subjects appear here as they are verified against real official NERDC curriculum documents.'
+  },
+  {
+    id: 'waec',
+    title: 'WAEC (SSCE) Senior Secondary',
+    badge: 'SS3 / SSCE Exam',
+    levelTarget: 'SS 3',
+    description: 'For SS3 candidates preparing for the West African Senior School Certificate Examination. Subjects appear here as they are verified against real official NERDC curriculum documents.'
+  }
+];
+
+// Groups flat rows fetched from Supabase into the nested
+// Subject -> Topic -> Question structure the UI renders.
+function groupQuestionsIntoSubjects(rows: ExamQuestionRow[]): ExamSubject[] {
+  const subjectMap = new Map<string, ExamSubject>();
+
+  for (const row of rows) {
+    if (!subjectMap.has(row.subjectId)) {
+      subjectMap.set(row.subjectId, {
+        id: row.subjectId,
+        name: row.subjectName,
+        icon: row.subjectIcon,
+        topics: []
+      });
+    }
+    const subject = subjectMap.get(row.subjectId)!;
+
+    let topic = subject.topics.find(t => t.id === row.topicId);
+    if (!topic) {
+      topic = {
+        id: row.topicId,
+        name: row.topicName,
+        nerdcUnit: row.nerdcUnit,
+        objectives: row.objectives,
+        questions: []
+      };
+      subject.topics.push(topic);
+    }
+
+    topic.questions.push({
+      id: row.id,
+      question: row.question,
+      options: row.options,
+      correctOptionIndex: row.correctOptionIndex,
+      explanation: row.explanation
+    });
+  }
+
+  return Array.from(subjectMap.values());
+}
 
 interface SmartStudyNotebookAndRevisionProps {
   profile: UserProfile;
@@ -41,13 +137,13 @@ interface SmartStudyNotebookAndRevisionProps {
 // pending individual verification against real fetched NERDC documents.
 const COMING_SOON_SUBJECTS: Record<string, { name: string; icon: string }[]> = {
   fslc: [
+    { name: 'Mathematics', icon: '📐' },
     { name: 'English Language', icon: '📖' },
     { name: 'Basic Science', icon: '🔬' },
     { name: 'Social Studies', icon: '🌍' },
     { name: 'Yoruba Language', icon: '🇳🇬' }
   ],
   bece: [
-    { name: 'Mathematics', icon: '📐' },
     { name: 'Basic Science & Technology', icon: '🔬' },
     { name: 'English Language', icon: '📖' },
     { name: 'Social Studies', icon: '🌍' },
@@ -115,6 +211,30 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
       cancelled = true;
     };
   }, [userId]);
+
+  // Live exam data — real questions fetched from Supabase per exam type,
+  // combined with stable structural metadata, instead of a bundled file.
+  const [examData, setExamData] = useState<ExamType[]>(
+    EXAM_META.map(meta => ({ ...meta, subjects: [] }))
+  );
+  const [isLoadingExamData, setIsLoadingExamData] = useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setIsLoadingExamData(true);
+    Promise.all(EXAM_META.map(meta => fetchExamRevisionQuestions(meta.id))).then(results => {
+      if (cancelled) return;
+      const combined = EXAM_META.map((meta, i) => ({
+        ...meta,
+        subjects: groupQuestionsIntoSubjects(results[i])
+      }));
+      setExamData(combined);
+      setIsLoadingExamData(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Action: Print Personal Notebook or Exam Revision
   const handlePrint = () => {
@@ -589,31 +709,35 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {EXAM_REVISION_DATA.map((exam) => (
-                    <button
-                      key={exam.id}
-                      onClick={() => handleSelectExam(exam)}
-                      className="p-5 rounded-3xl bg-white border-2 border-slate-200 hover:border-[#064E3B] shadow-soft hover:shadow-md transition-all text-left space-y-3 group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-jakarta font-bold">
-                          {exam.badge}
-                        </span>
-                        <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#064E3B] group-hover:translate-x-1 transition-transform" />
-                      </div>
+                {isLoadingExamData ? (
+                  <div className="py-10 text-center text-sm text-slate-500">Loading exam subjects...</div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {examData.map((exam) => (
+                      <button
+                        key={exam.id}
+                        onClick={() => handleSelectExam(exam)}
+                        className="p-5 rounded-3xl bg-white border-2 border-slate-200 hover:border-[#064E3B] shadow-soft hover:shadow-md transition-all text-left space-y-3 group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-jakarta font-bold">
+                            {exam.badge}
+                          </span>
+                          <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#064E3B] group-hover:translate-x-1 transition-transform" />
+                        </div>
 
-                      <div>
-                        <h3 className="font-serif font-bold text-lg text-slate-900 group-hover:text-[#064E3B]">
-                          {exam.title}
-                        </h3>
-                        <p className="text-xs text-slate-600 mt-1 leading-relaxed font-sans">
-                          {exam.description}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                        <div>
+                          <h3 className="font-serif font-bold text-lg text-slate-900 group-hover:text-[#064E3B]">
+                            {exam.title}
+                          </h3>
+                          <p className="text-xs text-slate-600 mt-1 leading-relaxed font-sans">
+                            {exam.description}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
