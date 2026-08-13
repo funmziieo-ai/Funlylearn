@@ -181,7 +181,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
               </span>
 
               <h2 className="font-serif text-2xl sm:text-3xl font-bold text-amber-300">
-                Upgrade FunlyLearn 🌟
+                Upgrade FunlyLearn
               </h2>
               <p className="text-xs sm:text-sm text-emerald-100 max-w-lg mx-auto">
                 Choose the right plan for your child. Unlock unlimited homework explanations with Mama Titi!
