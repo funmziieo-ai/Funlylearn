@@ -1,0 +1,75 @@
+name: Build Android APK
+
+# This entire build runs on GitHub's servers, not your Chromebook.
+# Trigger it manually from the "Actions" tab in your repo, or it will
+# also run automatically any time you push to the main branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install web app dependencies
+        run: npm install
+
+      - name: Build the web app
+        run: npm run build
+
+      - name: Install Capacitor
+        run: |
+          npm install @capacitor/core
+          npm install -D @capacitor/cli
+          npm install @capacitor/android
+
+      # Creates the Capacitor config file directly, instead of running
+      # the interactive "npx cap init" command (which can't run
+      # unattended in an automated cloud build).
+      - name: Create Capacitor config
+        run: |
+          cat > capacitor.config.json << 'EOF'
+          {
+            "appId": "com.funlylearn.app",
+            "appName": "FunlyLearn",
+            "webDir": "dist"
+          }
+          EOF
+
+      - name: Add Android platform (only if not already present)
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            npx cap sync android
+          fi
+
+      - name: Set up Java (required to build the Android project)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Build the debug APK
+        working-directory: ./android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      # Makes the finished APK downloadable from the "Actions" tab,
+      # under this workflow run, once it finishes.
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FunlyLearn-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
