@@ -127,7 +127,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
     const message = encodeURIComponent(
       `Hi FunlyLearn! I need help choosing a subscription plan for my child in ${profile.classLevel}`
     );
-    window.open(`https://wa.me/2348012345678?text=${message}`, '_blank');
+    window.open(`https://wa.me/2347033267197?text=${message}`, '_blank');
   };
 
   return (
