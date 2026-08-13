@@ -56,21 +56,41 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return;
 
-    // Check existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        handlePostAuthFlow(session.user);
-      }
-    });
+    // Detect a password recovery link directly from the URL, before
+    // either auth path below runs. A recovery link creates a real,
+    // valid Supabase session — so getSession() below would otherwise
+    // treat it as a normal sign-in and race ahead to onboarding/app
+    // before the PASSWORD_RECOVERY event listener even fires.
+    const isPasswordRecovery =
+      window.location.hash.includes('type=recovery') ||
+      window.location.search.includes('type=recovery');
+
+    if (isPasswordRecovery) {
+      setView('reset-password');
+    }
+
+    // Check existing session — skipped for recovery links, since we
+    // never want a recovery session routed into onboarding/app.
+    if (!isPasswordRecovery) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          setUser(session.user);
+          handlePostAuthFlow(session.user);
+        }
+      });
+    }
 
     const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      // A password recovery link lands here as a real auth event —
-      // without this check, it would silently fall through to the
-      // normal sign-in path and skip the actual password-change step
-      // entirely, taking the user straight into the app instead.
+      // Kept as a backup signal in addition to the URL check above —
+      // without this, it would silently fall through to the normal
+      // sign-in path and skip the actual password-change step.
       if (_event === 'PASSWORD_RECOVERY') {
         setView('reset-password');
+        return;
+      }
+      if (isPasswordRecovery) {
+        // Already showing the reset screen for this load — don't let
+        // a session-restored event pull the user away from it.
         return;
       }
       if (session?.user) {
