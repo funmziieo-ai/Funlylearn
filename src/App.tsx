@@ -15,6 +15,7 @@ import {
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { AuthScreen } from './components/AuthScreen';
+import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { PricingModal } from './components/PricingModal';
 import { ScholarProfileModal } from './components/ScholarProfileModal';
 import { VoiceKeyModal } from './components/VoiceKeyModal';
@@ -30,7 +31,7 @@ import { ProfilePage } from './pages/ProfilePage';
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile>(() => getStoredProfile());
-  const [view, setView] = useState<'landing' | 'auth' | 'onboarding' | 'app'>('landing');
+  const [view, setView] = useState<'landing' | 'auth' | 'onboarding' | 'app' | 'reset-password'>('landing');
   const [activeTab, setActiveTab] = useState<string>('home');
 
   // If someone opened the app via an invite link (e.g. ?invite=word_crush),
@@ -64,6 +65,14 @@ export default function App() {
     });
 
     const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      // A password recovery link lands here as a real auth event —
+      // without this check, it would silently fall through to the
+      // normal sign-in path and skip the actual password-change step
+      // entirely, taking the user straight into the app instead.
+      if (_event === 'PASSWORD_RECOVERY') {
+        setView('reset-password');
+        return;
+      }
       if (session?.user) {
         setUser(session.user);
         handlePostAuthFlow(session.user);
@@ -207,6 +216,12 @@ export default function App() {
           <AuthScreen
             onAuthSuccess={handleAuthSuccess}
             onContinueAsGuest={handleContinueAsGuest}
+          />
+        )}
+
+        {view === 'reset-password' && (
+          <ResetPasswordScreen
+            onComplete={() => setView('auth')}
           />
         )}
 
