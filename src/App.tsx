@@ -254,7 +254,13 @@ export default function App() {
             )}
 
             {activeTab === 'notebook' && (
-              <SmartNotebookPage profile={profile} />
+              <SmartNotebookPage
+                profile={profile}
+                onProfileUpdate={handleProfileUpdate}
+                userId={user?.id || getOrCreateGuestSessionId()}
+                subscription={subscription}
+                onOpenPricingModal={() => setIsPricingOpen(true)}
+              />
             )}
 
             {activeTab === 'parent' && (
