@@ -388,6 +388,55 @@ export async function fetchHomeworkRecords(
   }
 }
 
+// EXAM REVISION QUESTIONS — fetched live from Supabase instead of a
+// bundled static file, so updating/verifying more curriculum content
+// never requires an APK rebuild.
+export interface ExamQuestionRow {
+  id: string;
+  examId: string;
+  subjectId: string;
+  subjectName: string;
+  subjectIcon: string;
+  topicId: string;
+  topicName: string;
+  nerdcUnit: string;
+  objectives: string[];
+  question: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation: string;
+}
+
+export async function fetchExamRevisionQuestions(
+  examId: string
+): Promise<ExamQuestionRow[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('exam_revision_questions')
+      .select('*')
+      .eq('exam_id', examId);
+    if (error || !data) return [];
+    return data.map((r: any) => ({
+      id: r.id,
+      examId: r.exam_id,
+      subjectId: r.subject_id,
+      subjectName: r.subject_name,
+      subjectIcon: r.subject_icon,
+      topicId: r.topic_id,
+      topicName: r.topic_name,
+      nerdcUnit: r.nerdc_unit,
+      objectives: r.objectives,
+      question: r.question,
+      options: r.options,
+      correctOptionIndex: r.correct_option_index,
+      explanation: r.explanation
+    }));
+  } catch (e) {
+    return [];
+  }
+}
+
 // LEADERBOARD — real users ranked by stars, scoped to the same class
 // level so a Primary 3 child isn't compared against an SS3 student.
 export async function fetchLeaderboard(
