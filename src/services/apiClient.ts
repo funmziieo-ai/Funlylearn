@@ -170,7 +170,7 @@ export async function fetchAudioTTS(
   text: string,
   language: string
 ): Promise<{
-  audioBase64?: string;
+  audioUrl?: string;
   useClientSpeech?: boolean;
   textToSpeak?: string;
   voice?: string;
@@ -234,14 +234,15 @@ export async function fetchAudioTTS(
       throw new Error('Audio blob too small');
     }
 
-    const audioBase64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    // Using a blob URL instead of converting to base64 — base64 adds
+    // roughly a third more data plus a full encode/decode pass before
+    // playback can start, which is fast enough to be invisible in a
+    // desktop browser but noticeably slow inside a native app's
+    // WebView (like this app's Android build). A blob URL points
+    // directly at the audio data in memory, skipping that overhead.
+    const audioUrl = URL.createObjectURL(blob);
 
-    return { audioBase64, voice: 'Idera' };
+    return { audioUrl, voice: 'Idera' };
   } catch (err) {
     console.error('YarnGPT call failed:', err);
     const msg = err instanceof Error ? err.message : String(err);
