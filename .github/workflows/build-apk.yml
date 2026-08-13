@@ -64,8 +64,8 @@ jobs:
       # gives testers something recognizable instead of a blank default.
       - name: Set up app icon from existing Mama Titi photo (placeholder)
         run: |
-          mkdir -p resources
-          cp src/assets/images/mama_titi_official_1784860280943.jpg resources/icon.png
+          mkdir -p assets
+          cp src/assets/images/mama_titi_official_1784860280943.jpg assets/icon.png
           npm install @capacitor/assets --save-dev
           npx capacitor-assets generate --android
 
