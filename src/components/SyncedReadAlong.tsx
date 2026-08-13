@@ -85,8 +85,8 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
       if (stoppedRef.current) return;
 
-      if (ttsData.audioBase64) {
-        const audio = new Audio(ttsData.audioBase64);
+      if (ttsData.audioUrl) {
+        const audio = new Audio(ttsData.audioUrl);
         audioRef.current = audio;
 
         const totalDurationMs = await new Promise<number>((resolve) => {
@@ -129,6 +129,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           if (intervalRef.current) clearInterval(intervalRef.current);
           setIsPlaying(false);
           setActiveWordIndex(null);
+          URL.revokeObjectURL(ttsData.audioUrl!);
           audioRef.current = null;
           if (onSpeechStateChange) onSpeechStateChange(false);
         };
