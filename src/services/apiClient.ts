@@ -9,17 +9,17 @@ const PROFILE_KEY = 'funlylearn_user_profile_v2';
 const CHAT_KEY = 'funlylearn_chat_history_v2';
 
 export const DEFAULT_USER: UserProfile = {
-  id: 'user-tobi-1',
-  name: 'Tobi',
+  id: 'guest-' + Date.now(),
+  name: '',
   classLevel: 'JSS 1',
   language: 'en',
   isOutOfSchool: false,
-  stars: 942,
-  streakDays: 4,
-  level: 12,
-  parentApprovedCount: 3,
+  stars: 0,
+  streakDays: 1,
+  level: 1,
+  parentApprovedCount: 0,
   unlockedRewards: ['r1'],
-  parentWhatsApp: '2348012345678',
+  parentWhatsApp: '',
   createdAt: new Date().toISOString()
 };
 
