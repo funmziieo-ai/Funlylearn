@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
-import { supabase } from '../services/supabaseService';
+import { supabase, resetPasswordForEmail } from '../services/supabaseService';
 import { MamaTitiAvatar } from './MamaTitiAvatar';
 
 interface AuthScreenProps {
@@ -17,6 +17,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
 
   const handleEmailAuth = async () => {
     if (!supabase) {
@@ -59,6 +60,34 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
     }
   };
 
+  // Previously this was just static text with no click handler at all —
+  // tapping it could never have done anything. Now it actually calls the
+  // real password reset function, using whatever email is already typed
+  // into the field above (asking them to type it there first if empty).
+  const handleForgotPassword = async () => {
+    setError(null);
+    setInfoMsg(null);
+
+    if (!email) {
+      setError('Please enter your email address above first, then tap "Forgot password?" again.');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const result = await resetPasswordForEmail(email);
+      if (result.success) {
+        setInfoMsg(result.message);
+      } else {
+        setError(result.message);
+      }
+    } catch (err: any) {
+      setError('Something went wrong sending the reset link. Please try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#064E3B] flex flex-col items-center px-5 pt-10 pb-8">
       {/* Mascot + welcome */}
@@ -81,7 +110,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
           5 free messages a day. Sign up anytime to save your stars.
         </p>
 
-        {error && (
+        {error && !showEmailForm && (
           <p className="text-center text-red-300 text-xs px-4">{error}</p>
         )}
       </div>
@@ -153,7 +182,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
             </button>
 
             {mode === 'signin' && (
-              <p className="text-center text-emerald-300 text-xs underline">Forgot password? Reset here</p>
+              <button
+                onClick={handleForgotPassword}
+                disabled={resetLoading}
+                className="w-full text-center text-emerald-300 text-xs underline disabled:opacity-60"
+              >
+                {resetLoading ? 'Sending reset link...' : 'Forgot password? Reset here'}
+              </button>
             )}
           </div>
         )}
