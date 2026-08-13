@@ -143,7 +143,16 @@ export default function App() {
   };
 
   const handleSignOut = async () => {
-    await signOutUser();
+    // Always clear local state, even if the remote sign-out call fails
+    // for any reason (network hiccup, Supabase timeout). Previously, a
+    // failure here left the user stuck "signed in" with no way out, and
+    // meant the next sign-in couldn't properly load fresh account data
+    // since the app never actually left the old session state.
+    try {
+      await signOutUser();
+    } catch (err) {
+      console.warn('Remote sign-out failed, clearing local session anyway:', err);
+    }
     setUser(null);
     setIsGuest(false);
     setView('landing');
