@@ -156,6 +156,11 @@ export default function App() {
     setUser(null);
     setIsGuest(false);
     setView('landing');
+    // Temporary visible confirmation for testing this fix — makes it
+    // obvious the function actually ran, rather than relying only on
+    // the screen change (easy to miss/misread while testing). Safe to
+    // remove once confirmed working.
+    window.alert('Signed out successfully!');
   };
 
   const handleOnboardingComplete = (updatedProfile: UserProfile) => {
