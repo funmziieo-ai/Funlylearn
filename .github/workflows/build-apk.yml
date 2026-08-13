@@ -57,6 +57,18 @@ jobs:
             npx cap sync android
           fi
 
+      # Uses the existing Mama Titi photo as a real placeholder app icon,
+      # instead of shipping Capacitor's generic default icon. This isn't
+      # a polished, professionally-designed icon (that's a later task,
+      # likely for whoever handles final Play Store polish) — it just
+      # gives testers something recognizable instead of a blank default.
+      - name: Set up app icon from existing Mama Titi photo (placeholder)
+        run: |
+          mkdir -p resources
+          cp src/assets/images/mama_titi_official_1784860280943.jpg resources/icon.png
+          npm install @capacitor/assets --save-dev
+          npx capacitor-assets generate --android
+
       - name: Set up Java (required to build the Android project)
         uses: actions/setup-java@v4
         with:
