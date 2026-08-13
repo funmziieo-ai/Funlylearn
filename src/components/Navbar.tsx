@@ -97,7 +97,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onTabChange && onTabChange('lingo')}
             disabled={!onTabChange}
             title="View Naija Lingo levels"
-            className="hidden sm:flex items-center space-x-1 bg-[#022C22] hover:bg-emerald-900 px-2.5 py-1 rounded-full border border-amber-400/30 text-xs font-bold text-amber-300 transition-colors"
+            className="flex items-center space-x-1 bg-[#022C22] hover:bg-emerald-900 px-2.5 py-1 rounded-full border border-amber-400/30 text-xs font-bold text-amber-300 transition-colors"
           >
             <span>🪙</span>
             <span>{profile.coins || 0}</span>
@@ -108,7 +108,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onTabChange && onTabChange('lingo')}
             disabled={!onTabChange}
             title="View Naija Lingo levels"
-            className="hidden sm:flex items-center space-x-1 bg-[#022C22] hover:bg-emerald-900 px-2.5 py-1 rounded-full border border-amber-400/30 text-xs font-bold text-amber-300 transition-colors"
+            className="flex items-center space-x-1 bg-[#022C22] hover:bg-emerald-900 px-2.5 py-1 rounded-full border border-amber-400/30 text-xs font-bold text-amber-300 transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
             <span>{profile.stars}</span>
