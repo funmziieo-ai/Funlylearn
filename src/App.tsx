@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, UserSubscription } from './types';
-import { getStoredProfile, saveStoredProfile } from './services/apiClient';
+import { getStoredProfile, saveStoredProfile, DEFAULT_USER } from './services/apiClient';
 import {
   supabase,
   getStoredSubscription,
@@ -153,14 +153,16 @@ export default function App() {
     } catch (err) {
       console.warn('Remote sign-out failed, clearing local session anyway:', err);
     }
+    // Also reset the actual profile (name, coins, stars, etc.) — sign
+    // out was previously only clearing who's logged in, leaving the
+    // old profile's name and data sitting in memory and in local
+    // storage for whoever uses the app next.
+    const freshProfile = { ...DEFAULT_USER, id: 'guest-' + Date.now(), createdAt: new Date().toISOString() };
+    setProfile(freshProfile);
+    saveStoredProfile(freshProfile);
     setUser(null);
     setIsGuest(false);
     setView('landing');
-    // Temporary visible confirmation for testing this fix — makes it
-    // obvious the function actually ran, rather than relying only on
-    // the screen change (easy to miss/misread while testing). Safe to
-    // remove once confirmed working.
-    window.alert('Signed out successfully!');
   };
 
   const handleOnboardingComplete = (updatedProfile: UserProfile) => {
