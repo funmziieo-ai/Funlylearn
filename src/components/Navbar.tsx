@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Sparkles, MoreVertical, Crown, User, Mic } from 'lucide-react';
+import { Sparkles, MoreVertical, Crown, User, Mic } from 'lucide-react';
 import { UserProfile, LanguageCode } from '../types';
 import mamaTitiImg from '../assets/images/mama_titi_official_1784860280943.jpg';
 
@@ -132,12 +132,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </button>
 
-          {/* Notification bell */}
-          <button className="p-1.5 text-emerald-100 hover:text-white hover:bg-emerald-800 rounded-full transition-colors relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#FF6B35]" />
-          </button>
-
           {/* Three dots menu */}
           <div className="relative" ref={menuRef}>
             <button
@@ -150,27 +144,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             {isMenuOpen && (
               <div className="absolute right-0 mt-2 w-56 bg-white text-slate-800 rounded-2xl shadow-2xl border-2 border-amber-400/80 py-2 z-50 font-sans">
 
-                {/* Profile header in menu */}
-                <div className="px-3 py-2 border-b border-slate-100 mb-1 flex items-center space-x-2">
-                  {!imgError ? (
-                    <img
-                      src={mamaTitiImg}
-                      alt="Mama Titi"
-                      className="w-8 h-8 rounded-full object-cover object-top border border-amber-300"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-[#064E3B] flex items-center justify-center">
-                      <span className="text-white font-black text-sm">M</span>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Scholar
-                    </p>
-                    <p className="text-xs font-bold text-[#064E3B]">
-                      {profile.name} · {profile.classLevel}
-                    </p>
-                  </div>
+                {/* Profile header in menu — text only, avatar removed since it duplicated the brand logo above */}
+                <div className="px-3 py-2 border-b border-slate-100 mb-1">
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Scholar
+                  </p>
+                  <p className="text-xs font-bold text-[#064E3B]">
+                    {profile.name} · {profile.classLevel}
+                  </p>
                 </div>
 
                 {/* Subscription */}
