@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, MoreVertical, Crown, User, Mic } from 'lucide-react';
+import { Sparkles, MoreVertical, Crown, User } from 'lucide-react';
 import { UserProfile, LanguageCode } from '../types';
 import mamaTitiImg from '../assets/images/mama_titi_official_1784860280943.jpg';
 
@@ -177,24 +177,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <span className="block text-slate-900 font-bold">Subscription & Billing 💳</span>
                       <span className="block text-[10px] text-slate-500 font-normal">
                         Upgrade plan or view status
-                      </span>
-                    </div>
-                  </button>
-                )}
-
-                {/* Voice Key */}
-                {onOpenVoiceKeyModal && (
-                  <button
-                    onClick={() => handleMenuItemClick(onOpenVoiceKeyModal)}
-                    className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 font-bold text-xs flex items-center space-x-2.5 transition-colors group border-b border-slate-100"
-                  >
-                    <div className="p-1.5 rounded-xl bg-emerald-700 text-amber-300 group-hover:scale-105 transition-transform">
-                      <Mic className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="block text-slate-900 font-bold">Voice Settings 🎙️</span>
-                      <span className="block text-[10px] text-slate-500 font-normal">
-                        Mama Titi voice settings
                       </span>
                     </div>
                   </button>
