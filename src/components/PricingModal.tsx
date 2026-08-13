@@ -28,51 +28,62 @@ export const PricingModal: React.FC<PricingModalProps> = ({
   const [currency, setCurrency] = useState<'NGN' | 'GBP' | 'USD'>('NGN');
   const [isLoadingPlan, setIsLoadingPlan] = useState<string | null>(null);
   const [successPlan, setSuccessPlan] = useState<SubscriptionPlan | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const currencySymbol = currency === 'NGN' ? '₦' : currency === 'GBP' ? '£' : '$';
 
-  // Handle Plan Subscription
   const handleSubscribe = async (plan: 'basic' | 'family') => {
     setIsLoadingPlan(plan);
+    setPaymentError(null);
 
-    // Calculate NGN Amount in Kobo or Diaspora Amount
-    let amountInKobo = 600000; // ₦6,000
-    if (plan === 'basic') {
-      amountInKobo = billingInterval === 'monthly' ? 600000 : 4320000; // ₦6,000 or ₦43,200
-    } else {
-      amountInKobo = billingInterval === 'monthly' ? 1200000 : 8640000; // ₦12,000 or ₦86,400
-    }
-
+    // Amounts in the smallest currency unit (kobo/pence/cents), since
+    // that's what Paystack's API requires regardless of currency.
+    let amount: number;
     if (currency === 'NGN') {
-      // Paystack NGN inline checkout
-      openPaystackCheckout({
-        email: userEmail,
-        amount: amountInKobo,
-        plan,
-        childName: profile.name,
-        classLevel: profile.classLevel,
-        currency: 'NGN',
-        onSuccess: async (ref) => {
-          await finalizeSubscription(plan, ref, 'NGN', amountInKobo / 100);
-        },
-        onCancel: () => {
-          setIsLoadingPlan(null);
-        }
-      });
+      if (plan === 'basic') {
+        amount = billingInterval === 'monthly' ? 600000 : 4320000;
+      } else {
+        amount = billingInterval === 'monthly' ? 1200000 : 8640000;
+      }
+    } else if (currency === 'GBP') {
+      if (plan === 'basic') {
+        amount = billingInterval === 'monthly' ? 1000 : 7200;
+      } else {
+        amount = billingInterval === 'monthly' ? 2000 : 14400;
+      }
     } else {
-      // Diaspora checkout (GBP or USD)
-      setTimeout(async () => {
-        let amount = 10;
-        if (plan === 'basic') {
-          amount = billingInterval === 'monthly' ? 10 : 72;
-        } else {
-          amount = billingInterval === 'monthly' ? 20 : 144;
-        }
-        await finalizeSubscription(plan, `stripe_diaspora_${Date.now()}`, currency, amount);
-      }, 1000);
+      // USD
+      if (plan === 'basic') {
+        amount = billingInterval === 'monthly' ? 1000 : 7200;
+      } else {
+        amount = billingInterval === 'monthly' ? 2000 : 14400;
+      }
     }
+
+    // Every currency now goes through real Paystack — no simulated
+    // "diaspora" success path. If Paystack doesn't support a given
+    // currency on this account, it will surface as a real error via
+    // onError below, rather than silently faking a successful payment.
+    openPaystackCheckout({
+      email: userEmail,
+      amount,
+      plan,
+      childName: profile.name,
+      classLevel: profile.classLevel,
+      currency,
+      onSuccess: async (ref) => {
+        await finalizeSubscription(plan, ref, currency, amount / 100);
+      },
+      onCancel: () => {
+        setIsLoadingPlan(null);
+      },
+      onError: (message) => {
+        setIsLoadingPlan(null);
+        setPaymentError(message);
+      }
+    });
   };
 
   const finalizeSubscription = async (
@@ -112,7 +123,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
     });
   };
 
-  // WhatsApp Support Helper
   const handleWhatsAppSupport = () => {
     const message = encodeURIComponent(
       `Hi FunlyLearn! I need help choosing a subscription plan for my child in ${profile.classLevel}`
@@ -125,7 +135,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
       
       <div className="relative w-full max-w-4xl bg-white rounded-3xl border-2 border-amber-400/50 shadow-2xl overflow-hidden my-6 my-auto animate-fadeIn">
         
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors"
@@ -133,7 +142,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        {/* SUCCESS SCREEN OVERLAY */}
         {successPlan ? (
           <div className="bg-[#064E3B] text-white p-8 sm:p-12 text-center space-y-6 animate-scaleUp">
             <div className="w-20 h-20 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center mx-auto shadow-xl">
@@ -165,7 +173,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
           </div>
         ) : (
           <div>
-            {/* DEEP GREEN HEADER */}
             <div className="bg-[#064E3B] text-white p-6 sm:p-8 text-center space-y-3 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
               
@@ -180,10 +187,8 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 Choose the right plan for your child. Unlock unlimited homework explanations with Mama Titi!
               </p>
 
-              {/* TOGGLES: Billing & Currency */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
                 
-                {/* Billing Monthly / Yearly Toggle */}
                 <div className="bg-[#022C22] p-1 rounded-2xl border border-amber-400/30 flex items-center text-xs font-jakarta font-bold">
                   <button
                     onClick={() => setBillingInterval('monthly')}
@@ -210,7 +215,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                   </button>
                 </div>
 
-                {/* Currency Toggle */}
                 <div className="bg-[#022C22] p-1 rounded-2xl border border-amber-400/30 flex items-center text-xs font-jakarta font-bold">
                   <button
                     onClick={() => setCurrency('NGN')}
@@ -247,10 +251,14 @@ export const PricingModal: React.FC<PricingModalProps> = ({
               </div>
             </div>
 
-            {/* THREE PLAN CARDS GRID */}
+            {paymentError && (
+              <div className="mx-5 sm:mx-8 mt-4 p-3.5 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-800 text-xs font-medium text-center">
+                {paymentError}
+              </div>
+            )}
+
             <div className="p-5 sm:p-8 bg-[#FFFDF5] grid grid-cols-1 md:grid-cols-3 gap-5">
               
-              {/* PLAN 1: FREE PLAN */}
               <div className="bg-white rounded-3xl border border-slate-200 p-5 space-y-4 flex flex-col justify-between shadow-soft">
                 <div className="space-y-3">
                   <div>
@@ -306,7 +314,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 </button>
               </div>
 
-              {/* PLAN 2: BASIC PLAN */}
               <div className="bg-white rounded-3xl border-2 border-amber-400 p-5 space-y-4 flex flex-col justify-between shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 bg-amber-400 text-slate-950 font-jakarta font-bold text-[10px] uppercase px-3 py-1 rounded-bl-xl shadow-xs">
                   Recommended
@@ -319,7 +326,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                       {currency === 'NGN' ? (
                         billingInterval === 'monthly' ? (
                           <>
-                            <span className="line-through text-slate-400 font-normal mr-2 text-lg">₦1,500</span>
                             <span>₦6,000</span>
                             <span className="text-xs text-slate-500 font-normal ml-1"> / month</span>
                           </>
@@ -404,7 +410,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 </button>
               </div>
 
-              {/* PLAN 3: FAMILY PLAN */}
               <div className="bg-[#022C22] text-white rounded-3xl border-2 border-emerald-400 p-5 space-y-4 flex flex-col justify-between shadow-xl">
                 <div className="space-y-3">
                   <div>
@@ -413,7 +418,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                       {currency === 'NGN' ? (
                         billingInterval === 'monthly' ? (
                           <>
-                            <span className="line-through text-emerald-300/60 font-normal mr-2 text-lg">₦3,500</span>
                             <span>₦12,000</span>
                             <span className="text-xs text-emerald-200 font-normal ml-1"> / month</span>
                           </>
@@ -491,7 +495,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
 
             </div>
 
-            {/* WHATSAPP SUPPORT LINK BELOW */}
             <div className="p-4 bg-emerald-950 text-center border-t border-emerald-900 flex flex-col sm:flex-row items-center justify-between gap-3 px-6">
               <span className="text-xs text-emerald-200 font-medium">
                 Need help choosing a plan or making a bank transfer? Chat with our team!
