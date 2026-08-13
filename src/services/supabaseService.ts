@@ -198,7 +198,7 @@ export async function resetPasswordForEmail(
     if (error) return { success: false, message: error.message };
     return {
       success: true,
-      message: 'Password reset link sent! Check your inbox my dear.'
+      message: 'Password reset link sent! Check your inbox.'
     };
   } catch (e: any) {
     return {
