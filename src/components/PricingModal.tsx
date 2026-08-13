@@ -272,15 +272,15 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                   <div className="border-t border-slate-100 pt-3 space-y-2 text-xs text-slate-700 font-sans">
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>5 messages per day</span>
+                      <span>5 messages or homework snaps per day</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Basic Mama Titi teaching</span>
+                      <span>Unlimited Mama Titi voice</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Naija Lingo 3 words daily</span>
+                      <span>Naija Lingo — unlock levels by earning coins</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -289,11 +289,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
 
                     <div className="flex items-center space-x-2 text-slate-400">
                       <X className="w-4 h-4 shrink-0" />
-                      <span className="line-through">Unlimited messages</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-slate-400">
-                      <X className="w-4 h-4 shrink-0" />
-                      <span className="line-through">Homework snap</span>
+                      <span className="line-through">Unlimited messages & snaps</span>
                     </div>
                     <div className="flex items-center space-x-2 text-slate-400">
                       <X className="w-4 h-4 shrink-0" />
@@ -359,19 +355,15 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                   <div className="border-t border-amber-100 pt-3 space-y-2 text-xs text-slate-800 font-sans">
                     <div className="flex items-center space-x-2 font-semibold">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Unlimited Mama Titi messages</span>
+                      <span>Unlimited messages & homework snaps</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Homework snap feature</span>
+                      <span>Smart notebook — view, print & download</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>All subjects Primary 1 to SS3</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Full Naija Lingo Yoruba game</span>
+                      <span>All subjects Primary 3 to SS3</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -388,25 +380,16 @@ export const PricingModal: React.FC<PricingModalProps> = ({
 
                     <div className="flex items-center space-x-2 text-slate-400">
                       <X className="w-4 h-4 shrink-0" />
-                      <span className="line-through">Smart notebook</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-slate-400">
-                      <X className="w-4 h-4 shrink-0" />
                       <span className="line-through">Multiple children</span>
                     </div>
                   </div>
                 </div>
 
                 <button
-                  onClick={() => handleSubscribe('basic')}
-                  disabled={isLoadingPlan !== null}
-                  className="w-full py-3.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white font-jakarta font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2 active:scale-[0.98]"
+                  disabled
+                  className="w-full py-3.5 rounded-2xl bg-slate-200 text-slate-500 font-jakarta font-bold text-xs cursor-not-allowed flex items-center justify-center space-x-2"
                 >
-                  {isLoadingPlan === 'basic' ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <span>Subscribe Now</span>
-                  )}
+                  <span>Payments Coming Soon</span>
                 </button>
               </div>
 
@@ -459,10 +442,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>Smart notebook PDF export</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>Friend and cousin battles</span>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -481,15 +460,10 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 </div>
 
                 <button
-                  onClick={() => handleSubscribe('family')}
-                  disabled={isLoadingPlan !== null}
-                  className="w-full py-3.5 rounded-2xl bg-white hover:bg-slate-100 text-[#064E3B] font-jakarta font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2 active:scale-[0.98]"
+                  disabled
+                  className="w-full py-3.5 rounded-2xl bg-emerald-900/60 text-emerald-300/60 font-jakarta font-bold text-xs cursor-not-allowed flex items-center justify-center space-x-2"
                 >
-                  {isLoadingPlan === 'family' ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <span>Subscribe Now</span>
-                  )}
+                  <span>Payments Coming Soon</span>
                 </button>
               </div>
 
