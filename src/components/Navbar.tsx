@@ -92,17 +92,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Right side controls */}
         <div className="flex items-center space-x-2">
 
-          {/* Coins badge */}
-          <div className="hidden sm:flex items-center space-x-1 bg-[#022C22] px-2.5 py-1 rounded-full border border-amber-400/30 text-xs font-bold text-amber-300">
+          {/* Coins badge — tapping jumps to Naija Lingo, since coins unlock levels there */}
+          <button
+            onClick={() => onTabChange && onTabChange('lingo')}
+            disabled={!onTabChange}
+            title="View Naija Lingo levels"
+            className="hidden sm:flex items-center space-x-1 bg-[#022C22] hover:bg-emerald-900 px-2.5 py-1 rounded-full border border-amber-400/30 text-xs font-bold text-amber-300 transition-colors"
+          >
             <span>🪙</span>
             <span>{profile.coins || 0}</span>
-          </div>
+          </button>
 
-          {/* Stars badge */}
-          <div className="hidden sm:flex items-center space-x-1 bg-[#022C22] px-2.5 py-1 rounded-full border border-amber-400/30 text-xs font-bold text-amber-300">
+          {/* Stars badge — tapping jumps to Naija Lingo too, per current app flow */}
+          <button
+            onClick={() => onTabChange && onTabChange('lingo')}
+            disabled={!onTabChange}
+            title="View Naija Lingo levels"
+            className="hidden sm:flex items-center space-x-1 bg-[#022C22] hover:bg-emerald-900 px-2.5 py-1 rounded-full border border-amber-400/30 text-xs font-bold text-amber-300 transition-colors"
+          >
             <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
             <span>{profile.stars}</span>
-          </div>
+          </button>
 
           {/* Language Toggle */}
           <button
