@@ -23,7 +23,7 @@ import {
   Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { UserProfile } from '../types';
+import { UserProfile, UserSubscription } from '../types';
 import { MamaTitiAvatar } from './MamaTitiAvatar';
 import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow } from '../services/supabaseService';
 
@@ -128,6 +128,23 @@ interface SmartStudyNotebookAndRevisionProps {
   profile: UserProfile;
   onProfileUpdate: (updated: UserProfile) => void;
   userId: string;
+  subscription?: UserSubscription;
+  onOpenPricingModal: () => void;
+}
+
+// Same premium check as ChatPage.tsx — active paid plan, or a still-valid
+// trial period. Smart Notebook viewing/export is Basic/Family only; the
+// underlying homework records still accumulate for free either way, so
+// by the time a parent upgrades there's already real progress to see.
+function isPremiumActive(subscription?: UserSubscription): boolean {
+  if (!subscription) return false;
+  if (subscription.status === 'active' && subscription.plan !== 'free') {
+    return true;
+  }
+  if (subscription.status === 'trial' && subscription.expiresAt) {
+    return new Date(subscription.expiresAt).getTime() > Date.now();
+  }
+  return false;
 }
 
 // Subjects that are planned but don't have real question content yet.
@@ -173,8 +190,12 @@ function pickRandomQuestions(pool: ExamQuestion[], count: number): ExamQuestion[
 export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisionProps> = ({
   profile,
   onProfileUpdate,
-  userId
+  userId,
+  subscription,
+  onOpenPricingModal
 }) => {
+  const isPremium = isPremiumActive(subscription);
+
   // Navigation & View States
   const [activeView, setActiveView] = useState<'hub' | 'notebook' | 'revision'>('hub');
   
@@ -585,10 +606,10 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                 </p>
               </div>
 
-              {/* Action Buttons: Print & Download */}
+              {/* Action Buttons: Print & Download — Basic/Family only */}
               <div className="flex items-center space-x-2 shrink-0">
                 <button
-                  onClick={handlePrint}
+                  onClick={isPremium ? handlePrint : onOpenPricingModal}
                   className="px-3.5 py-2 rounded-2xl bg-[#064E3B] hover:bg-[#022C22] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
                 >
                   <Printer className="w-4 h-4" />
@@ -596,7 +617,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                 </button>
 
                 <button
-                  onClick={handleDownloadNotebook}
+                  onClick={isPremium ? handleDownloadNotebook : onOpenPricingModal}
                   className="px-3.5 py-2 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
                 >
                   <Download className="w-4 h-4" />
@@ -605,9 +626,42 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </div>
             </div>
 
-            {/* Compiled Note Cards — real homework sessions from Supabase */}
+            {/* Compiled Note Cards — real homework sessions from Supabase.
+                Basic/Family only: the records accumulate for free either
+                way, but viewing/exporting them requires an upgrade — so
+                the upgrade prompt shows real, already-earned progress
+                rather than an abstract feature description. */}
             {isLoadingNotes ? (
               <div className="py-10 text-center text-sm text-slate-500">Loading your sessions...</div>
+            ) : !isPremium ? (
+              <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-amber-50 to-emerald-50 border-2 border-amber-300 text-center space-y-3">
+                <span className="text-4xl block">📓</span>
+                {compiledNotes.length > 0 ? (
+                  <>
+                    <h3 className="font-serif text-lg font-bold text-[#064E3B]">
+                      {profile.name} has {compiledNotes.length} learning {compiledNotes.length === 1 ? 'session' : 'sessions'} recorded!
+                    </h3>
+                    <p className="text-xs text-slate-600 max-w-sm mx-auto">
+                      Upgrade to Basic or Family to view, print, and download {profile.name}'s full compiled study notebook.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="font-serif text-lg font-bold text-[#064E3B]">
+                      Your Notebook is Waiting
+                    </h3>
+                    <p className="text-xs text-slate-600 max-w-sm mx-auto">
+                      As {profile.name} chats with Mama Titi, real learning sessions get recorded here. Upgrade to Basic or Family anytime to view and export them.
+                    </p>
+                  </>
+                )}
+                <button
+                  onClick={onOpenPricingModal}
+                  className="px-5 py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
+                >
+                  Upgrade to Unlock Notebook
+                </button>
+              </div>
             ) : compiledNotes.length === 0 ? (
               <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-1">
                 <span className="text-3xl block">📚</span>
