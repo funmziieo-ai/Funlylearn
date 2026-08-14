@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Camera, X, Upload, Crop, RefreshCw } from 'lucide-react';
+import { Send, Camera, X, Upload, Crop, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { UserProfile, ChatMessage, UserSubscription } from '../types';
 import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
 import { SyncedReadAlong } from '../components/SyncedReadAlong';
@@ -12,7 +12,7 @@ import {
   clearStoredChat,
   getWelcomeMessage
 } from '../services/apiClient';
-import { saveHomeworkRecord } from '../services/supabaseService';
+import { saveHomeworkRecord, saveMessageFeedback } from '../services/supabaseService';
 import { getUnlockedLevels } from '../utils/coinsSystem';
 
 interface ChatPageProps {
@@ -25,6 +25,23 @@ interface ChatPageProps {
   onGoToLingo?: () => void;
   isGuest?: boolean;
   userId: string;
+}
+
+const FREE_DAILY_MESSAGE_LIMIT = 5;
+
+// A user has full (Basic/Family) access if they have an active paid
+// plan, OR are still inside a valid trial period. Everyone else is
+// on the real Free tier limits — this was previously never checked
+// anywhere, so every user had unrestricted access regardless of plan.
+function isPremiumActive(subscription?: UserSubscription): boolean {
+  if (!subscription) return false;
+  if (subscription.status === 'active' && subscription.plan !== 'free') {
+    return true;
+  }
+  if (subscription.status === 'trial' && subscription.expiresAt) {
+    return new Date(subscription.expiresAt).getTime() > Date.now();
+  }
+  return false;
 }
 
 const FUN_LOADING_MESSAGES_EN = [
@@ -104,12 +121,15 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [celebrationCount, setCelebrationCount] = useState(0);
   const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
   const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
+  const [reactions, setReactions] = useState<Record<string, 'up' | 'down'>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const userCoins = profile.coins || 0;
+  const isPremium = isPremiumActive(subscription);
+  const dailyLimitReached = !isPremium && dailyMessagesCount >= FREE_DAILY_MESSAGE_LIMIT;
   const loadingMessages = isYoruba ? FUN_LOADING_MESSAGES_YO : FUN_LOADING_MESSAGES_EN;
   const celebrationMessages = isYoruba ? CELEBRATION_MESSAGES_YO : CELEBRATION_MESSAGES_EN;
 
@@ -181,6 +201,22 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     };
   }, [isLoading]);
 
+  // Lightweight thumbs up/down on a specific reply — toggles off if
+  // tapped again, and saves the real signal to Supabase either way.
+  const handleReaction = (message: ChatMessage, reaction: 'up' | 'down') => {
+    setReactions(prev => {
+      const current = prev[message.id];
+      const next = { ...prev };
+      if (current === reaction) {
+        delete next[message.id];
+      } else {
+        next[message.id] = reaction;
+      }
+      return next;
+    });
+    saveMessageFeedback(userId, message.text, reaction);
+  };
+
   const handleNewChat = () => {
     setShowNewChatConfirm(true);
   };
@@ -194,6 +230,22 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setShowNewChatConfirm(false);
   };
 
+  // Homework Snap is now open to everyone, including Free tier — this
+  // lets a family experience the feature (increasingly standard across
+  // competitor apps) before deciding to upgrade, rather than hitting a
+  // hard wall immediately. Usage is still naturally capped: a snap goes
+  // through handleSend just like a typed question, so Free users get
+  // up to FREE_DAILY_MESSAGE_LIMIT total interactions/day (snaps and
+  // questions combined), enforced by the existing dailyLimitReached
+  // check in handleSend — no separate quota needed.
+  const handleOpenCamera = () => {
+    setIsCameraOpen(true);
+  };
+
+  const handleOpenUpload = () => {
+    directFileInputRef.current?.click();
+  };
+
   const handleSend = async (
     overrideText?: string,
     imagePayload?: string
@@ -201,6 +253,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     const textToSend = overrideText || inputText;
     const imgToSend = imagePayload || croppedImage;
     if (!textToSend.trim() && !imgToSend) return;
+
+    // Real enforcement of the Free tier's daily message limit — this
+    // was previously never checked, so every user had unlimited
+    // messages regardless of subscription status.
+    if (dailyLimitReached) {
+      onOpenPricingModal();
+      return;
+    }
 
     const defaultImageText = isYoruba
       ? 'Mama Titi jọwọ wo aworan iṣẹ ile mi ki o ran mi lọwọ!'
@@ -265,6 +325,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       if (coinsEarned > 0) {
         setCoinsEarnedToast(coinsEarned);
         setTimeout(() => setCoinsEarnedToast(null), 2500);
+      }
+
+      // Count this message toward the Free tier's daily limit — was
+      // previously never called, so the limit check above always saw 0.
+      if (!isPremium) {
+        onIncrementDailyMessages();
       }
 
       onProfileUpdate({
@@ -499,9 +565,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       </div>
 
-      {/* Snap Homework Bar — tapping the banner itself opens Snap (camera), not Upload. New Chat now lives here too, beside Snap/Upload. */}
+      {/* Snap Homework Bar — tapping the banner itself opens Snap (camera), not Upload. New Chat now lives here too, beside Snap/Upload. Basic/Family feature — gated for Free tier. */}
       <div
-        onClick={() => setIsCameraOpen(true)}
+        onClick={handleOpenCamera}
         className="bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2.5 px-3.5 sm:px-4 shadow-sm flex items-center justify-between shrink-0 border-b border-amber-500 cursor-pointer"
       >
         <div className="flex items-center space-x-2">
@@ -523,7 +589,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setIsCameraOpen(true);
+              handleOpenCamera();
             }}
             className="px-3 py-1.5 rounded-full bg-slate-950 hover:bg-slate-800 text-amber-300 font-bold text-xs transition-all flex items-center space-x-1"
           >
@@ -533,7 +599,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              directFileInputRef.current?.click();
+              handleOpenUpload();
             }}
             className="px-3 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs transition-all flex items-center space-x-1"
           >
@@ -608,6 +674,28 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                           )
                         }
                       />
+                      <div className="flex items-center space-x-2 pt-1">
+                        <button
+                          onClick={() => handleReaction(msg, 'up')}
+                          className={`p-1.5 rounded-full transition-all ${
+                            reactions[msg.id] === 'up'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-100 text-slate-400 hover:text-emerald-600'
+                          }`}
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleReaction(msg, 'down')}
+                          className={`p-1.5 rounded-full transition-all ${
+                            reactions[msg.id] === 'down'
+                              ? 'bg-rose-500 text-white'
+                              : 'bg-slate-100 text-slate-400 hover:text-rose-500'
+                          }`}
+                        >
+                          <ThumbsDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
@@ -691,15 +779,25 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
       {/* Bottom Input Bar */}
       <div className="fixed bottom-[66px] sm:bottom-[70px] left-0 right-0 max-w-2xl mx-auto px-3 pb-1 z-30">
+        {dailyLimitReached && (
+          <button
+            onClick={onOpenPricingModal}
+            className="w-full mb-2 py-2.5 px-4 rounded-2xl bg-amber-100 border-2 border-amber-300 text-amber-900 text-xs font-bold text-center shadow-md"
+          >
+            {isYoruba
+              ? `Ẹ ti dé opin ọrọ ọjọ́ (${FREE_DAILY_MESSAGE_LIMIT}). Tẹ láti ṣe igbesoke!`
+              : `You've reached today's ${FREE_DAILY_MESSAGE_LIMIT} free messages. Tap to upgrade!`}
+          </button>
+        )}
         <div className="bg-white/95 backdrop-blur-md rounded-full border-2 border-slate-300 shadow-2xl p-1.5 flex items-center space-x-2">
           <button
-            onClick={() => directFileInputRef.current?.click()}
+            onClick={handleOpenUpload}
             className="p-2.5 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-[#064E3B] transition-all"
           >
             <Upload className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setIsCameraOpen(true)}
+            onClick={handleOpenCamera}
             className="p-2.5 rounded-full bg-[#FFE8DE] hover:bg-[#FFD0BE] text-[#FF6B35] font-bold transition-all"
           >
             <Camera className="w-4 h-4" />
