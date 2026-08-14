@@ -16,6 +16,7 @@ import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { AuthScreen } from './components/AuthScreen';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
+import { FeedbackForm } from './components/FeedbackForm';
 import { PricingModal } from './components/PricingModal';
 import { ScholarProfileModal } from './components/ScholarProfileModal';
 import { VoiceKeyModal } from './components/VoiceKeyModal';
@@ -41,6 +42,14 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const invite = params.get('invite');
     return invite === 'word_crush' || invite === 'lingo' ? invite : null;
+  });
+
+  // A direct feedback link (e.g. ?feedback=1) shows the feedback form
+  // immediately, bypassing the normal landing/auth/app flow entirely —
+  // no sign-in needed to leave feedback.
+  const [showFeedbackForm] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('feedback') === '1';
   });
 
   // Authentication & Subscription States
@@ -205,6 +214,11 @@ export default function App() {
     setDailyMessagesCount(newCount);
     return newCount;
   };
+
+  // Feedback form bypasses the entire normal flow — no sign-in needed.
+  if (showFeedbackForm) {
+    return <FeedbackForm />;
+  }
 
   return (
     <div className="min-h-screen bg-[#FFFBF5] text-slate-900 flex flex-col font-sans selection:bg-[#FF6B35] selection:text-white">
