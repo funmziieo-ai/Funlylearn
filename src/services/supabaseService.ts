@@ -437,6 +437,26 @@ export async function fetchExamRevisionQuestions(
   }
 }
 
+// MESSAGE FEEDBACK — lightweight thumbs up/down on individual Mama Titi
+// replies, a much lower-friction alternative to a standalone feedback
+// form for everyday users.
+export async function saveMessageFeedback(
+  userId: string,
+  messageSnippet: string,
+  reaction: 'up' | 'down'
+): Promise<void> {
+  if (!supabase) return;
+  try {
+    await supabase.from('message_feedback').insert({
+      user_id: userId,
+      message_snippet: messageSnippet.slice(0, 200),
+      reaction
+    });
+  } catch (e) {
+    console.warn('Error saving message feedback:', e);
+  }
+}
+
 // LEADERBOARD — real users ranked by stars, scoped to the same class
 // level so a Primary 3 child isn't compared against an SS3 student.
 export async function fetchLeaderboard(
