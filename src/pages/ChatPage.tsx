@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Camera, X, Upload, Crop, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Send, Camera, X, Upload, Crop, RefreshCw } from 'lucide-react';
 import { UserProfile, ChatMessage, UserSubscription } from '../types';
 import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
 import { SyncedReadAlong } from '../components/SyncedReadAlong';
@@ -12,7 +12,7 @@ import {
   clearStoredChat,
   getWelcomeMessage
 } from '../services/apiClient';
-import { saveHomeworkRecord, saveMessageFeedback } from '../services/supabaseService';
+import { saveHomeworkRecord, saveAppPollResponse } from '../services/supabaseService';
 import { getUnlockedLevels } from '../utils/coinsSystem';
 
 interface ChatPageProps {
@@ -28,6 +28,31 @@ interface ChatPageProps {
 }
 
 const FREE_DAILY_MESSAGE_LIMIT = 5;
+
+// Quick multiple-choice app polls — shown one at a time as the child
+// uses the app, never all at once and never repeating a question
+// already answered. Once every question here has been answered, no
+// more popups ever appear. Replaces the earlier thumbs up/down
+// reactions with something lower-friction and more structured.
+const APP_POLL_QUESTIONS: { id: string; question: string; options: string[] }[] = [
+  {
+    id: 'poll_helpfulness',
+    question: 'How is FunlyLearn working for your child so far?',
+    options: ['😊 Really helpful', '🙂 Pretty good', '😐 It\'s okay', '😕 Needs work']
+  },
+  {
+    id: 'poll_ease',
+    question: 'Is the app easy for your child to use on their own?',
+    options: ['😊 Very easy', '🙂 Mostly easy', '😐 A bit tricky', '😕 Too confusing']
+  },
+  {
+    id: 'poll_voice',
+    question: 'How do you feel about Mama Titi\'s voice?',
+    options: ['😊 Love it', '🙂 It\'s good', '😐 Hit or miss', '😕 Rarely works']
+  }
+];
+const POLL_TRIGGER_MESSAGE_COUNT = 3;
+const POLL_STORAGE_KEY = 'funlylearn_answered_polls';
 
 // A user has full (Basic/Family) access if they have an active paid
 // plan, OR are still inside a valid trial period. Everyone else is
@@ -121,8 +146,15 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [celebrationCount, setCelebrationCount] = useState(0);
   const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
   const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
-  const [reactions, setReactions] = useState<Record<string, 'up' | 'down'>>({});
-  const [reactionToast, setReactionToast] = useState(false);
+  const [answeredPollIds, setAnsweredPollIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(POLL_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [activePoll, setActivePoll] = useState<typeof APP_POLL_QUESTIONS[number] | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
@@ -202,22 +234,35 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     };
   }, [isLoading]);
 
-  // Lightweight thumbs up/down on a specific reply — toggles off if
-  // tapped again, and saves the real signal to Supabase either way.
-  const handleReaction = (message: ChatMessage, reaction: 'up' | 'down') => {
-    setReactions(prev => {
-      const current = prev[message.id];
-      const next = { ...prev };
-      if (current === reaction) {
-        delete next[message.id];
-      } else {
-        next[message.id] = reaction;
-      }
-      return next;
-    });
-    saveMessageFeedback(userId, message.text, reaction);
-    setReactionToast(true);
-    setTimeout(() => setReactionToast(false), 1800);
+  // Picks the next unanswered poll question and shows it — called after
+  // a few real exchanges. Does nothing once every question in the set
+  // has been answered (the "disappears when all questions have been
+  // answered" behavior).
+  const maybeShowPoll = () => {
+    if (activePoll) return;
+    const nextUnanswered = APP_POLL_QUESTIONS.find(
+      p => !answeredPollIds.includes(p.id)
+    );
+    if (nextUnanswered) {
+      setActivePoll(nextUnanswered);
+    }
+  };
+
+  const handlePollAnswer = (answer: string) => {
+    if (!activePoll) return;
+    saveAppPollResponse(userId, activePoll.question, answer);
+    const updated = [...answeredPollIds, activePoll.id];
+    setAnsweredPollIds(updated);
+    try {
+      localStorage.setItem(POLL_STORAGE_KEY, JSON.stringify(updated));
+    } catch (e) {}
+    setActivePoll(null);
+  };
+
+  const handleDismissPoll = () => {
+    // Dismissing doesn't count as answered — it'll be offered again
+    // after the next few exchanges, rather than being lost entirely.
+    setActivePoll(null);
   };
 
   const handleNewChat = () => {
@@ -365,6 +410,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         response.subject || undefined
       );
 
+      // Show a quick app poll after a few real exchanges, using the
+      // count of the child's own messages so far in this session.
+      const userMessageCount = newHistory.filter(m => m.sender === 'user').length;
+      if (userMessageCount >= POLL_TRIGGER_MESSAGE_COUNT) {
+        maybeShowPoll();
+      }
+
       // Automatic parent update — opens WhatsApp pre-filled the moment
       // a parent number is saved, instead of requiring the child to
       // remember to visit the Parent Dashboard and tap "Tell Parents"
@@ -492,6 +544,37 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
+      {/* Quick App Poll Popup — one question at a time, from a rotating
+          set, never repeating an answered one, never showing once
+          they're all answered. */}
+      {activePoll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-6">
+          <div className="bg-white rounded-3xl p-6 text-center space-y-4 max-w-sm w-full shadow-2xl border-2 border-amber-300 relative">
+            <button
+              onClick={handleDismissPoll}
+              className="absolute top-3 right-3 p-1.5 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="text-4xl">💭</div>
+            <h3 className="font-serif font-bold text-base text-[#064E3B] px-2">
+              {activePoll.question}
+            </h3>
+            <div className="space-y-2 pt-1">
+              {activePoll.options.map(option => (
+                <button
+                  key={option}
+                  onClick={() => handlePollAnswer(option)}
+                  className="w-full py-3 px-4 rounded-2xl bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 text-sm font-medium text-slate-800 text-left transition-all"
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Celebration Splash */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -549,13 +632,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       {coinsEarnedToast && (
         <div className="fixed top-20 right-4 z-40 bg-amber-400 text-slate-900 px-4 py-2 rounded-full shadow-lg font-bold text-sm animate-bounce">
           +{coinsEarnedToast} 🪙 {isYoruba ? 'owó ere!' : 'coins earned!'}
-        </div>
-      )}
-
-      {/* Reaction Toast */}
-      {reactionToast && (
-        <div className="fixed top-20 right-4 z-40 bg-emerald-700 text-white px-4 py-2 rounded-full shadow-lg font-bold text-sm">
-          {isYoruba ? 'Ẹ ṣé fún ìdáhùn rẹ!' : 'Thanks for your feedback!'}
         </div>
       )}
 
@@ -698,35 +774,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                           )
                         }
                       />
-                      {/* Only show reactions on genuine replies to a
-                          real question — not the auto-generated welcome
-                          message, since reacting to that wouldn't be
-                          tied to anything meaningful and would just be
-                          confusing, ambiguous data. */}
-                      {!msg.id.startsWith('welcome-') && (
-                        <div className="flex items-center space-x-2 pt-1">
-                          <button
-                            onClick={() => handleReaction(msg, 'up')}
-                            className={`p-1.5 rounded-full transition-all ${
-                              reactions[msg.id] === 'up'
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-100 text-slate-400 hover:text-emerald-600'
-                            }`}
-                          >
-                            <ThumbsUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleReaction(msg, 'down')}
-                            className={`p-1.5 rounded-full transition-all ${
-                              reactions[msg.id] === 'down'
-                                ? 'bg-rose-500 text-white'
-                                : 'bg-slate-100 text-slate-400 hover:text-rose-500'
-                            }`}
-                          >
-                            <ThumbsDown className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
                     </div>
                   ) : (
                     <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
