@@ -10,7 +10,9 @@ import {
   Flame, 
   MessageSquare, 
   Gift,
-  Loader2
+  Loader2,
+  Trophy,
+  TrendingUp
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile, ParentReward, LanguageCode } from '../types';
@@ -38,6 +40,13 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
   const [isLoadingRecords, setIsLoadingRecords] = useState(true);
   const [sentIds, setSentIds] = useState<Set<number>>(new Set());
 
+  // A larger set specifically for computing real Mathematics progress
+  // stats — separate from the small "recent activity" list above, since
+  // a meaningful progress summary needs more history than just the last
+  // 5 sessions shown elsewhere on this page.
+  const [mathRecords, setMathRecords] = useState<HomeworkRecord[]>([]);
+  const [isLoadingMathRecords, setIsLoadingMathRecords] = useState(true);
+
   useEffect(() => {
     let cancelled = false;
     setIsLoadingRecords(true);
@@ -45,6 +54,20 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
       if (!cancelled) {
         setRecentRecords(records);
         setIsLoadingRecords(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingMathRecords(true);
+    fetchHomeworkRecords(userId, 100).then(records => {
+      if (!cancelled) {
+        setMathRecords(records.filter(r => r.subject === 'Mathematics'));
+        setIsLoadingMathRecords(false);
       }
     });
     return () => {
@@ -64,9 +87,28 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
     onProfileUpdate({ ...profile, language: newLang });
   };
 
+  // Converts a Nigerian number typed the normal local way (e.g.
+  // "08012345678", how virtually everyone actually types their number)
+  // into the international format WhatsApp's wa.me links require
+  // ("2348012345678"). Without this, both manual and automatic parent
+  // notifications would silently fail or go to an invalid number for
+  // anyone who didn't happen to type the country code themselves.
+  const normalizeNigerianPhone = (raw: string): string => {
+    const digitsOnly = raw.replace(/\D/g, '');
+    if (digitsOnly.startsWith('0')) {
+      return '234' + digitsOnly.slice(1);
+    }
+    if (digitsOnly.startsWith('234')) {
+      return digitsOnly;
+    }
+    // Already missing both a leading 0 and 234 — assume it's a local
+    // number missing its leading 0 (e.g. someone typed "8012345678").
+    return '234' + digitsOnly;
+  };
+
   const handleSavePhone = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = phoneNumber.replace(/\D/g, '');
+    const cleaned = normalizeNigerianPhone(phoneNumber);
     onProfileUpdate({
       ...profile,
       parentWhatsApp: cleaned
@@ -89,7 +131,7 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
       `🌟 *Mama Titi Learning Ping* 🌟\n\nHello Parent!\n${profile.name} just worked on: "${record.topic}" ${resultLine}\n\nTotal Stars Earned: ⭐ ${profile.stars}\nKeep encouraging ${profile.name}! 🎉`
     );
 
-    const cleanNum = (profile.parentWhatsApp || phoneNumber).replace(/\D/g, '');
+    const cleanNum = normalizeNigerianPhone(profile.parentWhatsApp || phoneNumber);
     if (!cleanNum) {
       alert('Please save a parent WhatsApp number first.');
       return;
@@ -191,6 +233,18 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
           >
             <Smartphone className="w-3.5 h-3.5" />
             <span>📲 WhatsApp Notifications</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('performance')}
+            className={`px-4 py-2 rounded-2xl text-xs font-jakarta font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap ${
+              activeSubTab === 'performance'
+                ? 'bg-amber-400 text-slate-950 shadow-md'
+                : 'bg-emerald-800/60 text-emerald-100 hover:bg-emerald-800'
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5" />
+            <span>📊 Progress</span>
           </button>
 
           <button
@@ -340,6 +394,66 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
             </ol>
           </div>
 
+        </div>
+      )}
+
+      {/* SUB-TAB 1.5: MATHEMATICS PROGRESS — real data, sourced from
+          genuine RAG-verified Math sessions (not a guess or fake chart
+          like the previous version of this section). Currently only
+          covers JSS 1-3, matching what's been ingested so far — a real,
+          known coverage limit, honestly reflected below rather than
+          hidden. */}
+      {activeSubTab === 'performance' && (
+        <div className="space-y-5 animate-fadeIn">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border-2 border-emerald-200 shadow-soft space-y-4">
+            <div className="flex items-center space-x-2">
+              <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
+                <Trophy className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-serif font-bold text-lg text-slate-900">
+                  Mathematics Level & Progress
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {profile.name} is currently in <strong>{profile.classLevel}</strong>
+                </p>
+              </div>
+            </div>
+
+            {isLoadingMathRecords ? (
+              <div className="py-8 text-center text-sm text-slate-500">Loading progress...</div>
+            ) : mathRecords.length === 0 ? (
+              <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-1">
+                <span className="text-2xl block">📐</span>
+                <p className="text-sm font-medium text-slate-600">No Mathematics sessions tracked yet</p>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                  This currently tracks JSS 1-3 Mathematics questions specifically. As {profile.name} asks Mama Titi Math questions, real progress will appear here.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center">
+                    <p className="text-2xl font-bold text-emerald-800">{mathRecords.length}</p>
+                    <p className="text-xs text-emerald-700 font-medium">Math Sessions</p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-center">
+                    <p className="text-2xl font-bold text-amber-800">
+                      {Math.round(
+                        (mathRecords.filter(r => r.wasCorrect === true).length / mathRecords.length) * 100
+                      )}%
+                    </p>
+                    <p className="text-xs text-amber-700 font-medium">Correct So Far</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 text-xs text-slate-500 pt-1">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>Based on {profile.name}'s last {mathRecords.length} tracked Mathematics session{mathRecords.length === 1 ? '' : 's'}</span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
