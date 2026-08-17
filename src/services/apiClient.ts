@@ -95,7 +95,7 @@ async function sendWithRetry(
     conversationHistory?: ChatMessage[];
   },
   retries = 2
-): Promise<{ reply: string; timestamp: string }> {
+): Promise<{ reply: string; timestamp: string; subject?: string | null }> {
   try {
     const res = await fetch(
       SUPABASE_FUNCTIONS_URL + '/mama-titi-chat',
@@ -142,7 +142,7 @@ export async function sendMessageToMamaTiti(params: {
   profile: UserProfile;
   imageBase64?: string;
   conversationHistory?: ChatMessage[];
-}): Promise<{ reply: string; timestamp: string }> {
+}): Promise<{ reply: string; timestamp: string; subject?: string | null }> {
   try {
     return await sendWithRetry(params);
   } catch (err) {
