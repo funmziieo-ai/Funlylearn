@@ -440,20 +440,20 @@ export async function fetchExamRevisionQuestions(
 // MESSAGE FEEDBACK — lightweight thumbs up/down on individual Mama Titi
 // replies, a much lower-friction alternative to a standalone feedback
 // form for everyday users.
-export async function saveMessageFeedback(
+export async function saveAppPollResponse(
   userId: string,
-  messageSnippet: string,
-  reaction: 'up' | 'down'
+  question: string,
+  answer: string
 ): Promise<void> {
   if (!supabase) return;
   try {
-    await supabase.from('message_feedback').insert({
+    await supabase.from('app_poll_responses').insert({
       user_id: userId,
-      message_snippet: messageSnippet.slice(0, 200),
-      reaction
+      question,
+      answer
     });
   } catch (e) {
-    console.warn('Error saving message feedback:', e);
+    console.warn('Error saving poll response:', e);
   }
 }
 
