@@ -122,6 +122,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
   const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
   const [reactions, setReactions] = useState<Record<string, 'up' | 'down'>>({});
+  const [reactionToast, setReactionToast] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
@@ -215,6 +216,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       return next;
     });
     saveMessageFeedback(userId, message.text, reaction);
+    setReactionToast(true);
+    setTimeout(() => setReactionToast(false), 1800);
   };
 
   const handleNewChat = () => {
@@ -350,15 +353,34 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
       // Log a real record of what was actually worked on, so the
       // Parent Dashboard can show genuine sessions instead of mock
-      // data. "topic" is the child's own message — we don't have real
-      // subject-detection yet, so this stays honest about only
-      // capturing what was actually typed, not inventing a subject.
+      // data. "topic" is the child's own message. "subject" is now a
+      // real signal from mama-titi-chat's RAG system — only set when a
+      // genuine, semantically-verified Math curriculum match was found,
+      // not a guess. Currently only fires for JSS 1-3 Math (whatever's
+      // been ingested so far) — a real, known coverage limit, not a bug.
       saveHomeworkRecord(
         userId,
         userMsg.text.slice(0, 120),
         isCorrect,
-        undefined
+        response.subject || undefined
       );
+
+      // Automatic parent update — opens WhatsApp pre-filled the moment
+      // a parent number is saved, instead of requiring the child to
+      // remember to visit the Parent Dashboard and tap "Tell Parents"
+      // manually. Note: WhatsApp itself requires a human tap to
+      // actually send (no fully silent sending is possible without
+      // WhatsApp's paid Business API) — this removes the "hunt for the
+      // button" step, not the final send tap. Tied to the same every-
+      // 3rd-correct-answer rhythm as the streak bonus, so parents get
+      // real updates at genuine celebration moments rather than being
+      // pinged (and the child interrupted) after every single answer.
+      if (isCorrect && currentStreak % 3 === 0 && profile.parentWhatsApp) {
+        const parentMessage = encodeURIComponent(
+          `🌟 *Mama Titi Learning Update* 🌟\n\nHello! ${profile.name} just answered correctly with Mama Titi! 🎉\n\nTotal Stars: ⭐ ${profile.stars + (isCorrect ? 10 : 0)}\nKeep encouraging ${profile.name}! 🇳🇬`
+        );
+        window.open(`https://wa.me/${profile.parentWhatsApp}?text=${parentMessage}`, '_blank');
+      }
     } catch (err) {
       console.error('Error getting response from Mama Titi:', err);
       const errorMsg: ChatMessage = {
@@ -530,6 +552,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
+      {/* Reaction Toast */}
+      {reactionToast && (
+        <div className="fixed top-20 right-4 z-40 bg-emerald-700 text-white px-4 py-2 rounded-full shadow-lg font-bold text-sm">
+          {isYoruba ? 'Ẹ ṣé fún ìdáhùn rẹ!' : 'Thanks for your feedback!'}
+        </div>
+      )}
+
       <input
         type="file"
         ref={directFileInputRef}
@@ -662,40 +691,42 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                       <SyncedReadAlong
                         text={msg.text}
                         language={profile.language}
-                        autoPlay={
-                          isMama &&
-                          idx === messages.length - 1 &&
-                          !isLoading &&
-                          messages.some(m => m.sender === 'user')
-                        }
+                        autoPlay={false}
                         onSpeechStateChange={speaking =>
                           setSpeakingMessageId(
                             speaking ? msg.id : null
                           )
                         }
                       />
-                      <div className="flex items-center space-x-2 pt-1">
-                        <button
-                          onClick={() => handleReaction(msg, 'up')}
-                          className={`p-1.5 rounded-full transition-all ${
-                            reactions[msg.id] === 'up'
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-slate-100 text-slate-400 hover:text-emerald-600'
-                          }`}
-                        >
-                          <ThumbsUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleReaction(msg, 'down')}
-                          className={`p-1.5 rounded-full transition-all ${
-                            reactions[msg.id] === 'down'
-                              ? 'bg-rose-500 text-white'
-                              : 'bg-slate-100 text-slate-400 hover:text-rose-500'
-                          }`}
-                        >
-                          <ThumbsDown className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {/* Only show reactions on genuine replies to a
+                          real question — not the auto-generated welcome
+                          message, since reacting to that wouldn't be
+                          tied to anything meaningful and would just be
+                          confusing, ambiguous data. */}
+                      {!msg.id.startsWith('welcome-') && (
+                        <div className="flex items-center space-x-2 pt-1">
+                          <button
+                            onClick={() => handleReaction(msg, 'up')}
+                            className={`p-1.5 rounded-full transition-all ${
+                              reactions[msg.id] === 'up'
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-100 text-slate-400 hover:text-emerald-600'
+                            }`}
+                          >
+                            <ThumbsUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleReaction(msg, 'down')}
+                            className={`p-1.5 rounded-full transition-all ${
+                              reactions[msg.id] === 'down'
+                                ? 'bg-rose-500 text-white'
+                                : 'bg-slate-100 text-slate-400 hover:text-rose-500'
+                            }`}
+                          >
+                            <ThumbsDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
