@@ -659,13 +659,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         <div className="flex items-center space-x-3">
           <div>
             <h2 className="font-serif font-bold text-lg leading-tight">
-              Mama Titi
+              {isYoruba ? `Ẹ ku ọjọ, ${profile.name}!` : `Welcome, ${profile.name}!`}
             </h2>
-            <p className="text-xs text-emerald-200">
-              {isYoruba
-                ? 'Olukọ AI Naijiria ' + profile.classLevel
-                : 'Nigerian AI Teacher ' + profile.classLevel}
-            </p>
           </div>
         </div>
       </div>
@@ -691,16 +686,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           </div>
         </div>
         <div className="flex items-center space-x-1.5">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenCamera();
-            }}
-            className="px-3 py-1.5 rounded-full bg-slate-950 hover:bg-slate-800 text-amber-300 font-bold text-xs transition-all flex items-center space-x-1"
-          >
-            <Camera className="w-3.5 h-3.5" />
-            <span>{isYoruba ? 'Yaworan' : 'Snap'}</span>
-          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
