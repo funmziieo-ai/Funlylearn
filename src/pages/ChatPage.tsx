@@ -655,7 +655,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       )}
 
       {/* Header — avatar removed here since Navbar already shows Mama Titi's photo app-wide; coins/language also live in Navbar */}
-      <div className="bg-[#064E3B] text-white p-3 sm:p-4 shadow-sm flex items-center justify-between border-b border-[#0A5D46] shrink-0">
+      <div className="bg-[#064E3B] text-white p-3 sm:p-4 shadow-sm flex items-center justify-between shrink-0">
         <div className="flex items-center space-x-3">
           <div>
             <h2 className="font-serif font-bold text-lg leading-tight">
@@ -665,10 +665,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       </div>
 
-      {/* Snap Homework Bar — tapping the banner itself opens Snap (camera), not Upload. New Chat now lives here too, beside Snap/Upload. Basic/Family feature — gated for Free tier. */}
+      {/* Snap Homework Bar — tapping the banner itself opens Snap (camera), not Upload. New Chat now lives here too, beside Snap/Upload. Basic/Family feature — gated for Free tier. Small top margin added so it doesn't feel flush against the header above it. */}
       <div
         onClick={handleOpenCamera}
-        className="bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2.5 px-3.5 sm:px-4 shadow-sm flex items-center justify-between shrink-0 border-b border-amber-500 cursor-pointer"
+        className="mt-2 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2.5 px-3.5 sm:px-4 shadow-sm flex items-center justify-between shrink-0 rounded-2xl mx-2 cursor-pointer"
       >
         <div className="flex items-center space-x-2">
           <div className="p-1.5 bg-slate-950 text-amber-300 rounded-xl">
@@ -797,7 +797,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
       {/* Cropped Image Preview */}
       {croppedImage && (
-        <div className="fixed bottom-[130px] sm:bottom-[135px] left-0 right-0 max-w-2xl mx-auto px-3 z-30">
+        <div className="fixed bottom-[144px] sm:bottom-[149px] left-0 right-0 max-w-2xl mx-auto px-3 z-30">
           <div className="bg-slate-900/95 backdrop-blur-md text-white p-2.5 px-3.5 rounded-2xl border-2 border-amber-400 shadow-xl flex items-center justify-between gap-3">
             <div className="flex items-center space-x-3 overflow-hidden">
               <div className="relative w-12 h-12 rounded-xl overflow-hidden border-2 border-amber-300 bg-black/40 shrink-0">
@@ -841,7 +841,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       )}
 
       {/* Bottom Input Bar */}
-      <div className="fixed bottom-[66px] sm:bottom-[70px] left-0 right-0 max-w-2xl mx-auto px-3 pb-1 z-30">
+      <div className="fixed bottom-[80px] sm:bottom-[84px] left-0 right-0 max-w-2xl mx-auto px-3 pb-1 z-30">
         {dailyLimitReached && (
           <button
             onClick={onOpenPricingModal}
