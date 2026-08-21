@@ -221,11 +221,11 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
 
       {/* Header Banner */}
       <div className="bg-[#5B21B6] text-white p-6 rounded-3xl shadow-xl space-y-4 relative overflow-hidden">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-y-3">
           <div className="flex items-center space-x-2">
             <span className="text-3xl">🌍</span>
             <div>
-              <h1 className="font-serif text-2xl font-bold">Naija Lingo</h1>
+              <h1 className="font-serif text-2xl font-bold whitespace-nowrap">Naija Lingo</h1>
               <p className="text-xs text-purple-200">Learn Nigerian Languages with Mama Titi</p>
             </div>
           </div>
