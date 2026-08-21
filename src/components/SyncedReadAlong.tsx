@@ -20,9 +20,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasError, setHasError] = useState(false);
   const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
-  const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -144,34 +142,18 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
         await audio.play();
       } else {
-        // No real audio available — show an honest message instead of
-        // silently falling back to a robotic browser voice, since a
-        // wrong-sounding voice breaks the "real Nigerian teacher"
-        // experience worse than voice being briefly unavailable does.
-        // This wording describes an action (tap to retry), not a
-        // promise about when she'll speak again, since we can't
-        // guarantee the retry will succeed either.
+        // No real audio available — fail silently back to the normal
+        // "Listen to Voice" state, rather than showing an alarming
+        // error message. The button remains visible and tappable again
+        // immediately; we just don't call attention to the failure.
         setIsLoading(false);
         setIsPlaying(false);
-        setHasError(true);
-        setQuotaMessage(
-          ttsData.quotaMessage ||
-            (language === 'yo'
-              ? "Ohùn Mama Titi ní ìṣòro díẹ̀ — tẹ ìsàlẹ̀ láti gbìyànjú lẹ́ẹ̀kansí tàbí ka ìdáhùn rẹ̀ nísàlẹ̀"
-              : "Mama Titi's voice had a little hiccup — tap below to try again or read her reply below")
-        );
         if (onSpeechStateChange) onSpeechStateChange(false);
       }
     } catch {
       if (!stoppedRef.current) {
         setIsLoading(false);
         setIsPlaying(false);
-        setHasError(true);
-        setQuotaMessage(
-          language === 'yo'
-            ? "Ohùn Mama Titi ní ìṣòro díẹ̀ — tẹ ìsàlẹ̀ láti gbìyànjú lẹ́ẹ̀kansí tàbí ka ìdáhùn rẹ̀ nísàlẹ̀"
-            : "Mama Titi's voice had a little hiccup — tap below to try again or read her reply below"
-        );
         if (onSpeechStateChange) onSpeechStateChange(false);
       }
     }
@@ -199,12 +181,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           );
         })}
       </div>
-
-      {quotaMessage && (
-        <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          {quotaMessage}
-        </div>
-      )}
 
       <div className="pt-1 flex items-center space-x-2">
         {isLoading ? (
@@ -266,16 +242,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
             </div>
             <span>Loading Mama Titi's Voice...</span>
           </div>
-        ) : hasError ? (
-          <button
-            onClick={handlePlay}
-            type="button"
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 transition-all"
-          >
-            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-            <span>Try again</span>
-            <RotateCcw className="w-3 h-3 ml-0.5" />
-          </button>
         ) : (
           <button
             onClick={handlePlay}
