@@ -64,9 +64,6 @@ const YorubaListenButton: React.FC<{ text: string; label?: string; className?: s
         audioRef.current.pause();
         audioRef.current = null;
       }
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
       setPlaying(false);
       return;
     }
@@ -74,12 +71,13 @@ const YorubaListenButton: React.FC<{ text: string; label?: string; className?: s
     setLoading(true);
     try {
       const res = await fetchAudioTTS(text, 'yo');
-      if (res.audioBase64) {
-        const audio = new Audio(res.audioBase64);
+      if (res.audioUrl) {
+        const audio = new Audio(res.audioUrl);
         audioRef.current = audio;
         audio.onended = () => {
           setPlaying(false);
           audioRef.current = null;
+          URL.revokeObjectURL(res.audioUrl!);
         };
         audio.onerror = () => {
           setPlaying(false);
@@ -92,27 +90,8 @@ const YorubaListenButton: React.FC<{ text: string; label?: string; className?: s
         return;
       }
     } catch (_err) {
-      // Fallback
-    }
-    if ('speechSynthesis' in window) {
-      try {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.85;
-        utterance.lang = 'yo-NG';
-        utterance.onstart = () => {
-          setLoading(false);
-          setPlaying(true);
-        };
-        utterance.onend = () => setPlaying(false);
-        utterance.onerror = () => {
-          setLoading(false);
-          setPlaying(false);
-          setError(true);
-        };
-        window.speechSynthesis.speak(utterance);
-        return;
-      } catch (_err) {}
+      // Real voice failed — no browser voice fallback, fail honestly
+      // instead, matching the same standard everywhere else in the app.
     }
     setLoading(false);
     setPlaying(false);
