@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Pause } from 'lucide-react';
+import { Volume2, Pause, Loader2 } from 'lucide-react';
 import { fetchAudioTTS } from '../services/apiClient';
 
 interface SyncedReadAlongProps {
@@ -18,6 +18,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   className = ''
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [isRealAudioPlaying, setIsRealAudioPlaying] = useState(false);
   const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
 
@@ -61,6 +62,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       window.speechSynthesis.cancel();
     }
     setIsPlaying(false);
+    setIsLoading(false);
     setIsRealAudioPlaying(false);
     setActiveWordIndex(null);
     if (onSpeechStateChange) onSpeechStateChange(false);
@@ -100,7 +102,11 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     }, estimatedIntervalMs);
 
     // Real voice fetch happens in parallel — a bonus layer, not a
-    // requirement for the reading pacer above to keep running.
+    // requirement for the reading pacer above to keep running. This is
+    // a genuine loading state, tied to the real network fetch duration
+    // — not a fake delay — so tapping gives immediate, honest feedback
+    // that something is actually happening.
+    setIsLoading(true);
     try {
       const ttsData = await fetchAudioTTS(cleanText, language);
 
@@ -110,6 +116,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         const audio = new Audio(ttsData.audioUrl);
         audioRef.current = audio;
         await audio.play();
+        setIsLoading(false);
         setIsRealAudioPlaying(true);
 
         audio.onended = () => {
@@ -127,12 +134,15 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           // completely unaffected and keeps running silently.
           audioRef.current = null;
         };
+      } else {
+        // No real audio available — the reading pacer above is already
+        // running on its own and needs nothing further here.
+        setIsLoading(false);
       }
-      // No real audio available — the reading pacer above is already
-      // running on its own and needs nothing further here.
     } catch {
       // Real voice fetch failed entirely — the reading pacer above is
       // completely unaffected and keeps running silently.
+      setIsLoading(false);
     }
   };
 
@@ -167,6 +177,8 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
               'inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ' +
               (isRealAudioPlaying
                 ? 'bg-[#FF6B35] text-white hover:bg-[#E85523] ring-2 ring-amber-300'
+                : isLoading
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
                 : 'bg-[#064E3B] text-white hover:bg-[#022C22]')
             }
           >
@@ -174,6 +186,11 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
               <>
                 <Pause className="w-3.5 h-3.5 animate-pulse text-amber-200" />
                 <span>Mama Titi is Speaking...</span>
+              </>
+            ) : isLoading ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-700" />
+                <span>Loading Voice...</span>
               </>
             ) : (
               <>
