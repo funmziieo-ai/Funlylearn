@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Camera, X, Upload, Crop, RefreshCw } from 'lucide-react';
 import { UserProfile, ChatMessage, UserSubscription } from '../types';
 import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
+import { SyncedReadAlong } from '../components/SyncedReadAlong';
 import { CameraUploadModal } from '../components/CameraUploadModal';
 import { HomeworkCropModal } from '../components/HomeworkCropModal';
 import {
@@ -140,6 +141,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [croppedImage, setCroppedImage] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationCount, setCelebrationCount] = useState(0);
   const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
@@ -743,13 +745,20 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                         <span className="font-serif font-bold text-xs text-[#064E3B]">
                           Mama Titi
                         </span>
-                        <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
-                          {isYoruba ? 'Ohùn — Ń Bọ̀' : 'Voice — Coming Soon'}
+                        <span className="text-[10px] bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded-full font-bold">
+                          {isYoruba ? 'Ohun Idera' : 'AI Teacher Voice'}
                         </span>
                       </div>
-                      <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
-                        {msg.text}
-                      </p>
+                      <SyncedReadAlong
+                        text={msg.text}
+                        language={profile.language}
+                        autoPlay={false}
+                        onSpeechStateChange={speaking =>
+                          setSpeakingMessageId(
+                            speaking ? msg.id : null
+                          )
+                        }
+                      />
                     </div>
                   ) : (
                     <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
@@ -772,7 +781,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             instead of a large empty screen. Disappears once a real
             conversation starts. */}
         {messages.length === 1 && !isLoading && (
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 -mt-2">
             {(isYoruba
               ? [
                   'Ran mi lọwọ pẹlu Iṣiro',
