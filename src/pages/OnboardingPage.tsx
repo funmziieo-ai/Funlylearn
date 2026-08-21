@@ -11,6 +11,7 @@ interface OnboardingPageProps {
 }
 
 const YORUBA_PREVIEW_TEXT = 'Ẹ kaaro! Orukọ mi ni Mama Titi. Jẹ ki a kọ ẹkọ papọ loni!';
+const ENGLISH_PREVIEW_TEXT = 'Hello! My name is Mama Titi. Let us learn together today!';
 
 export const OnboardingPage: React.FC<OnboardingPageProps> = ({
   initialProfile,
@@ -22,8 +23,9 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
   const [classLevel, setClassLevel] = useState<ClassLevel | null>(initialProfile.classLevel || null);
   const [isOutOfSchool, setIsOutOfSchool] = useState(initialProfile.isOutOfSchool || false);
   const [language, setLanguage] = useState<LanguageCode>(initialProfile.language || 'en');
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState<'en' | 'yo' | null>(null);
   const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
+  const [activePreviewLang, setActivePreviewLang] = useState<'en' | 'yo' | null>(null);
 
   const primaryClasses: ClassLevel[] = ['Primary 3', 'Primary 4', 'Primary 5', 'Primary 6'];
   const secondaryClasses: ClassLevel[] = ['JSS 1', 'JSS 2', 'JSS 3', 'SS 1', 'SS 2', 'SS 3'];
@@ -66,29 +68,39 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
     });
   };
 
-  const handlePlayYorubaPreview = async () => {
+  const handlePlayPreview = async (lang: 'en' | 'yo') => {
+    if (previewAudio && activePreviewLang === lang) {
+      previewAudio.pause();
+      setPreviewAudio(null);
+      setActivePreviewLang(null);
+      return;
+    }
     if (previewAudio) {
       previewAudio.pause();
       setPreviewAudio(null);
-      return;
     }
 
-    setPreviewLoading(true);
+    const text = lang === 'yo' ? YORUBA_PREVIEW_TEXT : ENGLISH_PREVIEW_TEXT;
+    setPreviewLoading(lang);
     try {
-      const ttsData = await fetchAudioTTS(YORUBA_PREVIEW_TEXT, 'yo');
-      if (ttsData.audioBase64) {
-        const audio = new Audio(ttsData.audioBase64);
-        audio.onended = () => setPreviewAudio(null);
+      const ttsData = await fetchAudioTTS(text, lang);
+      if (ttsData.audioUrl) {
+        const audio = new Audio(ttsData.audioUrl);
+        audio.onended = () => {
+          setPreviewAudio(null);
+          setActivePreviewLang(null);
+          URL.revokeObjectURL(ttsData.audioUrl!);
+        };
         setPreviewAudio(audio);
+        setActivePreviewLang(lang);
         await audio.play();
-      } else if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(YORUBA_PREVIEW_TEXT);
-        window.speechSynthesis.speak(utterance);
       }
+      // Real voice failed — no browser voice fallback, fail honestly
+      // instead, matching the same standard as Mama Titi's main voice.
     } catch {
       // Preview failing quietly is fine — this is just a taste, not core functionality
     } finally {
-      setPreviewLoading(false);
+      setPreviewLoading(null);
     }
   };
 
@@ -375,22 +387,41 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
                 )}
               </button>
 
-              {/* Yoruba voice preview — always visible to create anticipation, not just after selecting */}
-              <button
-                type="button"
-                onClick={handlePlayYorubaPreview}
-                disabled={previewLoading}
-                className="w-full p-3 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-center space-x-2 disabled:opacity-60"
-              >
-                {previewLoading ? (
-                  <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
-                ) : (
-                  <Volume2 className="w-4 h-4 text-purple-600" />
-                )}
-                <span className="text-sm font-bold text-purple-700">
-                  {previewAudio ? 'Playing... tap to stop' : "Hear Mama Titi's voice in Yoruba"}
-                </span>
-              </button>
+              {/* English & Yoruba voice previews — both always visible to
+                  create anticipation, not just after selecting a language */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePlayPreview('en')}
+                  disabled={previewLoading !== null}
+                  className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center space-x-2 disabled:opacity-60"
+                >
+                  {previewLoading === 'en' ? (
+                    <Loader2 className="w-4 h-4 text-emerald-700 animate-spin" />
+                  ) : (
+                    <Volume2 className="w-4 h-4 text-emerald-700" />
+                  )}
+                  <span className="text-xs sm:text-sm font-bold text-emerald-800">
+                    {activePreviewLang === 'en' ? 'Playing...' : 'Hear in English'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePlayPreview('yo')}
+                  disabled={previewLoading !== null}
+                  className="p-3 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-center space-x-2 disabled:opacity-60"
+                >
+                  {previewLoading === 'yo' ? (
+                    <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
+                  ) : (
+                    <Volume2 className="w-4 h-4 text-purple-600" />
+                  )}
+                  <span className="text-xs sm:text-sm font-bold text-purple-700">
+                    {activePreviewLang === 'yo' ? 'Playing...' : 'Hear in Yoruba'}
+                  </span>
+                </button>
+              </div>
 
               {language === 'yo' && (
                 <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 text-left">
