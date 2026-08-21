@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Camera, X, Upload, Crop, RefreshCw } from 'lucide-react';
 import { UserProfile, ChatMessage, UserSubscription } from '../types';
 import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
-import { SyncedReadAlong } from '../components/SyncedReadAlong';
 import { CameraUploadModal } from '../components/CameraUploadModal';
 import { HomeworkCropModal } from '../components/HomeworkCropModal';
 import {
@@ -140,7 +139,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
   const [croppedImage, setCroppedImage] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationCount, setCelebrationCount] = useState(0);
@@ -745,20 +743,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                         <span className="font-serif font-bold text-xs text-[#064E3B]">
                           Mama Titi
                         </span>
-                        <span className="text-[10px] bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded-full font-bold">
-                          {isYoruba ? 'Ohun Idera' : 'AI Teacher Voice'}
+                        <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
+                          {isYoruba ? 'Ohùn — Ń Bọ̀' : 'Voice — Coming Soon'}
                         </span>
                       </div>
-                      <SyncedReadAlong
-                        text={msg.text}
-                        language={profile.language}
-                        autoPlay={false}
-                        onSpeechStateChange={speaking =>
-                          setSpeakingMessageId(
-                            speaking ? msg.id : null
-                          )
-                        }
-                      />
+                      <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
+                        {msg.text}
+                      </p>
                     </div>
                   ) : (
                     <p className="text-sm font-sans leading-relaxed font-medium text-slate-900">
@@ -774,6 +765,36 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             </React.Fragment>
           );
         })}
+
+        {/* Suggested question chips — shown only on a fresh conversation
+            (just the welcome message, nothing typed yet), giving a
+            first-time user something purposeful to tap immediately
+            instead of a large empty screen. Disappears once a real
+            conversation starts. */}
+        {messages.length === 1 && !isLoading && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {(isYoruba
+              ? [
+                  'Ran mi lọwọ pẹlu Iṣiro',
+                  'Ṣalaye ọrọ kan fun mi',
+                  'Ran mi lọwọ pẹlu Gẹẹsi'
+                ]
+              : [
+                  'Help me with Math',
+                  'Explain a word for me',
+                  'Help me with English'
+                ]
+            ).map(suggestion => (
+              <button
+                key={suggestion}
+                onClick={() => handleSend(suggestion)}
+                className="px-3.5 py-2 rounded-full bg-white border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-xs font-jakarta font-bold text-[#064E3B] transition-all shadow-sm"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Fun Loading — avatar removed here, only the header avatar remains */}
         {isLoading && (
