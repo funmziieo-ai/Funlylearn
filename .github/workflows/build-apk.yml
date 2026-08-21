@@ -75,16 +75,36 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Build the debug APK
+      # Decodes the keystore secret back into a real file the build can
+      # sign with. Requires these GitHub Secrets to already be set:
+      # KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+      - name: Decode signing keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+
+      - name: Build the signed release APK
         working-directory: ./android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
-      # Makes the finished APK downloadable from the "Actions" tab,
-      # under this workflow run, once it finishes.
-      - name: Upload APK
+      - name: Rename APK to FunlyLearn.apk
+        run: mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/FunlyLearn.apk
+
+      # Makes the finished, signed APK downloadable from the "Actions"
+      # tab, under this workflow run, once it finishes. This is the file
+      # you upload to Loveworld Appstore (or any third-party Android
+      # store that accepts a plain signed APK).
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: FunlyLearn-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: FunlyLearn-release-apk
+          path: android/app/build/outputs/apk/release/FunlyLearn.apk
