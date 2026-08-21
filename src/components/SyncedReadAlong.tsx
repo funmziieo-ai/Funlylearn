@@ -163,13 +163,10 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         <button
             onClick={handlePlay}
             type="button"
-            disabled={isPlaying && !isRealAudioPlaying}
             className={
               'inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ' +
               (isRealAudioPlaying
                 ? 'bg-[#FF6B35] text-white hover:bg-[#E85523] ring-2 ring-amber-300'
-                : isPlaying
-                ? 'bg-slate-200 text-slate-500 cursor-default'
                 : 'bg-[#064E3B] text-white hover:bg-[#022C22]')
             }
           >
@@ -177,11 +174,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
               <>
                 <Pause className="w-3.5 h-3.5 animate-pulse text-amber-200" />
                 <span>Mama Titi is Speaking...</span>
-              </>
-            ) : isPlaying ? (
-              <>
-                <Volume2 className="w-3.5 h-3.5 text-slate-400" />
-                <span>Reading...</span>
               </>
             ) : (
               <>
