@@ -752,7 +752,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                       <SyncedReadAlong
                         text={msg.text}
                         language={profile.language}
-                        autoPlay={false}
+                        autoPlay={
+                          isMama &&
+                          idx === messages.length - 1 &&
+                          !isLoading &&
+                          messages.some(m => m.sender === 'user')
+                        }
                         onSpeechStateChange={speaking =>
                           setSpeakingMessageId(
                             speaking ? msg.id : null
