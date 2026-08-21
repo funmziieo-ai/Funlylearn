@@ -18,6 +18,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   className = ''
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isRealAudioPlaying, setIsRealAudioPlaying] = useState(false);
   const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -60,6 +61,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       window.speechSynthesis.cancel();
     }
     setIsPlaying(false);
+    setIsRealAudioPlaying(false);
     setActiveWordIndex(null);
     if (onSpeechStateChange) onSpeechStateChange(false);
   };
@@ -108,9 +110,11 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         const audio = new Audio(ttsData.audioUrl);
         audioRef.current = audio;
         await audio.play();
+        setIsRealAudioPlaying(true);
 
         audio.onended = () => {
           audioRef.current = null;
+          setIsRealAudioPlaying(false);
           URL.revokeObjectURL(ttsData.audioUrl!);
           // Reading pacer keeps running on its own estimated timing —
           // not stopped here, since it may still have words left even
@@ -118,6 +122,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         };
 
         audio.onerror = () => {
+          setIsRealAudioPlaying(false);
           // Real audio failed mid-way — the reading pacer above is
           // completely unaffected and keeps running silently.
           audioRef.current = null;
@@ -158,17 +163,25 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         <button
             onClick={handlePlay}
             type="button"
+            disabled={isPlaying && !isRealAudioPlaying}
             className={
               'inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ' +
-              (isPlaying
+              (isRealAudioPlaying
                 ? 'bg-[#FF6B35] text-white hover:bg-[#E85523] ring-2 ring-amber-300'
+                : isPlaying
+                ? 'bg-slate-200 text-slate-500 cursor-default'
                 : 'bg-[#064E3B] text-white hover:bg-[#022C22]')
             }
           >
-            {isPlaying ? (
+            {isRealAudioPlaying ? (
               <>
                 <Pause className="w-3.5 h-3.5 animate-pulse text-amber-200" />
                 <span>Mama Titi is Speaking...</span>
+              </>
+            ) : isPlaying ? (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-slate-400" />
+                <span>Reading...</span>
               </>
             ) : (
               <>
