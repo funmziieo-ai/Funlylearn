@@ -23,6 +23,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isManualRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stoppedRef = useRef(false);
 
@@ -41,6 +42,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
   useEffect(() => {
     if (autoPlay) {
+      isManualRef.current = false;
       handlePlay();
     }
     return () => {
@@ -102,11 +104,13 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     }, estimatedIntervalMs);
 
     // Real voice fetch happens in parallel — a bonus layer, not a
-    // requirement for the reading pacer above to keep running. This is
-    // a genuine loading state, tied to the real network fetch duration
-    // — not a fake delay — so tapping gives immediate, honest feedback
-    // that something is actually happening.
-    setIsLoading(true);
+    // requirement for the reading pacer above to keep running. The
+    // Loading/Speaking UI states only ever surface for an explicit tap
+    // — an auto-triggered play (arriving message, greeting) runs this
+    // exact same logic underneath, but stays silent at the button
+    // level, letting the word highlighting alone carry the moment.
+    const showUiState = isManualRef.current;
+    if (showUiState) setIsLoading(true);
     try {
       const ttsData = await fetchAudioTTS(cleanText, language);
 
@@ -116,12 +120,14 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         const audio = new Audio(ttsData.audioUrl);
         audioRef.current = audio;
         await audio.play();
-        setIsLoading(false);
-        setIsRealAudioPlaying(true);
+        if (showUiState) {
+          setIsLoading(false);
+          setIsRealAudioPlaying(true);
+        }
 
         audio.onended = () => {
           audioRef.current = null;
-          setIsRealAudioPlaying(false);
+          if (showUiState) setIsRealAudioPlaying(false);
           URL.revokeObjectURL(ttsData.audioUrl!);
           // Reading pacer keeps running on its own estimated timing —
           // not stopped here, since it may still have words left even
@@ -129,7 +135,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         };
 
         audio.onerror = () => {
-          setIsRealAudioPlaying(false);
+          if (showUiState) setIsRealAudioPlaying(false);
           // Real audio failed mid-way — the reading pacer above is
           // completely unaffected and keeps running silently.
           audioRef.current = null;
@@ -137,12 +143,12 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       } else {
         // No real audio available — the reading pacer above is already
         // running on its own and needs nothing further here.
-        setIsLoading(false);
+        if (showUiState) setIsLoading(false);
       }
     } catch {
       // Real voice fetch failed entirely — the reading pacer above is
       // completely unaffected and keeps running silently.
-      setIsLoading(false);
+      if (showUiState) setIsLoading(false);
     }
   };
 
@@ -171,7 +177,10 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
       <div className="pt-1 flex items-center space-x-2">
         <button
-            onClick={handlePlay}
+            onClick={() => {
+              isManualRef.current = true;
+              handlePlay();
+            }}
             type="button"
             className={
               'inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ' +
