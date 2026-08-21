@@ -755,8 +755,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                         autoPlay={
                           isMama &&
                           idx === messages.length - 1 &&
-                          !isLoading &&
-                          messages.some(m => m.sender === 'user')
+                          !isLoading
                         }
                         onSpeechStateChange={speaking =>
                           setSpeakingMessageId(
