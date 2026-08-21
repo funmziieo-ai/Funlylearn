@@ -82,6 +82,20 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
 
+      # Verifies the decoded file is genuinely a valid keystore BEFORE
+      # attempting to build with it - gives a clear, direct answer
+      # instead of Gradle's confusing wrapped error message.
+      - name: Verify the decoded keystore is valid
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          echo "File size in bytes:"
+          wc -c < android/app/release.keystore
+          echo "File type:"
+          file android/app/release.keystore
+          echo "Attempting to list the keystore contents:"
+          keytool -list -keystore android/app/release.keystore -storepass "$KEYSTORE_PASSWORD"
+
       - name: Build the signed release APK
         working-directory: ./android
         env:
