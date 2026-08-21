@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Pause, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
+import { Volume2, Pause, Loader2 } from 'lucide-react';
 import { fetchAudioTTS } from '../services/apiClient';
 import mamaTitiIconSrc from '../assets/images/mama_titi_official_1784860280943.jpg';
 
@@ -74,8 +74,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     }
 
     stoppedRef.current = false;
-    setHasError(false);
-    setQuotaMessage(null);
     setIsLoading(true);
 
     try {
@@ -136,7 +134,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           if (intervalRef.current) clearInterval(intervalRef.current);
           setIsPlaying(false);
           setIsLoading(false);
-          setHasError(true);
           if (onSpeechStateChange) onSpeechStateChange(false);
         };
 
