@@ -746,7 +746,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                           Mama Titi
                         </span>
                         <span className="text-[10px] bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded-full font-bold">
-                          {isYoruba ? 'Ohun Idera' : 'AI Teacher Voice'}
+                          {isYoruba ? 'Ohun Olukọ AI' : 'AI Teacher Voice'}
                         </span>
                       </div>
                       <SyncedReadAlong
