@@ -35,6 +35,7 @@ jobs:
           npm install @capacitor/core
           npm install -D @capacitor/cli
           npm install @capacitor/android
+          npm install @capacitor/browser
 
       # Creates the Capacitor config file directly, instead of running
       # the interactive "npx cap init" command (which can't run
