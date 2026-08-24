@@ -345,6 +345,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         id: 'm-' + Date.now(),
         sender: 'mama_titi',
         text: response.reply,
+        curriculumVerified: response.curriculumVerified || false,
         timestamp:
           response.timestamp ||
           new Date().toLocaleTimeString([], {
@@ -745,9 +746,17 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                         <span className="font-serif font-bold text-xs text-[#064E3B]">
                           Mama Titi
                         </span>
-                        <span className="text-[10px] bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded-full font-bold">
-                          {isYoruba ? 'Ohun Olukọ AI' : 'AI Teacher Voice'}
-                        </span>
+                        <div className="flex items-center space-x-1.5">
+                          {msg.curriculumVerified && (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold flex items-center space-x-0.5">
+                              <span>✓</span>
+                              <span>{isYoruba ? 'Ẹ̀kọ́ Tí A Fọwọ́ Sí' : 'Curriculum Verified'}</span>
+                            </span>
+                          )}
+                          <span className="text-[10px] bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded-full font-bold">
+                            {isYoruba ? 'Ohun Olukọ AI' : 'AI Teacher Voice'}
+                          </span>
+                        </div>
                       </div>
                       <SyncedReadAlong
                         text={msg.text}
