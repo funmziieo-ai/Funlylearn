@@ -43,6 +43,20 @@ export const CameraUploadModal: React.FC<CameraUploadModalProps> = ({
     }
   }, [isOpen]);
 
+  // Attaches the camera stream once the video element genuinely
+  // exists in the DOM (cameraMode === 'live'), instead of trying to
+  // do it before React has actually rendered it. MUST stay here,
+  // before the early return below — a hook placed after an early
+  // return gets skipped whenever that return fires, which is exactly
+  // what caused the "Rendered more hooks than during the previous
+  // render" crash (React error #310) when this was misplaced below.
+  useEffect(() => {
+    if (cameraMode === 'live' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraMode]);
+
   if (!isOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -118,16 +132,6 @@ export const CameraUploadModal: React.FC<CameraUploadModalProps> = ({
     setIsStartingCamera(false);
     setCameraMode('live');
   };
-
-  // Attaches the camera stream once the video element genuinely
-  // exists in the DOM (cameraMode === 'live'), instead of trying to
-  // do it before React has actually rendered it.
-  useEffect(() => {
-    if (cameraMode === 'live' && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch(() => {});
-    }
-  }, [cameraMode]);
 
   const capturePhoto = () => {
     const video = videoRef.current;
