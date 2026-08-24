@@ -1,21 +1,25 @@
 import React from 'react';
-import { Home, Camera, Smartphone, Languages, Trophy, GraduationCap } from 'lucide-react';
+import { Home, Camera, GraduationCap, Languages, Trophy, Smartphone } from 'lucide-react';
 
 interface BottomNavProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
 
+// Reordered to group by purpose: the core learning loop (Home, Snap
+// Homework, Exam Prep) comes first, since asking Mama Titi a question
+// and reviewing/studying past ones are closely related actions a child
+// moves between constantly. Extras and admin (Lingo, Board, Parents)
+// follow after, rather than sitting between the two learning tools.
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'chat', label: 'Snap Homework', icon: Camera },
-    { id: 'parent', label: 'Parents', icon: Smartphone },
+    { id: 'me', label: 'Exam Prep', icon: GraduationCap },
     { id: 'lingo', label: 'Lingo', icon: Languages },
     { id: 'board', label: 'Board', icon: Trophy },
-    { id: 'me', label: 'Exam Prep', icon: GraduationCap }
+    { id: 'parent', label: 'Parents', icon: Smartphone }
   ];
-
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-lg py-1.5 px-2">
       <div className="max-w-md mx-auto flex items-center justify-around">
@@ -43,4 +47,3 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
     </nav>
   );
 };
-
