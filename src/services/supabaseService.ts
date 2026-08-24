@@ -67,6 +67,36 @@ export function incrementNotebookDailyViewCount(): number {
   return updated.count;
 }
 
+// EXAM PREP ATTEMPT COUNT — same daily-reset pattern again. Free users
+// get 5 quiz-submission attempts per day before being prompted to
+// upgrade, matching the same rhythm as chat and the notebook.
+const EXAM_PREP_ATTEMPT_KEY = 'funlylearn_exam_prep_attempt_count';
+
+export function getExamPrepDailyAttemptCount(): { count: number; date: string } {
+  try {
+    const saved = localStorage.getItem(EXAM_PREP_ATTEMPT_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const today = new Date().toISOString().split('T')[0];
+      if (parsed.date === today) return parsed;
+    }
+  } catch (e) {
+    console.warn('Error reading exam prep attempt count:', e);
+  }
+  return { count: 0, date: new Date().toISOString().split('T')[0] };
+}
+
+export function incrementExamPrepDailyAttemptCount(): number {
+  const current = getExamPrepDailyAttemptCount();
+  const updated = { count: current.count + 1, date: current.date };
+  try {
+    localStorage.setItem(EXAM_PREP_ATTEMPT_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.warn('Error saving exam prep attempt count:', e);
+  }
+  return updated.count;
+}
+
 export function getStoredSubscription(): UserSubscription {
   try {
     const saved = localStorage.getItem(LOCAL_SUB_KEY);
