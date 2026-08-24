@@ -335,6 +335,8 @@ export default function App() {
                 userId={user?.id || getOrCreateGuestSessionId()}
               />
             )}
+
+            {activeTab === 'feedback' && <FeedbackForm />}
           </>
         )}
       </main>
