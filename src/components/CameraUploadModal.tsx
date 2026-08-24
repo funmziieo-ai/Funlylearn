@@ -106,14 +106,28 @@ export const CameraUploadModal: React.FC<CameraUploadModalProps> = ({
       }
     }
 
-    if (videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      await videoRef.current.play().catch(() => {});
-    }
-
+    // Switch to 'live' mode FIRST — this is what actually causes the
+    // <video> element to render. Attaching the stream happens
+    // separately below, in a useEffect that runs after this render
+    // completes, guaranteeing videoRef.current genuinely exists by
+    // then. Trying to attach it here, before the video element is
+    // even in the DOM yet, was the actual bug — it silently failed on
+    // the first attempt every time, leaving a blank video with no
+    // stream, only working on a second tap once the element already
+    // existed from the prior attempt.
     setIsStartingCamera(false);
     setCameraMode('live');
   };
+
+  // Attaches the camera stream once the video element genuinely
+  // exists in the DOM (cameraMode === 'live'), instead of trying to
+  // do it before React has actually rendered it.
+  useEffect(() => {
+    if (cameraMode === 'live' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraMode]);
 
   const capturePhoto = () => {
     const video = videoRef.current;
