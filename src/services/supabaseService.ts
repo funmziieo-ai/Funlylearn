@@ -21,10 +21,6 @@ export function getOrCreateGuestSessionId(): string {
   return id;
 }
 
-// DAILY LIMIT COMPLETELY REMOVED
-// All users can send unlimited messages
-// Guest daily message functions removed
-// isLimitReached always returns false
 export function getGuestDailyMessageCount(): { count: number; date: string } {
   return { count: 0, date: new Date().toISOString().split('T')[0] };
 }
@@ -37,7 +33,6 @@ export function isGuestLimitReached(): boolean {
   return false;
 }
 
-// Subscription Local Cache Helper
 export function getStoredSubscription(): UserSubscription {
   try {
     const saved = localStorage.getItem(LOCAL_SUB_KEY);
@@ -64,7 +59,6 @@ export function saveStoredSubscription(sub: UserSubscription): void {
   }
 }
 
-// AUTH FUNCTIONS
 export async function signUpWithEmail(
   email: string,
   pass: string
@@ -74,27 +68,16 @@ export async function signUpWithEmail(
     return { user: mockUser, session: null, error: null };
   }
   try {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: pass
-    });
+    const { data, error } = await supabase.auth.signUp({ email, password: pass });
     if (error) {
       if (error.message.includes('already registered')) {
-        return {
-          user: null,
-          session: null,
-          error: 'Account already exists. Please sign in instead!'
-        };
+        return { user: null, session: null, error: 'Account already exists. Please sign in instead!' };
       }
       return { user: null, session: null, error: error.message };
     }
     return { user: data.user, session: data.session, error: null };
   } catch (e: any) {
-    return {
-      user: null,
-      session: null,
-      error: e.message || 'Connection failed. Please check your internet.'
-    };
+    return { user: null, session: null, error: e.message || 'Connection failed. Please check your internet.' };
   }
 }
 
@@ -107,54 +90,31 @@ export async function signInWithEmail(
     return { user: mockUser, session: null, error: null };
   }
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: pass
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
     if (error) {
       if (error.message.includes('Invalid login credentials')) {
-        return {
-          user: null,
-          session: null,
-          error: 'Incorrect password. Please try again or reset.'
-        };
+        return { user: null, session: null, error: 'Incorrect password. Please try again or reset.' };
       }
       if (error.message.includes('User not found')) {
-        return {
-          user: null,
-          session: null,
-          error: 'No account found. Please sign up first.'
-        };
+        return { user: null, session: null, error: 'No account found. Please sign up first.' };
       }
       return { user: null, session: null, error: error.message };
     }
     return { user: data.user, session: data.session, error: null };
   } catch (e: any) {
-    return {
-      user: null,
-      session: null,
-      error: e.message || 'Connection failed. Please check your internet.'
-    };
+    return { user: null, session: null, error: e.message || 'Connection failed. Please check your internet.' };
   }
 }
 
-export async function signInWithGoogleOAuth(): Promise<{
-  user?: any;
-  error: string | null;
-}> {
+export async function signInWithGoogleOAuth(): Promise<{ user?: any; error: string | null }> {
   if (!supabase) {
-    const mockUser: any = {
-      id: `google_usr_${Date.now()}`,
-      email: 'scholar@funlylearn.ng'
-    };
+    const mockUser: any = { id: `google_usr_${Date.now()}`, email: 'scholar@funlylearn.ng' };
     return { user: mockUser, error: null };
   }
   try {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin
-      }
+      options: { redirectTo: window.location.origin }
     });
     if (error) {
       if (
@@ -163,31 +123,20 @@ export async function signInWithGoogleOAuth(): Promise<{
         (error as any).status === 400 ||
         (error as any).code === 'validation_failed'
       ) {
-        return {
-          error:
-            'Google Sign-In is not enabled yet. Please sign in with Email and Password or Continue as Guest!'
-        };
+        return { error: 'Google Sign-In is not enabled yet. Please sign in with Email and Password or Continue as Guest!' };
       }
       return { error: error.message };
     }
     return { error: null };
   } catch (e: any) {
-    if (
-      e?.message?.includes('provider is not enabled') ||
-      e?.message?.includes('Unsupported provider')
-    ) {
-      return {
-        error:
-          'Google Sign-In is not enabled yet. Please sign in with Email and Password or Continue as Guest!'
-      };
+    if (e?.message?.includes('provider is not enabled') || e?.message?.includes('Unsupported provider')) {
+      return { error: 'Google Sign-In is not enabled yet. Please sign in with Email and Password or Continue as Guest!' };
     }
     return { error: e.message || 'OAuth initialization failed' };
   }
 }
 
-export async function resetPasswordForEmail(
-  email: string
-): Promise<{ success: boolean; message: string }> {
+export async function resetPasswordForEmail(email: string): Promise<{ success: boolean; message: string }> {
   if (!supabase) {
     return { success: true, message: 'Password reset email sent (Demo Mode).' };
   }
@@ -196,15 +145,9 @@ export async function resetPasswordForEmail(
       redirectTo: `${window.location.origin}/reset-password`
     });
     if (error) return { success: false, message: error.message };
-    return {
-      success: true,
-      message: 'Password reset link sent! Check your inbox.'
-    };
+    return { success: true, message: 'Password reset link sent! Check your inbox.' };
   } catch (e: any) {
-    return {
-      success: false,
-      message: e.message || 'Reset failed. Check internet connection.'
-    };
+    return { success: false, message: e.message || 'Reset failed. Check internet connection.' };
   }
 }
 
@@ -215,17 +158,10 @@ export async function signOutUser(): Promise<void> {
   localStorage.removeItem(LOCAL_SUB_KEY);
 }
 
-// FETCH CHILD PROFILE
-export async function fetchChildProfile(
-  userId: string
-): Promise<UserProfile | null> {
+export async function fetchChildProfile(userId: string): Promise<UserProfile | null> {
   if (!supabase) return null;
   try {
-    const { data, error } = await supabase
-      .from('child_profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    const { data, error } = await supabase.from('child_profiles').select('*').eq('user_id', userId).single();
     if (error || !data) return null;
     return {
       id: data.id || userId,
@@ -247,43 +183,42 @@ export async function fetchChildProfile(
   }
 }
 
-// SAVE CHILD PROFILE
-export async function saveChildProfileToSupabase(
-  profile: UserProfile,
-  userId: string
-): Promise<void> {
+export async function saveChildProfileToSupabase(profile: UserProfile, userId: string): Promise<void> {
   if (!supabase) return;
   try {
-    await supabase
-      .from('child_profiles')
-      .upsert(
-        {
-          id: profile.id,
-          user_id: userId,
-          name: profile.name,
-          class_level: profile.classLevel,
-          language: profile.language,
-          is_out_of_school: profile.isOutOfSchool,
-          stars: profile.stars,
-          streak_days: profile.streakDays,
-          level: profile.level,
-          parent_approved_count: profile.parentApprovedCount,
-          unlocked_rewards: profile.unlockedRewards,
-          parent_whatsapp: profile.parentWhatsApp,
-          updated_at: new Date().toISOString()
-        },
-        { onConflict: 'user_id' }
-      );
+    await supabase.from('child_profiles').upsert(
+      {
+        id: profile.id,
+        user_id: userId,
+        name: profile.name,
+        class_level: profile.classLevel,
+        language: profile.language,
+        is_out_of_school: profile.isOutOfSchool,
+        stars: profile.stars,
+        streak_days: profile.streakDays,
+        level: profile.level,
+        parent_approved_count: profile.parentApprovedCount,
+        unlocked_rewards: profile.unlockedRewards,
+        parent_whatsapp: profile.parentWhatsApp,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: 'user_id' }
+    );
   } catch (e) {
     console.warn('Error saving profile:', e);
   }
 }
 
-// SAVE SUBSCRIPTION
-export async function saveSubscriptionToSupabase(
-  sub: UserSubscription,
-  userId: string
-): Promise<void> {
+// IMPORTANT: this function should NO LONGER be called directly from
+// the payment flow in PricingModal.tsx. Granting a real subscription
+// based purely on a client-side call is insecure — it can't actually
+// verify a payment succeeded, since a user's own browser is not a
+// trustworthy source for that. Real subscription rows are now created
+// exclusively by the paystack-webhook Edge Function, called directly
+// by Paystack's own servers with a cryptographically signed, verified
+// payload. Left here for backward compatibility, but should not be
+// reintroduced into any client-triggered "payment succeeded" path.
+export async function saveSubscriptionToSupabase(sub: UserSubscription, userId: string): Promise<void> {
   saveStoredSubscription(sub);
   if (!supabase) return;
   try {
@@ -302,10 +237,7 @@ export async function saveSubscriptionToSupabase(
   }
 }
 
-// FETCH SUBSCRIPTION
-export async function fetchSubscriptionFromSupabase(
-  userId: string
-): Promise<UserSubscription | null> {
+export async function fetchSubscriptionFromSupabase(userId: string): Promise<UserSubscription | null> {
   if (!supabase) return null;
   try {
     const { data, error } = await supabase
@@ -334,8 +266,49 @@ export async function fetchSubscriptionFromSupabase(
   }
 }
 
-// HOMEWORK RECORDS — real log of what Mama Titi actually helped with,
-// replacing the previous hardcoded "Send a ping" cards.
+// CHECK SUBSCRIPTION STATUS — deliberately READ-ONLY. Used by
+// PricingModal.tsx to poll for the real, webhook-created subscription
+// row after a payment attempt, rather than trusting the frontend
+// popup's own "success" callback. Never writes or grants access
+// itself — only the server-side webhook does that. Matched on
+// paystack_reference specifically, so it confirms the exact
+// transaction just attempted, not just any pre-existing active
+// subscription for this user.
+export async function checkSubscriptionStatus(
+  userId: string,
+  paystackReference: string
+): Promise<UserSubscription | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('paystack_reference', paystackReference)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    const sub: UserSubscription = {
+      id: data.id,
+      userId: data.user_id,
+      plan: data.plan as SubscriptionPlan,
+      status: data.status,
+      paystackReference: data.paystack_reference,
+      amount: data.amount,
+      currency: data.currency,
+      startedAt: data.started_at,
+      expiresAt: data.expires_at
+    };
+    saveStoredSubscription(sub);
+    return sub;
+  } catch (e) {
+    console.warn('Error checking subscription status:', e);
+    return null;
+  }
+}
+
 export interface HomeworkRecord {
   id: number;
   subject: string | null;
@@ -363,10 +336,7 @@ export async function saveHomeworkRecord(
   }
 }
 
-export async function fetchHomeworkRecords(
-  userId: string,
-  limit: number = 5
-): Promise<HomeworkRecord[]> {
+export async function fetchHomeworkRecords(userId: string, limit: number = 5): Promise<HomeworkRecord[]> {
   if (!supabase) return [];
   try {
     const { data, error } = await supabase
@@ -388,9 +358,6 @@ export async function fetchHomeworkRecords(
   }
 }
 
-// EXAM REVISION QUESTIONS — fetched live from Supabase instead of a
-// bundled static file, so updating/verifying more curriculum content
-// never requires an APK rebuild.
 export interface ExamQuestionRow {
   id: string;
   examId: string;
@@ -407,15 +374,10 @@ export interface ExamQuestionRow {
   explanation: string;
 }
 
-export async function fetchExamRevisionQuestions(
-  examId: string
-): Promise<ExamQuestionRow[]> {
+export async function fetchExamRevisionQuestions(examId: string): Promise<ExamQuestionRow[]> {
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
-      .from('exam_revision_questions')
-      .select('*')
-      .eq('exam_id', examId);
+    const { data, error } = await supabase.from('exam_revision_questions').select('*').eq('exam_id', examId);
     if (error || !data) return [];
     return data.map((r: any) => ({
       id: r.id,
@@ -437,28 +399,15 @@ export async function fetchExamRevisionQuestions(
   }
 }
 
-// MESSAGE FEEDBACK — lightweight thumbs up/down on individual Mama Titi
-// replies, a much lower-friction alternative to a standalone feedback
-// form for everyday users.
-export async function saveAppPollResponse(
-  userId: string,
-  question: string,
-  answer: string
-): Promise<void> {
+export async function saveAppPollResponse(userId: string, question: string, answer: string): Promise<void> {
   if (!supabase) return;
   try {
-    await supabase.from('app_poll_responses').insert({
-      user_id: userId,
-      question,
-      answer
-    });
+    await supabase.from('app_poll_responses').insert({ user_id: userId, question, answer });
   } catch (e) {
     console.warn('Error saving poll response:', e);
   }
 }
 
-// LEADERBOARD — real users ranked by stars, scoped to the same class
-// level so a Primary 3 child isn't compared against an SS3 student.
 export async function fetchLeaderboard(
   classLevel: string,
   limit: number = 20
