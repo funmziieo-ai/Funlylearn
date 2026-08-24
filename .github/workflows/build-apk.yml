@@ -57,6 +57,22 @@ jobs:
             npx cap sync android
           fi
 
+      # The android/ folder is regenerated fresh every single build (it's
+      # never committed to the repo), so any manual permission edit would
+      # just get overwritten next time. This patches the camera permission
+      # into the freshly-generated manifest, every time, right after it's
+      # created — CameraUploadModal.tsx uses plain browser getUserMedia()
+      # directly rather than a native Capacitor plugin, so without this,
+      # the WebView has no native permission to grant, causing "could not
+      # access camera" even though the same code works fine in a browser.
+      - name: Add camera permission to the freshly-generated manifest
+        run: |
+          sed -i 's/<manifest /<manifest xmlns:tools="http:\/\/schemas.android.com\/tools" /' android/app/src/main/AndroidManifest.xml
+          sed -i '/<\/manifest>/i\    <uses-permission android:name="android.permission.CAMERA" />' android/app/src/main/AndroidManifest.xml
+          sed -i '/<\/manifest>/i\    <uses-feature android:name="android.hardware.camera" android:required="false" />' android/app/src/main/AndroidManifest.xml
+          echo "Manifest after patching:"
+          cat android/app/src/main/AndroidManifest.xml
+
       # Uses the existing Mama Titi photo as a real placeholder app icon,
       # instead of shipping Capacitor's generic default icon. This isn't
       # a polished, professionally-designed icon (that's a later task,
