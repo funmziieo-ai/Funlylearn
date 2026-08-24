@@ -485,15 +485,15 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
         
         {/* Top Profile Header Bar */}
         <div className="bg-[#064E3B] text-white p-5 sm:p-6 rounded-3xl border-2 border-amber-400/40 shadow-xl space-y-4 relative overflow-hidden">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center space-x-3.5">
               <MamaTitiAvatar size="md" showOnlineStatus={false} />
               <div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full">
+                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                  <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full whitespace-nowrap">
                     {profile.isOutOfSchool ? 'Catch Up Scholar' : 'Student Scholar'}
                   </span>
-                  <span className="text-xs text-emerald-200">NERDC Aligned</span>
+                  <span className="text-xs text-emerald-200 whitespace-nowrap">NERDC Aligned</span>
                 </div>
                 <h1 className="font-serif text-2xl font-bold text-white mt-0.5">
                   {profile.name}
@@ -656,7 +656,10 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </>
                 )}
                 <button
-                  onClick={onOpenPricingModal}
+                  onClick={() => {
+                    alert('Button click registered - this file is live');
+                    onOpenPricingModal();
+                  }}
                   className="px-5 py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
                 >
                   Upgrade to Unlock Notebook
