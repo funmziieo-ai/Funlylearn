@@ -850,13 +850,15 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             {(isYoruba
               ? [
                   'Ran mi lọwọ pẹlu Iṣiro',
-                  'Ṣalaye ọrọ kan fun mi',
-                  'Ran mi lọwọ pẹlu Gẹẹsi'
+                  'Ran mi lọwọ pẹlu Gẹẹsi',
+                  'Ran mi lọwọ pẹlu Imọ Ipilẹ',
+                  'Ran mi lọwọ pẹlu Ẹkọ Awujọ'
                 ]
               : [
-                  'Help me with Math',
-                  'Explain a word for me',
-                  'Help me with English'
+                  'Help me with Mathematics',
+                  'Help me with English',
+                  'Help me with Basic Science',
+                  'Help me with Social Studies'
                 ]
             ).map(suggestion => (
               <button
