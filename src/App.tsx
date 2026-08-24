@@ -310,6 +310,7 @@ export default function App() {
                 profile={profile}
                 subscription={subscription}
                 userEmail={user?.email}
+                userId={user?.id || getOrCreateGuestSessionId()}
                 onProfileUpdate={handleProfileUpdate}
                 onOpenPricingModal={() => setIsPricingOpen(true)}
                 onSignOut={handleSignOut}
