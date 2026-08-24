@@ -33,6 +33,40 @@ export function isGuestLimitReached(): boolean {
   return false;
 }
 
+// NOTEBOOK VIEW COUNT — mirrors the exact same daily-reset pattern as
+// the chat message counter above. Free users get 5 notebook views per
+// day before being prompted to upgrade, same rhythm as chat's 5 free
+// messages. Same known limitation as the chat counter: stored in
+// localStorage, so it won't sync across a registered user's devices —
+// consistent with how the existing chat limit already works, not a
+// new gap introduced here.
+const NOTEBOOK_VIEW_KEY = 'funlylearn_notebook_view_count';
+
+export function getNotebookDailyViewCount(): { count: number; date: string } {
+  try {
+    const saved = localStorage.getItem(NOTEBOOK_VIEW_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const today = new Date().toISOString().split('T')[0];
+      if (parsed.date === today) return parsed;
+    }
+  } catch (e) {
+    console.warn('Error reading notebook view count:', e);
+  }
+  return { count: 0, date: new Date().toISOString().split('T')[0] };
+}
+
+export function incrementNotebookDailyViewCount(): number {
+  const current = getNotebookDailyViewCount();
+  const updated = { count: current.count + 1, date: current.date };
+  try {
+    localStorage.setItem(NOTEBOOK_VIEW_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.warn('Error saving notebook view count:', e);
+  }
+  return updated.count;
+}
+
 export function getStoredSubscription(): UserSubscription {
   try {
     const saved = localStorage.getItem(LOCAL_SUB_KEY);
@@ -313,7 +347,9 @@ export interface HomeworkRecord {
   id: number;
   subject: string | null;
   topic: string;
+  mamaReply: string | null;
   wasCorrect: boolean | null;
+  sessionId: string | null;
   createdAt: string;
 }
 
@@ -321,7 +357,9 @@ export async function saveHomeworkRecord(
   userId: string,
   topic: string,
   wasCorrect: boolean | null,
-  subject?: string
+  subject?: string,
+  sessionId?: string,
+  mamaReply?: string
 ): Promise<void> {
   if (!supabase) return;
   try {
@@ -329,28 +367,32 @@ export async function saveHomeworkRecord(
       user_id: userId,
       subject: subject || null,
       topic,
-      was_correct: wasCorrect
+      mama_reply: mamaReply || null,
+      was_correct: wasCorrect,
+      session_id: sessionId || null
     });
   } catch (e) {
     console.warn('Error saving homework record:', e);
   }
 }
 
-export async function fetchHomeworkRecords(userId: string, limit: number = 5): Promise<HomeworkRecord[]> {
+export async function fetchHomeworkRecords(userId: string, limit: number = 50): Promise<HomeworkRecord[]> {
   if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from('homework_records')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true })
       .limit(limit);
     if (error || !data) return [];
     return data.map((r: any) => ({
       id: r.id,
       subject: r.subject,
       topic: r.topic,
+      mamaReply: r.mama_reply,
       wasCorrect: r.was_correct,
+      sessionId: r.session_id,
       createdAt: r.created_at
     }));
   } catch (e) {
