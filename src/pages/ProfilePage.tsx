@@ -6,6 +6,7 @@ interface ProfilePageProps {
   profile: UserProfile;
   subscription?: UserSubscription;
   userEmail?: string;
+  userId: string;
   onProfileUpdate: (updated: UserProfile) => void;
   onOpenPricingModal?: () => void;
   onSignOut?: () => void;
@@ -13,7 +14,10 @@ interface ProfilePageProps {
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({
   profile,
-  onProfileUpdate
+  subscription,
+  userId,
+  onProfileUpdate,
+  onOpenPricingModal = () => {}
 }) => {
   return (
     <div className="space-y-6 pb-20">
@@ -21,8 +25,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
       <SmartStudyNotebookAndRevision
         profile={profile}
         onProfileUpdate={onProfileUpdate}
+        userId={userId}
+        subscription={subscription}
+        onOpenPricingModal={onOpenPricingModal}
       />
     </div>
   );
 };
-
