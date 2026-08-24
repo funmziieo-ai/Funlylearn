@@ -398,17 +398,33 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     content += `Class Level: ${profile.classLevel}\n`;
     content += `Curriculum: Official Nigerian NERDC\n`;
     content += `Date Compiled: ${new Date().toLocaleDateString()}\n\n`;
-    content += `--------------------------------------------------------\n`;
-    content += `MY COMPILED HOMEWORK & LEARNING NOTES WITH MAMA TITI\n`;
-    content += `--------------------------------------------------------\n\n`;
 
-    compiledNotes.forEach((note, idx) => {
-      content += `${idx + 1}. ${note.topic}\n`;
-      content += `   Date: ${new Date(note.createdAt).toLocaleDateString()}\n`;
-      if (note.wasCorrect !== null) {
-        content += `   Result: ${note.wasCorrect ? 'Answered correctly' : 'Still practicing'}\n`;
-      }
-      content += `\n--------------------------------------------------------\n\n`;
+    subjectGroups.forEach((group) => {
+      content += `========================================================\n`;
+      content += `${group.subject.toUpperCase()}\n`;
+      content += `========================================================\n\n`;
+
+      group.sessions.forEach((session, idx) => {
+        const firstExchange = session.exchanges[0];
+        content += `--------------------------------------------------------\n`;
+        content += `${idx + 1}. ${firstExchange.topic}\n`;
+        content += `Date: ${new Date(session.latestDate).toLocaleDateString()}\n`;
+        content += `Result: ${session.resolved ? 'Answered correctly' : 'Still practicing'}\n\n`;
+
+        session.exchanges.forEach((exchange, exIdx) => {
+          const label =
+            exIdx === session.exchanges.length - 1 && session.resolved
+              ? 'Final answer'
+              : `Attempt ${exIdx + 1}`;
+          content += `  [${label}]\n`;
+          content += `  ${profile.name} asked: ${exchange.topic}\n`;
+          if (exchange.mamaReply) {
+            content += `  Mama Titi explained: ${exchange.mamaReply}\n`;
+          }
+          content += `\n`;
+        });
+      });
+      content += `\n`;
     });
 
     content += `Generated via FunlyLearn AI Companion (NERDC Aligned)\n`;
@@ -841,9 +857,21 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                                   </span>
                                 </div>
 
-                                <h4 className="font-serif text-sm font-bold text-slate-900">
-                                  {idx + 1}. {firstExchange.topic}
-                                </h4>
+                                {hasMultipleExchanges ? (
+                                  <button
+                                    onClick={() => toggleSessionExpanded(session.sessionId)}
+                                    className="w-full flex items-center justify-between text-left"
+                                  >
+                                    <h4 className="font-serif text-sm font-bold text-slate-900">
+                                      {idx + 1}. {firstExchange.topic}
+                                    </h4>
+                                    <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${isSessionExpanded ? 'rotate-90' : ''}`} />
+                                  </button>
+                                ) : (
+                                  <h4 className="font-serif text-sm font-bold text-slate-900">
+                                    {idx + 1}. {firstExchange.topic}
+                                  </h4>
+                                )}
 
                                 {firstExchange.mamaReply && !hasMultipleExchanges && (
                                   <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-100">
@@ -851,41 +879,28 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                                   </p>
                                 )}
 
-                                {hasMultipleExchanges && (
-                                  <div className="space-y-2">
-                                    <button
-                                      onClick={() => toggleSessionExpanded(session.sessionId)}
-                                      className="text-[11px] font-jakarta font-bold text-[#064E3B] flex items-center space-x-1"
-                                    >
-                                      <span>
-                                        {isSessionExpanded
-                                          ? 'Hide the full explanation journey'
-                                          : `See how Mama Titi explained it (${session.exchanges.length} steps)`}
-                                      </span>
-                                      <ChevronRight className={`w-3 h-3 transition-transform ${isSessionExpanded ? 'rotate-90' : ''}`} />
-                                    </button>
-
-                                    {isSessionExpanded && (
-                                      <div className="space-y-2.5 pt-1">
-                                        {session.exchanges.map((exchange, exIdx) => (
-                                          <div key={exchange.id} className="space-y-1.5">
-                                            <p className="text-[10px] font-bold text-slate-500">
-                                              {exIdx === session.exchanges.length - 1 && session.resolved
-                                                ? 'Final answer'
-                                                : `Attempt ${exIdx + 1}`}
-                                            </p>
-                                            <p className="text-[11px] text-slate-800 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                                              <strong>{profile.name} asked:</strong> {exchange.topic}
-                                            </p>
-                                            {exchange.mamaReply && (
-                                              <p className="text-[11px] text-slate-700 leading-relaxed bg-slate-50 p-2 rounded-lg border border-amber-100">
-                                                <strong>Mama Titi explained:</strong> {exchange.mamaReply}
-                                              </p>
-                                            )}
-                                          </div>
-                                        ))}
+                                {hasMultipleExchanges && isSessionExpanded && (
+                                  <div className="space-y-2.5 pt-1">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                                      How Mama Titi explained it, until {profile.name} got it right:
+                                    </p>
+                                    {session.exchanges.map((exchange, exIdx) => (
+                                      <div key={exchange.id} className="space-y-1.5">
+                                        <p className="text-[10px] font-bold text-slate-500">
+                                          {exIdx === session.exchanges.length - 1 && session.resolved
+                                            ? 'Final answer'
+                                            : `Attempt ${exIdx + 1}`}
+                                        </p>
+                                        <p className="text-[11px] text-slate-800 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                          <strong>{profile.name} asked:</strong> {exchange.topic}
+                                        </p>
+                                        {exchange.mamaReply && (
+                                          <p className="text-[11px] text-slate-700 leading-relaxed bg-slate-50 p-2 rounded-lg border border-amber-100">
+                                            <strong>Mama Titi explained:</strong> {exchange.mamaReply}
+                                          </p>
+                                        )}
                                       </div>
-                                    )}
+                                    ))}
                                   </div>
                                 )}
                               </div>
