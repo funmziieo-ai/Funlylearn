@@ -151,9 +151,33 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   // one. Used to group the notebook's "how Mama Titi explained it"
   // view — currently scoped to Math only, since that's where we have
   // real, substantial curriculum content.
-  const [currentSessionId, setCurrentSessionId] = useState<string>(
-    () => crypto.randomUUID()
-  );
+  //
+  // Stored in localStorage rather than pure component state — pure
+  // state was lost on any remount (switching tabs, a page refresh),
+  // silently starting a new disconnected session even mid-conversation,
+  // which meant the final correct answer sometimes never joined the
+  // earlier attempts it belonged with.
+  const SESSION_ID_KEY = 'funlylearn_current_math_session';
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem(SESSION_ID_KEY);
+      if (stored) return stored;
+    } catch (e) {}
+    const fresh = crypto.randomUUID();
+    try {
+      localStorage.setItem(SESSION_ID_KEY, fresh);
+    } catch (e) {}
+    return fresh;
+  });
+
+  const startNewSession = () => {
+    const fresh = crypto.randomUUID();
+    try {
+      localStorage.setItem(SESSION_ID_KEY, fresh);
+    } catch (e) {}
+    setCurrentSessionId(fresh);
+  };
+
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationCount, setCelebrationCount] = useState(0);
   const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
@@ -288,6 +312,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setCroppedImage(null);
     setRawImageSrc(null);
     setShowNewChatConfirm(false);
+    startNewSession();
   };
 
   // Homework Snap is now open to everyone, including Free tier — this
@@ -435,7 +460,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       // next question should start its own fresh session, not continue
       // grouping with this one.
       if (isCorrect) {
-        setCurrentSessionId(crypto.randomUUID());
+        startNewSession();
       }
 
       // Show a quick app poll after a few real exchanges, using the
