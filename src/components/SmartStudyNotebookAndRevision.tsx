@@ -194,6 +194,8 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   subscription,
   onOpenPricingModal
 }) => {
+  console.log('DIAGNOSTIC — onOpenPricingModal received as:', typeof onOpenPricingModal, onOpenPricingModal);
+
   const isPremium = isPremiumActive(subscription);
 
   // Navigation & View States
