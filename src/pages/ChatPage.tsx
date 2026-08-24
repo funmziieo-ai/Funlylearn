@@ -142,6 +142,18 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+
+  // Tracks the current "study session" — a group of exchanges on the
+  // same topic, from first attempt through to the child finally
+  // getting it right. Persists across retries (wrong answers), and
+  // resets to a fresh id once the child answers correctly, so the next
+  // question starts its own new session rather than continuing this
+  // one. Used to group the notebook's "how Mama Titi explained it"
+  // view — currently scoped to Math only, since that's where we have
+  // real, substantial curriculum content.
+  const [currentSessionId, setCurrentSessionId] = useState<string>(
+    () => crypto.randomUUID()
+  );
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationCount, setCelebrationCount] = useState(0);
   const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
@@ -398,18 +410,33 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       });
 
       // Log a real record of what was actually worked on, so the
-      // Parent Dashboard can show genuine sessions instead of mock
-      // data. "topic" is the child's own message. "subject" is now a
-      // real signal from mama-titi-chat's RAG system — only set when a
-      // genuine, semantically-verified Math curriculum match was found,
-      // not a guess. Currently only fires for JSS 1-3 Math (whatever's
-      // been ingested so far) — a real, known coverage limit, not a bug.
+      // Parent Dashboard and Notebook can show genuine sessions instead
+      // of mock data. "topic" is the child's own message, "mamaReply"
+      // is Mama Titi's actual explanation — both saved now, so the
+      // notebook can show real study content, not just a bare log.
+      // sessionId groups this with any earlier retries on the same
+      // topic. Currently scoped to Math only (response.subject ===
+      // 'Mathematics') for the full session-grouped notebook view,
+      // since that's where we have real, substantial content — a
+      // deliberate, known scope limit while this feature proves out,
+      // not a bug. Other subjects still log normally, just without
+      // session grouping in the notebook yet.
+      const isMathSession = response.subject === 'Mathematics';
       saveHomeworkRecord(
         userId,
         userMsg.text.slice(0, 120),
         isCorrect,
-        response.subject || undefined
+        response.subject || undefined,
+        isMathSession ? currentSessionId : undefined,
+        response.reply
       );
+
+      // Once the child gets it right, this topic is resolved — the
+      // next question should start its own fresh session, not continue
+      // grouping with this one.
+      if (isCorrect) {
+        setCurrentSessionId(crypto.randomUUID());
+      }
 
       // Show a quick app poll after a few real exchanges, using the
       // count of the child's own messages so far in this session.
