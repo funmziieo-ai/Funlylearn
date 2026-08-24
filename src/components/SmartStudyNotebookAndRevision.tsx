@@ -194,8 +194,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   subscription,
   onOpenPricingModal
 }) => {
-  console.log('DIAGNOSTIC — onOpenPricingModal received as:', typeof onOpenPricingModal, onOpenPricingModal);
-
   const isPremium = isPremiumActive(subscription);
 
   // Navigation & View States
@@ -658,10 +656,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </>
                 )}
                 <button
-                  onClick={() => {
-                    alert('Button click registered - this file is live');
-                    onOpenPricingModal();
-                  }}
+                  onClick={onOpenPricingModal}
                   className="px-5 py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
                 >
                   Upgrade to Unlock Notebook
