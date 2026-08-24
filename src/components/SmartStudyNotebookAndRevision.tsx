@@ -235,6 +235,36 @@ function groupIntoSessions(records: HomeworkRecord[]): StudySession[] {
   );
 }
 
+// One card per subject, not per topic — every session (topic) for
+// that subject nests inside it, so the notebook stays compact instead
+// of growing a new top-level card for every single topic ever asked
+// about. Sessions without a recognized subject group under "General."
+interface SubjectGroup {
+  subject: string;
+  sessions: StudySession[];
+  latestDate: string;
+}
+
+function groupSessionsBySubject(sessions: StudySession[]): SubjectGroup[] {
+  const subjectMap = new Map<string, SubjectGroup>();
+
+  for (const session of sessions) {
+    const key = session.subject || 'General';
+    if (!subjectMap.has(key)) {
+      subjectMap.set(key, { subject: key, sessions: [], latestDate: session.latestDate });
+    }
+    const group = subjectMap.get(key)!;
+    group.sessions.push(session);
+    if (new Date(session.latestDate) > new Date(group.latestDate)) {
+      group.latestDate = session.latestDate;
+    }
+  }
+
+  return Array.from(subjectMap.values()).sort(
+    (a, b) => new Date(b.latestDate).getTime() - new Date(a.latestDate).getTime()
+  );
+}
+
 export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisionProps> = ({
   profile,
   onProfileUpdate,
@@ -295,8 +325,27 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   // is hidden while this feature expands to more subjects over time.
   const studySessions = useMemo(() => groupIntoSessions(compiledNotes), [compiledNotes]);
 
-  // Which sessions are currently expanded to show the full exchange
-  // history, rather than just the summary line.
+  // Then grouped again by subject — one card per subject, all its
+  // sessions nested inside, instead of a growing list of one card per
+  // topic ever asked about.
+  const subjectGroups = useMemo(() => groupSessionsBySubject(studySessions), [studySessions]);
+
+  // Which SUBJECT cards are expanded (top level), and which individual
+  // SESSIONS within an expanded subject are further expanded to show
+  // their full exchange history.
+  const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+  const toggleSubjectExpanded = (subject: string) => {
+    setExpandedSubjects(prev => {
+      const next = new Set(prev);
+      if (next.has(subject)) {
+        next.delete(subject);
+      } else {
+        next.add(subject);
+      }
+      return next;
+    });
+  };
+
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const toggleSessionExpanded = (sessionId: string) => {
     setExpandedSessions(prev => {
@@ -732,7 +781,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   Upgrade for Unlimited Access
                 </button>
               </div>
-            ) : studySessions.length === 0 ? (
+            ) : subjectGroups.length === 0 ? (
               <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-1">
                 <span className="text-3xl block">📚</span>
                 <p className="text-sm font-medium text-slate-600">No homework sessions yet</p>
@@ -742,85 +791,106 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </div>
             ) : (
               <div className="space-y-4">
-                {studySessions.map((session, idx) => {
-                  const isExpanded = expandedSessions.has(session.sessionId);
-                  const firstExchange = session.exchanges[0];
-                  const hasMultipleExchanges = session.exchanges.length > 1;
+                {subjectGroups.map((group) => {
+                  const isSubjectExpanded = expandedSubjects.has(group.subject);
+                  const resolvedCount = group.sessions.filter(s => s.resolved).length;
 
                   return (
-                    <div key={session.sessionId} className="p-4 sm:p-5 rounded-2xl bg-[#FFFBF5] border border-amber-200 space-y-3">
-                      <div className="flex justify-between items-center flex-wrap gap-2">
-                        <div className="flex items-center space-x-2">
-                          {session.subject && (
-                            <span className="text-[10px] font-jakarta font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                              {session.subject}
-                            </span>
-                          )}
-                          <span className="text-[11px] text-slate-400 font-mono font-medium">
-                            {new Date(session.latestDate).toLocaleDateString()}
+                    <div key={group.subject} className="rounded-2xl bg-[#FFFBF5] border border-amber-200 overflow-hidden">
+                      {/* Subject header — always visible, tap to expand/collapse everything inside */}
+                      <button
+                        onClick={() => toggleSubjectExpanded(group.subject)}
+                        className="w-full p-4 sm:p-5 flex items-center justify-between text-left"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <span className="text-[10px] font-jakarta font-bold uppercase bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full">
+                            {group.subject}
                           </span>
+                          <div>
+                            <h3 className="font-serif text-base sm:text-lg font-bold text-slate-900">
+                              {group.sessions.length} {group.sessions.length === 1 ? 'topic' : 'topics'} covered
+                            </h3>
+                            <p className="text-[11px] text-slate-500">
+                              {resolvedCount} answered correctly · Last studied {new Date(group.latestDate).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
-                          session.resolved ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'
-                        }`}>
-                          {session.resolved ? 'Correct ✅' : 'Practicing 💪'}
-                        </span>
-                      </div>
+                        <ChevronRight className={`w-5 h-5 text-slate-400 transition-transform shrink-0 ${isSubjectExpanded ? 'rotate-90' : ''}`} />
+                      </button>
 
-                      <h3 className="font-serif text-base sm:text-lg font-bold text-slate-900">
-                        {idx + 1}. {firstExchange.topic}
-                      </h3>
+                      {/* Everything for this subject nests inside here, only
+                          rendered once expanded — keeps the notebook compact
+                          instead of every topic being its own card by default. */}
+                      {isSubjectExpanded && (
+                        <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-3 border-t border-amber-100 pt-4">
+                          {group.sessions.map((session, idx) => {
+                            const isSessionExpanded = expandedSessions.has(session.sessionId);
+                            const firstExchange = session.exchanges[0];
+                            const hasMultipleExchanges = session.exchanges.length > 1;
 
-                      {/* Real explanation content — only shown when we
-                          actually have it saved (mamaReply exists).
-                          Older records saved before this feature won't
-                          have this text, so they just show the topic
-                          line above, same as before. */}
-                      {firstExchange.mamaReply && !hasMultipleExchanges && (
-                        <p className="text-xs text-slate-700 leading-relaxed bg-white p-3 rounded-xl border border-amber-100">
-                          {firstExchange.mamaReply}
-                        </p>
-                      )}
-
-                      {/* Multi-exchange sessions (Math currently) show
-                          the full journey — every attempt, expandable,
-                          so a child can study exactly how they got from
-                          not understanding to getting it right. */}
-                      {hasMultipleExchanges && (
-                        <div className="space-y-2">
-                          <button
-                            onClick={() => toggleSessionExpanded(session.sessionId)}
-                            className="text-xs font-jakarta font-bold text-[#064E3B] flex items-center space-x-1"
-                          >
-                            <span>
-                              {isExpanded
-                                ? 'Hide the full explanation journey'
-                                : `See how Mama Titi explained it (${session.exchanges.length} steps)`}
-                            </span>
-                            <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                          </button>
-
-                          {isExpanded && (
-                            <div className="space-y-3 pt-1">
-                              {session.exchanges.map((exchange, exIdx) => (
-                                <div key={exchange.id} className="space-y-1.5">
-                                  <p className="text-[11px] font-bold text-slate-500">
-                                    {exIdx === session.exchanges.length - 1 && session.resolved
-                                      ? 'Final answer'
-                                      : `Attempt ${exIdx + 1}`}
-                                  </p>
-                                  <p className="text-xs text-slate-800 bg-white p-2.5 rounded-lg border border-slate-200">
-                                    <strong>{profile.name} asked:</strong> {exchange.topic}
-                                  </p>
-                                  {exchange.mamaReply && (
-                                    <p className="text-xs text-slate-700 leading-relaxed bg-white p-2.5 rounded-lg border border-amber-100">
-                                      <strong>Mama Titi explained:</strong> {exchange.mamaReply}
-                                    </p>
-                                  )}
+                            return (
+                              <div key={session.sessionId} className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2.5">
+                                <div className="flex justify-between items-center flex-wrap gap-1.5">
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {new Date(session.latestDate).toLocaleDateString()}
+                                  </span>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                                    session.resolved ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'
+                                  }`}>
+                                    {session.resolved ? 'Correct ✅' : 'Practicing 💪'}
+                                  </span>
                                 </div>
-                              ))}
-                            </div>
-                          )}
+
+                                <h4 className="font-serif text-sm font-bold text-slate-900">
+                                  {idx + 1}. {firstExchange.topic}
+                                </h4>
+
+                                {firstExchange.mamaReply && !hasMultipleExchanges && (
+                                  <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                    {firstExchange.mamaReply}
+                                  </p>
+                                )}
+
+                                {hasMultipleExchanges && (
+                                  <div className="space-y-2">
+                                    <button
+                                      onClick={() => toggleSessionExpanded(session.sessionId)}
+                                      className="text-[11px] font-jakarta font-bold text-[#064E3B] flex items-center space-x-1"
+                                    >
+                                      <span>
+                                        {isSessionExpanded
+                                          ? 'Hide the full explanation journey'
+                                          : `See how Mama Titi explained it (${session.exchanges.length} steps)`}
+                                      </span>
+                                      <ChevronRight className={`w-3 h-3 transition-transform ${isSessionExpanded ? 'rotate-90' : ''}`} />
+                                    </button>
+
+                                    {isSessionExpanded && (
+                                      <div className="space-y-2.5 pt-1">
+                                        {session.exchanges.map((exchange, exIdx) => (
+                                          <div key={exchange.id} className="space-y-1.5">
+                                            <p className="text-[10px] font-bold text-slate-500">
+                                              {exIdx === session.exchanges.length - 1 && session.resolved
+                                                ? 'Final answer'
+                                                : `Attempt ${exIdx + 1}`}
+                                            </p>
+                                            <p className="text-[11px] text-slate-800 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                              <strong>{profile.name} asked:</strong> {exchange.topic}
+                                            </p>
+                                            {exchange.mamaReply && (
+                                              <p className="text-[11px] text-slate-700 leading-relaxed bg-slate-50 p-2 rounded-lg border border-amber-100">
+                                                <strong>Mama Titi explained:</strong> {exchange.mamaReply}
+                                              </p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
