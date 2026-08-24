@@ -3,7 +3,7 @@ import { Check, X, Sparkles, MessageCircle, ShieldCheck, Zap, Star, ArrowRight, 
 import confetti from 'canvas-confetti';
 import { UserProfile, UserSubscription, SubscriptionPlan } from '../types';
 import { openPaystackCheckout } from '../services/paystackService';
-import { saveSubscriptionToSupabase } from '../services/supabaseService';
+import { checkSubscriptionStatus } from '../services/supabaseService';
 
 interface PricingModalProps {
   isOpen: boolean;
@@ -27,8 +27,10 @@ export const PricingModal: React.FC<PricingModalProps> = ({
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
   const [currency, setCurrency] = useState<'NGN' | 'GBP' | 'USD'>('NGN');
   const [isLoadingPlan, setIsLoadingPlan] = useState<string | null>(null);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [successPlan, setSuccessPlan] = useState<SubscriptionPlan | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState(false);
 
   if (!isOpen) return null;
 
@@ -38,8 +40,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
     setIsLoadingPlan(plan);
     setPaymentError(null);
 
-    // Amounts in the smallest currency unit (kobo/pence/cents), since
-    // that's what Paystack's API requires regardless of currency.
     let amount: number;
     if (currency === 'NGN') {
       if (plan === 'basic') {
@@ -54,7 +54,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
         amount = billingInterval === 'monthly' ? 2000 : 14400;
       }
     } else {
-      // USD
       if (plan === 'basic') {
         amount = billingInterval === 'monthly' ? 1000 : 7200;
       } else {
@@ -62,65 +61,64 @@ export const PricingModal: React.FC<PricingModalProps> = ({
       }
     }
 
-    // Every currency now goes through real Paystack — no simulated
-    // "diaspora" success path. If Paystack doesn't support a given
-    // currency on this account, it will surface as a real error via
-    // onError below, rather than silently faking a successful payment.
     openPaystackCheckout({
       email: userEmail,
       amount,
       plan,
+      userId,
       childName: profile.name,
       classLevel: profile.classLevel,
       currency,
       onSuccess: async (ref) => {
-        await finalizeSubscription(plan, ref, currency, amount / 100);
+        // IMPORTANT: reaching here means the Paystack popup reported
+        // success — it does NOT mean the family has real access yet.
+        // The only thing that actually grants access is the real
+        // subscription row created by the server-side webhook, once
+        // Paystack independently confirms the payment. We wait for
+        // that here instead of trusting the popup alone.
+        setIsLoadingPlan(null);
+        setIsConfirmingPayment(true);
+        await waitForRealConfirmation(plan, ref);
       },
       onCancel: () => {
         setIsLoadingPlan(null);
       },
-      onError: (message) => {
+      onError: () => {
         setIsLoadingPlan(null);
-        setPaymentError(message);
+        setPaymentError(
+          'We could not open the payment window. Please check your connection and try again, or contact support on WhatsApp below.'
+        );
       }
     });
   };
 
-  const finalizeSubscription = async (
-    plan: SubscriptionPlan,
-    reference: string,
-    curr: 'NGN' | 'GBP' | 'USD',
-    amt: number
-  ) => {
-    const now = new Date();
-    const expires = new Date();
-    if (billingInterval === 'monthly') {
-      expires.setMonth(expires.getMonth() + 1);
-    } else {
-      expires.setFullYear(expires.getFullYear() + 1);
+  // Polls for the real, webhook-created subscription row rather than
+  // trusting the frontend popup alone. Checks every 2 seconds for up
+  // to 20 seconds — webhooks are usually near-instant, but this gives
+  // real room for normal network delay before giving up.
+  const waitForRealConfirmation = async (plan: SubscriptionPlan, reference: string) => {
+    const maxAttempts = 10;
+    const delayMs = 2000;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+      const confirmedSub = await checkSubscriptionStatus(userId, reference);
+      if (confirmedSub) {
+        setIsConfirmingPayment(false);
+        onSubscriptionUpdated(confirmedSub);
+        setSuccessPlan(plan);
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+        return;
+      }
     }
 
-    const newSub: UserSubscription = {
-      plan,
-      status: 'active',
-      paystackReference: reference,
-      amount: amt,
-      currency: curr,
-      startedAt: now.toISOString(),
-      expiresAt: expires.toISOString(),
-      billingInterval
-    };
-
-    await saveSubscriptionToSupabase(newSub, userId);
-    onSubscriptionUpdated(newSub);
-    setIsLoadingPlan(null);
-    setSuccessPlan(plan);
-
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.6 }
-    });
+    // Genuinely uncertain outcome after real waiting — tell the truth
+    // rather than claim success or failure we can't actually confirm.
+    // The payment may still be processing on Paystack's side; never
+    // silently grant access here, and never falsely say it failed.
+    setIsConfirmingPayment(false);
+    setPendingConfirmation(true);
   };
 
   const handleWhatsAppSupport = () => {
@@ -142,7 +140,48 @@ export const PricingModal: React.FC<PricingModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        {successPlan ? (
+        {isConfirmingPayment ? (
+          <div className="bg-[#064E3B] text-white p-8 sm:p-12 text-center space-y-6">
+            <div className="w-20 h-20 rounded-full bg-amber-400/20 border-2 border-amber-400 flex items-center justify-center mx-auto">
+              <Loader2 className="w-10 h-10 text-amber-300 animate-spin" />
+            </div>
+            <div className="space-y-2 max-w-md mx-auto">
+              <h2 className="font-serif text-2xl font-bold text-amber-300">
+                Confirming your payment...
+              </h2>
+              <p className="text-sm text-emerald-100 font-sans">
+                This usually only takes a few seconds. Please don't close this window.
+              </p>
+            </div>
+          </div>
+        ) : pendingConfirmation ? (
+          <div className="bg-[#064E3B] text-white p-8 sm:p-12 text-center space-y-6">
+            <div className="space-y-2 max-w-md mx-auto">
+              <h2 className="font-serif text-2xl font-bold text-amber-300">
+                Still confirming...
+              </h2>
+              <p className="text-sm text-emerald-100 font-sans">
+                Your payment may still be processing. If it went through, your access will unlock automatically within a few minutes — no need to pay again. If you're unsure, our team can check for you on WhatsApp.
+              </p>
+            </div>
+            <button
+              onClick={handleWhatsAppSupport}
+              className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-jakarta font-bold text-sm shadow-xl transition-all flex items-center space-x-2 mx-auto"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>Check on WhatsApp</span>
+            </button>
+            <button
+              onClick={() => {
+                setPendingConfirmation(false);
+                onClose();
+              }}
+              className="text-xs text-emerald-300 underline"
+            >
+              Close for now
+            </button>
+          </div>
+        ) : successPlan ? (
           <div className="bg-[#064E3B] text-white p-8 sm:p-12 text-center space-y-6 animate-scaleUp">
             <div className="w-20 h-20 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center mx-auto shadow-xl">
               <Sparkles className="w-10 h-10 text-slate-950 animate-bounce" />
@@ -386,10 +425,18 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 </div>
 
                 <button
-                  disabled
-                  className="w-full py-3.5 rounded-2xl bg-slate-200 text-slate-500 font-jakarta font-bold text-xs cursor-not-allowed flex items-center justify-center space-x-2"
+                  onClick={() => handleSubscribe('basic')}
+                  disabled={isLoadingPlan !== null}
+                  className="w-full py-3.5 rounded-2xl bg-[#064E3B] hover:bg-[#022C22] disabled:opacity-60 text-white font-jakarta font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2"
                 >
-                  <span>Payments Coming Soon</span>
+                  {isLoadingPlan === 'basic' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Opening checkout...</span>
+                    </>
+                  ) : (
+                    <span>Subscribe to Basic</span>
+                  )}
                 </button>
               </div>
 
@@ -460,10 +507,18 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 </div>
 
                 <button
-                  disabled
-                  className="w-full py-3.5 rounded-2xl bg-emerald-900/60 text-emerald-300/60 font-jakarta font-bold text-xs cursor-not-allowed flex items-center justify-center space-x-2"
+                  onClick={() => handleSubscribe('family')}
+                  disabled={isLoadingPlan !== null}
+                  className="w-full py-3.5 rounded-2xl bg-amber-400 hover:bg-amber-300 disabled:opacity-60 text-slate-950 font-jakarta font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2"
                 >
-                  <span>Payments Coming Soon</span>
+                  {isLoadingPlan === 'family' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>Opening checkout...</span>
+                    </>
+                  ) : (
+                    <span>Subscribe to Family</span>
+                  )}
                 </button>
               </div>
 
