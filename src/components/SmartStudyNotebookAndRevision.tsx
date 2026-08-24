@@ -25,7 +25,7 @@ import {
 import confetti from 'canvas-confetti';
 import { UserProfile, UserSubscription } from '../types';
 import { MamaTitiAvatar } from './MamaTitiAvatar';
-import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow } from '../services/supabaseService';
+import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow, getNotebookDailyViewCount, incrementNotebookDailyViewCount } from '../services/supabaseService';
 
 // Local types replacing the ones previously imported from the static
 // examRevisionData.ts file, now built at runtime from live Supabase rows.
@@ -182,9 +182,57 @@ const COMING_SOON_SUBJECTS: Record<string, { name: string; icon: string }[]> = {
 // question pool stays available for the next "New Questions" refresh.
 const QUESTIONS_PER_ROUND = 8;
 
+// Free users get this many notebook views per day before being
+// prompted to upgrade — same rhythm as chat's 5 free daily messages,
+// rather than the notebook being fully locked from the very first
+// visit.
+const FREE_DAILY_NOTEBOOK_VIEWS = 5;
+
 function pickRandomQuestions(pool: ExamQuestion[], count: number): ExamQuestion[] {
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(count, pool.length));
+}
+
+// A real study session: one or more exchanges on the same topic,
+// grouped together by session_id, from the first attempt through to
+// the child finally getting it right (or the most recent attempt, if
+// still unresolved). Records without a session_id (older data, or
+// subjects not yet covered by session grouping) each become their own
+// single-exchange session, so nothing from before this feature existed
+// disappears from the notebook.
+interface StudySession {
+  sessionId: string;
+  subject: string | null;
+  exchanges: HomeworkRecord[];
+  resolved: boolean;
+  latestDate: string;
+}
+
+function groupIntoSessions(records: HomeworkRecord[]): StudySession[] {
+  const sessionMap = new Map<string, StudySession>();
+
+  for (const record of records) {
+    const key = record.sessionId || `single-${record.id}`;
+    if (!sessionMap.has(key)) {
+      sessionMap.set(key, {
+        sessionId: key,
+        subject: record.subject,
+        exchanges: [],
+        resolved: false,
+        latestDate: record.createdAt
+      });
+    }
+    const session = sessionMap.get(key)!;
+    session.exchanges.push(record);
+    session.latestDate = record.createdAt;
+    if (record.wasCorrect) session.resolved = true;
+  }
+
+  // Most recent session first, matching how the notebook displayed
+  // records before this change.
+  return Array.from(sessionMap.values()).sort(
+    (a, b) => new Date(b.latestDate).getTime() - new Date(a.latestDate).getTime()
+  );
 }
 
 export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisionProps> = ({
@@ -195,6 +243,14 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   onOpenPricingModal
 }) => {
   const isPremium = isPremiumActive(subscription);
+
+  // Free notebook view tracking — resets daily, same rhythm as chat's
+  // message limit. Only relevant for non-premium users; premium users
+  // always have full access regardless of this count.
+  const [notebookViewCount, setNotebookViewCount] = useState<number>(
+    () => getNotebookDailyViewCount().count
+  );
+  const notebookLimitReached = !isPremium && notebookViewCount >= FREE_DAILY_NOTEBOOK_VIEWS;
 
   // Navigation & View States
   const [activeView, setActiveView] = useState<'hub' | 'notebook' | 'revision'>('hub');
@@ -222,7 +278,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   React.useEffect(() => {
     let cancelled = false;
     setIsLoadingNotes(true);
-    fetchHomeworkRecords(userId, 20).then(records => {
+    fetchHomeworkRecords(userId, 50).then(records => {
       if (!cancelled) {
         setCompiledNotes(records);
         setIsLoadingNotes(false);
@@ -232,6 +288,28 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
       cancelled = true;
     };
   }, [userId]);
+
+  // Groups the flat records into real study sessions — currently only
+  // Math gets true multi-exchange grouping (see ChatPage.tsx), other
+  // subjects each become their own single-exchange session so nothing
+  // is hidden while this feature expands to more subjects over time.
+  const studySessions = useMemo(() => groupIntoSessions(compiledNotes), [compiledNotes]);
+
+  // Which sessions are currently expanded to show the full exchange
+  // history, rather than just the summary line.
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+  const toggleSessionExpanded = (sessionId: string) => {
+    setExpandedSessions(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
 
   // Live exam data — real questions fetched from Supabase per exam type,
   // combined with stable structural metadata, instead of a bundled file.
@@ -518,7 +596,12 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
           
           {/* ENTRY POINT A: "Create Notebook" Button / Card */}
           <button
-            onClick={() => setActiveView('notebook')}
+            onClick={() => {
+              if (!isPremium) {
+                setNotebookViewCount(incrementNotebookDailyViewCount());
+              }
+              setActiveView('notebook');
+            }}
             className={`p-5 rounded-3xl border-2 text-left transition-all relative overflow-hidden group shadow-soft ${
               activeView === 'notebook'
                 ? 'bg-[#064E3B] text-white border-amber-400 shadow-xl'
@@ -627,42 +710,29 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
             </div>
 
             {/* Compiled Note Cards — real homework sessions from Supabase.
-                Basic/Family only: the records accumulate for free either
-                way, but viewing/exporting them requires an upgrade — so
-                the upgrade prompt shows real, already-earned progress
-                rather than an abstract feature description. */}
+                Free users get real access up to FREE_DAILY_NOTEBOOK_VIEWS
+                views per day (same rhythm as chat's daily message
+                limit), then see this upgrade prompt. Premium users
+                never hit this at all. */}
             {isLoadingNotes ? (
               <div className="py-10 text-center text-sm text-slate-500">Loading your sessions...</div>
-            ) : !isPremium ? (
+            ) : notebookLimitReached ? (
               <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-amber-50 to-emerald-50 border-2 border-amber-300 text-center space-y-3">
                 <span className="text-4xl block">📓</span>
-                {compiledNotes.length > 0 ? (
-                  <>
-                    <h3 className="font-serif text-lg font-bold text-[#064E3B]">
-                      {profile.name} has {compiledNotes.length} learning {compiledNotes.length === 1 ? 'session' : 'sessions'} recorded!
-                    </h3>
-                    <p className="text-xs text-slate-600 max-w-sm mx-auto">
-                      Upgrade to Basic or Family to view, print, and download {profile.name}'s full compiled study notebook.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="font-serif text-lg font-bold text-[#064E3B]">
-                      Your Notebook is Waiting
-                    </h3>
-                    <p className="text-xs text-slate-600 max-w-sm mx-auto">
-                      As {profile.name} chats with Mama Titi, real learning sessions get recorded here. Upgrade to Basic or Family anytime to view and export them.
-                    </p>
-                  </>
-                )}
+                <h3 className="font-serif text-lg font-bold text-[#064E3B]">
+                  You've used today's {FREE_DAILY_NOTEBOOK_VIEWS} free notebook views
+                </h3>
+                <p className="text-xs text-slate-600 max-w-sm mx-auto">
+                  Upgrade to Basic or Family for unlimited notebook access, plus printing and downloading {profile.name}'s full study notebook anytime.
+                </p>
                 <button
                   onClick={onOpenPricingModal}
                   className="px-5 py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
                 >
-                  Upgrade to Unlock Notebook
+                  Upgrade for Unlimited Access
                 </button>
               </div>
-            ) : compiledNotes.length === 0 ? (
+            ) : studySessions.length === 0 ? (
               <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-1">
                 <span className="text-3xl block">📚</span>
                 <p className="text-sm font-medium text-slate-600">No homework sessions yet</p>
@@ -672,26 +742,90 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </div>
             ) : (
               <div className="space-y-4">
-                {compiledNotes.map((note, idx) => (
-                  <div key={note.id} className="p-4 sm:p-5 rounded-2xl bg-[#FFFBF5] border border-amber-200 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[11px] text-slate-400 font-mono font-medium">
-                        {new Date(note.createdAt).toLocaleDateString()}
-                      </span>
-                      {note.wasCorrect !== null && (
+                {studySessions.map((session, idx) => {
+                  const isExpanded = expandedSessions.has(session.sessionId);
+                  const firstExchange = session.exchanges[0];
+                  const hasMultipleExchanges = session.exchanges.length > 1;
+
+                  return (
+                    <div key={session.sessionId} className="p-4 sm:p-5 rounded-2xl bg-[#FFFBF5] border border-amber-200 space-y-3">
+                      <div className="flex justify-between items-center flex-wrap gap-2">
+                        <div className="flex items-center space-x-2">
+                          {session.subject && (
+                            <span className="text-[10px] font-jakarta font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                              {session.subject}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-slate-400 font-mono font-medium">
+                            {new Date(session.latestDate).toLocaleDateString()}
+                          </span>
+                        </div>
                         <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
-                          note.wasCorrect ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'
+                          session.resolved ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'
                         }`}>
-                          {note.wasCorrect ? 'Correct ✅' : 'Practicing 💪'}
+                          {session.resolved ? 'Correct ✅' : 'Practicing 💪'}
                         </span>
+                      </div>
+
+                      <h3 className="font-serif text-base sm:text-lg font-bold text-slate-900">
+                        {idx + 1}. {firstExchange.topic}
+                      </h3>
+
+                      {/* Real explanation content — only shown when we
+                          actually have it saved (mamaReply exists).
+                          Older records saved before this feature won't
+                          have this text, so they just show the topic
+                          line above, same as before. */}
+                      {firstExchange.mamaReply && !hasMultipleExchanges && (
+                        <p className="text-xs text-slate-700 leading-relaxed bg-white p-3 rounded-xl border border-amber-100">
+                          {firstExchange.mamaReply}
+                        </p>
+                      )}
+
+                      {/* Multi-exchange sessions (Math currently) show
+                          the full journey — every attempt, expandable,
+                          so a child can study exactly how they got from
+                          not understanding to getting it right. */}
+                      {hasMultipleExchanges && (
+                        <div className="space-y-2">
+                          <button
+                            onClick={() => toggleSessionExpanded(session.sessionId)}
+                            className="text-xs font-jakarta font-bold text-[#064E3B] flex items-center space-x-1"
+                          >
+                            <span>
+                              {isExpanded
+                                ? 'Hide the full explanation journey'
+                                : `See how Mama Titi explained it (${session.exchanges.length} steps)`}
+                            </span>
+                            <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                          </button>
+
+                          {isExpanded && (
+                            <div className="space-y-3 pt-1">
+                              {session.exchanges.map((exchange, exIdx) => (
+                                <div key={exchange.id} className="space-y-1.5">
+                                  <p className="text-[11px] font-bold text-slate-500">
+                                    {exIdx === session.exchanges.length - 1 && session.resolved
+                                      ? 'Final answer'
+                                      : `Attempt ${exIdx + 1}`}
+                                  </p>
+                                  <p className="text-xs text-slate-800 bg-white p-2.5 rounded-lg border border-slate-200">
+                                    <strong>{profile.name} asked:</strong> {exchange.topic}
+                                  </p>
+                                  {exchange.mamaReply && (
+                                    <p className="text-xs text-slate-700 leading-relaxed bg-white p-2.5 rounded-lg border border-amber-100">
+                                      <strong>Mama Titi explained:</strong> {exchange.mamaReply}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
-
-                    <h3 className="font-serif text-base sm:text-lg font-bold text-slate-900">
-                      {idx + 1}. {note.topic}
-                    </h3>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
