@@ -315,6 +315,14 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>5 notebook views per day</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>5 Exam Prep attempts per day</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>Unlimited Mama Titi voice</span>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -332,7 +340,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     </div>
                     <div className="flex items-center space-x-2 text-slate-400">
                       <X className="w-4 h-4 shrink-0" />
-                      <span className="line-through">Smart notebook</span>
+                      <span className="line-through">Unlimited notebook & Exam Prep</span>
                     </div>
                     <div className="flex items-center space-x-2 text-slate-400">
                       <X className="w-4 h-4 shrink-0" />
@@ -395,6 +403,10 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     <div className="flex items-center space-x-2 font-semibold">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>Unlimited messages & homework snaps</span>
+                    </div>
+                    <div className="flex items-center space-x-2 font-semibold">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Unlimited notebook & Exam Prep access</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
