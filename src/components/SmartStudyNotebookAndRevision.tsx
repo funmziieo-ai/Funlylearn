@@ -25,7 +25,7 @@ import {
 import confetti from 'canvas-confetti';
 import { UserProfile, UserSubscription } from '../types';
 import { MamaTitiAvatar } from './MamaTitiAvatar';
-import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow, getNotebookDailyViewCount, incrementNotebookDailyViewCount } from '../services/supabaseService';
+import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow, getNotebookDailyViewCount, incrementNotebookDailyViewCount, getExamPrepDailyAttemptCount, incrementExamPrepDailyAttemptCount } from '../services/supabaseService';
 
 // Local types replacing the ones previously imported from the static
 // examRevisionData.ts file, now built at runtime from live Supabase rows.
@@ -188,6 +188,11 @@ const QUESTIONS_PER_ROUND = 8;
 // visit.
 const FREE_DAILY_NOTEBOOK_VIEWS = 5;
 
+// Same limit, separate constant for clarity - free users get this
+// many Exam Prep quiz attempts per day before being prompted to
+// upgrade, matching the same rhythm as chat and the notebook.
+const FREE_DAILY_EXAM_ATTEMPTS = 5;
+
 function pickRandomQuestions(pool: ExamQuestion[], count: number): ExamQuestion[] {
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(count, pool.length));
@@ -281,6 +286,13 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     () => getNotebookDailyViewCount().count
   );
   const notebookLimitReached = !isPremium && notebookViewCount >= FREE_DAILY_NOTEBOOK_VIEWS;
+
+  // Free exam prep attempt tracking — same daily rhythm again. Each
+  // quiz submission (Check My Answers) counts as one attempt.
+  const [examAttemptCount, setExamAttemptCount] = useState<number>(
+    () => getExamPrepDailyAttemptCount().count
+  );
+  const examPrepLimitReached = !isPremium && examAttemptCount >= FREE_DAILY_EXAM_ATTEMPTS;
 
   // Navigation & View States
   const [activeView, setActiveView] = useState<'hub' | 'notebook' | 'revision'>('hub');
@@ -497,7 +509,11 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   // Submit Interactive Quiz
   const handleSubmitQuiz = () => {
     setSubmitted(true);
-    
+
+    if (!isPremium) {
+      setExamAttemptCount(incrementExamPrepDailyAttemptCount());
+    }
+
     let correctCount = 0;
     displayedQuestions.forEach((q) => {
       if (userAnswers[q.id] === q.correctOptionIndex) {
@@ -1153,7 +1169,23 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
             )}
 
             {/* STEP 3 & STEP 4: GENERATE REVISION QUESTIONS + SOLVE OR PRINT */}
-            {selectedExam && selectedTopic && (
+            {selectedExam && selectedTopic && examPrepLimitReached ? (
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-amber-300 shadow-soft text-center space-y-3">
+                <span className="text-4xl block">🎓</span>
+                <h3 className="font-serif text-lg font-bold text-[#064E3B]">
+                  You've used today's {FREE_DAILY_EXAM_ATTEMPTS} free Exam Prep attempts
+                </h3>
+                <p className="text-xs text-slate-600 max-w-sm mx-auto">
+                  Upgrade to Basic or Family for unlimited exam practice, plus printing and full notebook access anytime.
+                </p>
+                <button
+                  onClick={onOpenPricingModal}
+                  className="px-5 py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
+                >
+                  Upgrade for Unlimited Access
+                </button>
+              </div>
+            ) : selectedExam && selectedTopic && (
               <div className="bg-white p-5 sm:p-6 rounded-3xl border-2 border-emerald-200 shadow-soft space-y-6">
                 
                 {/* Topic Header & Actions */}
