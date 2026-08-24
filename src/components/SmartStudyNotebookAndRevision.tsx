@@ -334,6 +334,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   // SESSIONS within an expanded subject are further expanded to show
   // their full exchange history.
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const toggleSubjectExpanded = (subject: string) => {
     setExpandedSubjects(prev => {
       const next = new Set(prev);
@@ -390,7 +391,11 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   };
 
   // Action: Download Personal Notebook
-  const handleDownloadNotebook = () => {
+  const handleDownloadNotebook = (subjectFilter?: string) => {
+    const groupsToInclude = subjectFilter
+      ? subjectGroups.filter(g => g.subject === subjectFilter)
+      : subjectGroups;
+
     let content = `========================================================\n`;
     content += `          FUNLYLEARN SMART STUDY NOTEBOOK             \n`;
     content += `========================================================\n\n`;
@@ -399,7 +404,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     content += `Curriculum: Official Nigerian NERDC\n`;
     content += `Date Compiled: ${new Date().toLocaleDateString()}\n\n`;
 
-    subjectGroups.forEach((group) => {
+    groupsToInclude.forEach((group) => {
       content += `========================================================\n`;
       content += `${group.subject.toUpperCase()}\n`;
       content += `========================================================\n\n`;
@@ -433,10 +438,13 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${profile.name}_Smart_Study_Notebook.txt`;
+    link.download = subjectFilter
+      ? `${profile.name}_${subjectFilter}_Study_Notes.txt`
+      : `${profile.name}_Smart_Study_Notebook.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setShowDownloadMenu(false);
   };
 
   // Select Exam
@@ -764,13 +772,35 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   <span>Print</span>
                 </button>
 
-                <button
-                  onClick={isPremium ? handleDownloadNotebook : onOpenPricingModal}
-                  className="px-3.5 py-2 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download</span>
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={isPremium ? () => setShowDownloadMenu(prev => !prev) : onOpenPricingModal}
+                    className="px-3.5 py-2 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download</span>
+                  </button>
+
+                  {showDownloadMenu && (
+                    <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-2xl border border-slate-200 shadow-xl z-20 py-1.5 overflow-hidden">
+                      <button
+                        onClick={() => handleDownloadNotebook()}
+                        className="w-full text-left px-4 py-2.5 text-xs font-jakarta font-bold text-slate-800 hover:bg-slate-50"
+                      >
+                        All Subjects
+                      </button>
+                      {subjectGroups.map(group => (
+                        <button
+                          key={group.subject}
+                          onClick={() => handleDownloadNotebook(group.subject)}
+                          className="w-full text-left px-4 py-2.5 text-xs font-jakarta font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          {group.subject} only
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
