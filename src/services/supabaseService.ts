@@ -239,6 +239,7 @@ export async function fetchChildProfile(userId: string): Promise<UserProfile | n
       parentApprovedCount: data.parent_approved_count || 0,
       unlockedRewards: data.unlocked_rewards || ['r1'],
       parentWhatsApp: data.parent_whatsapp || '',
+      parentEmail: data.parent_email || '',
       createdAt: data.created_at || new Date().toISOString()
     };
   } catch (e) {
@@ -264,6 +265,7 @@ export async function saveChildProfileToSupabase(profile: UserProfile, userId: s
         parent_approved_count: profile.parentApprovedCount,
         unlocked_rewards: profile.unlockedRewards,
         parent_whatsapp: profile.parentWhatsApp,
+        parent_email: profile.parentEmail,
         updated_at: new Date().toISOString()
       },
       { onConflict: 'user_id' }
