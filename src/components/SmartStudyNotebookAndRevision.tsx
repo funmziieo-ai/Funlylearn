@@ -771,27 +771,21 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
         </div>
 
-        {/* VIEW 1: PERSONAL STUDY NOTEBOOK — redesigned to look like a
-            real physical exercise book, matching the Stitch mockup:
-            paper cover page, subject tabs (not accordions), rotated
-            "CORRECT"/"PRACTICING" ink-stamp badges, and Mama Titi's
-            note styled like a teacher's margin comment. */}
         {activeView === 'notebook' && (
-          <div className="bg-[#FFFBF5] rounded-3xl border-2 border-amber-300/80 shadow-soft overflow-hidden animate-fadeIn">
+          <div className="rounded-3xl border-2 border-amber-300/80 shadow-xl overflow-hidden animate-fadeIn bg-amber-100">
 
-            {/* Subject Tabs — one per subject the child has real
-                homework sessions in. Sits above the "page" like real
-                notebook chapter tabs. */}
+            {/* Subject Tabs — folder-style tabs that visually attach to
+                the page below, like real notebook chapter dividers. */}
             {subjectGroups.length > 1 && (
-              <div className="flex items-center space-x-1 px-4 sm:px-6 pt-4 overflow-x-auto no-scrollbar bg-[#FFFBF5]">
+              <div className="flex items-end space-x-1 px-4 sm:px-6 pt-4 overflow-x-auto no-scrollbar">
                 {subjectGroups.map((group) => (
                   <button
                     key={group.subject}
                     onClick={() => setActiveNotebookSubject(group.subject)}
-                    className={`px-4 py-2 rounded-t-xl text-xs sm:text-sm font-jakarta font-bold whitespace-nowrap transition-all border-2 border-b-0 ${
+                    className={`px-5 py-2.5 rounded-t-2xl text-xs sm:text-sm font-jakarta font-bold whitespace-nowrap transition-all relative ${
                       activeNotebookSubject === group.subject
-                        ? 'bg-white border-amber-300 text-[#064E3B]'
-                        : 'bg-amber-100/50 border-transparent text-slate-500 hover:text-slate-700'
+                        ? 'bg-[#FFFBF5] text-[#064E3B] shadow-[0_-2px_6px_rgba(0,0,0,0.04)]'
+                        : 'bg-amber-200/60 text-amber-900/60 hover:text-amber-900 -mb-0.5'
                     }`}
                   >
                     {group.subject}
@@ -800,193 +794,234 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </div>
             )}
 
-            {/* The "page" itself */}
-            <div className="bg-white p-5 sm:p-8 space-y-6">
+            {/* The "page" itself — ruled paper texture + spiral
+                binding holes down the left edge, like a real
+                notebook page. */}
+            <div className="relative bg-[#FFFBF5] pl-8 pr-5 py-6 sm:pl-14 sm:pr-8 sm:py-8">
 
-              {/* Cover / header block */}
-              <div className="flex items-start justify-between gap-4 flex-wrap border-b border-dashed border-slate-300 pb-5">
-                <div>
-                  <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#064E3B]">
-                    {profile.name}'s Study Notebook
-                  </h2>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider border border-slate-300 text-slate-700 px-2.5 py-0.5 rounded-full">
-                      {profile.classLevel}
-                    </span>
-                    <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider border border-amber-300 text-amber-800 px-2.5 py-0.5 rounded-full">
-                      NERDC Aligned
-                    </span>
+              {/* Spiral binding holes */}
+              <div className="absolute left-2.5 sm:left-5 top-0 bottom-0 w-3 flex flex-col justify-evenly py-6">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <span key={i} className="w-3 h-3 rounded-full bg-amber-100 border border-amber-300/70 shadow-inner" />
+                ))}
+              </div>
+
+              {/* Ruled lines background */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  backgroundImage:
+                    'repeating-linear-gradient(to bottom, transparent, transparent 35px, rgba(6,78,59,0.08) 35px, rgba(6,78,59,0.08) 36px)',
+                  backgroundPosition: '0 90px'
+                }}
+              />
+              {/* Left margin rule, like a school exercise book */}
+              <div className="absolute left-14 sm:left-24 top-0 bottom-0 w-px bg-rose-300/50 hidden sm:block" />
+
+              <div className="relative space-y-6">
+
+                {/* Cover / header block */}
+                <div className="flex items-start justify-between gap-4 flex-wrap border-b-2 border-slate-800/80 pb-5">
+                  <div>
+                    <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#064E3B]">
+                      {profile.name}'s Study Notebook
+                    </h2>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider border border-slate-300 text-slate-700 px-2.5 py-0.5 rounded-full bg-white">
+                        {profile.classLevel}
+                      </span>
+                      <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider border border-amber-300 text-amber-800 px-2.5 py-0.5 rounded-full bg-white">
+                        NERDC Aligned
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Stat line */}
-              <div className="flex items-center gap-8">
-                <div>
-                  <p className="font-serif text-2xl font-bold text-[#064E3B]">{totalTopics}</p>
-                  <p className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-slate-500">
-                    Topics Covered
-                  </p>
+                {/* Stat line */}
+                <div className="flex items-center gap-8">
+                  <div>
+                    <p className="font-serif text-2xl font-bold text-[#064E3B]">{totalTopics}</p>
+                    <p className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-slate-500">
+                      Topics Covered
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-serif text-2xl font-bold text-[#064E3B]">{totalCorrect}</p>
+                    <p className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-slate-500">
+                      Correct Answers
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-serif text-2xl font-bold text-[#064E3B]">{totalCorrect}</p>
-                  <p className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-slate-500">
-                    Correct Answers
-                  </p>
-                </div>
-              </div>
 
-              {/* Action Buttons: Print & Download — Basic/Family only */}
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={isPremium ? handlePrint : onOpenPricingModal}
-                  className="px-3.5 py-2 rounded-2xl bg-[#064E3B] hover:bg-[#022C22] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print</span>
-                </button>
-
-                <div className="relative">
+                {/* Action Buttons: Print & Download — Basic/Family only */}
+                <div className="flex items-center space-x-2">
                   <button
-                    onClick={isPremium ? () => setShowDownloadMenu(prev => !prev) : onOpenPricingModal}
-                    className="px-3.5 py-2 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
+                    onClick={isPremium ? handlePrint : onOpenPricingModal}
+                    className="px-3.5 py-2 rounded-2xl bg-[#064E3B] hover:bg-[#022C22] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
                   >
-                    <Download className="w-4 h-4" />
-                    <span>Download</span>
+                    <Printer className="w-4 h-4" />
+                    <span>Print</span>
                   </button>
 
-                  {showDownloadMenu && (
-                    <div className="absolute left-0 top-full mt-1.5 w-56 bg-white rounded-2xl border border-slate-200 shadow-xl z-20 py-1.5 overflow-hidden">
-                      <button
-                        onClick={() => handleDownloadNotebook()}
-                        className="w-full text-left px-4 py-2.5 text-xs font-jakarta font-bold text-slate-800 hover:bg-slate-50"
-                      >
-                        All Subjects
-                      </button>
-                      {subjectGroups.map(group => (
+                  <div className="relative">
+                    <button
+                      onClick={isPremium ? () => setShowDownloadMenu(prev => !prev) : onOpenPricingModal}
+                      className="px-3.5 py-2 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download</span>
+                    </button>
+
+                    {showDownloadMenu && (
+                      <div className="absolute left-0 top-full mt-1.5 w-56 bg-white rounded-2xl border border-slate-200 shadow-xl z-20 py-1.5 overflow-hidden">
                         <button
-                          key={group.subject}
-                          onClick={() => handleDownloadNotebook(group.subject)}
-                          className="w-full text-left px-4 py-2.5 text-xs font-jakarta font-medium text-slate-700 hover:bg-slate-50"
+                          onClick={() => handleDownloadNotebook()}
+                          className="w-full text-left px-4 py-2.5 text-xs font-jakarta font-bold text-slate-800 hover:bg-slate-50"
                         >
-                          {group.subject} only
+                          All Subjects
                         </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Notebook entries — real homework sessions from
-                  Supabase, for the active subject tab only. Free
-                  users get real access up to FREE_DAILY_NOTEBOOK_VIEWS
-                  views per day, then see this upgrade prompt. */}
-              {isLoadingNotes ? (
-                <div className="py-10 text-center text-sm text-slate-500">Loading your sessions...</div>
-              ) : notebookLimitReached ? (
-                <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-amber-50 to-emerald-50 border-2 border-amber-300 text-center space-y-3">
-                  <span className="text-4xl block">📓</span>
-                  <h3 className="font-serif text-lg font-bold text-[#064E3B]">
-                    You've used today's {FREE_DAILY_NOTEBOOK_VIEWS} free notebook views
-                  </h3>
-                  <p className="text-xs text-slate-600 max-w-sm mx-auto">
-                    Upgrade to Basic or Family for unlimited notebook access, plus printing and downloading {profile.name}'s full study notebook anytime.
-                  </p>
-                  <button
-                    onClick={onOpenPricingModal}
-                    className="px-5 py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
-                  >
-                    Upgrade for Unlimited Access
-                  </button>
-                </div>
-              ) : subjectGroups.length === 0 ? (
-                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-1">
-                  <span className="text-3xl block">📚</span>
-                  <p className="text-sm font-medium text-slate-600">No homework sessions yet</p>
-                  <p className="text-xs text-slate-400">
-                    Chat with Mama Titi about your homework to start building your notebook!
-                  </p>
-                </div>
-              ) : !activeSubjectGroup ? null : (
-                <div className="space-y-8 pt-2">
-                  {activeSubjectGroup.sessions.map((session, idx) => {
-                    const firstExchange = session.exchanges[0];
-                    const finalExchange = session.exchanges[session.exchanges.length - 1];
-
-                    return (
-                      <div key={session.sessionId} className="relative space-y-3 pb-8 border-b border-dashed border-slate-200 last:border-b-0">
-
-                        {/* Date + rotated stamp badge, like real ink stamps */}
-                        <div className="flex items-start justify-between gap-3">
-                          <span className="text-xs text-slate-500 font-mono">
-                            {new Date(session.latestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </span>
-                          <span
-                            className={`shrink-0 -rotate-6 border-2 rounded-md px-3 py-1 text-[11px] font-jakarta font-extrabold tracking-wide uppercase ${
-                              session.resolved
-                                ? 'border-emerald-600 text-emerald-700'
-                                : 'border-amber-500 text-amber-700'
-                            }`}
+                        {subjectGroups.map(group => (
+                          <button
+                            key={group.subject}
+                            onClick={() => handleDownloadNotebook(group.subject)}
+                            className="w-full text-left px-4 py-2.5 text-xs font-jakarta font-medium text-slate-700 hover:bg-slate-50"
                           >
-                            {session.resolved ? 'Correct ✅' : 'Practicing 💪'}
-                          </span>
-                        </div>
+                            {group.subject} only
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-                        {/* Question, styled like a homework prompt —
-                            only the FIRST exchange's topic is the
-                            actual question; later exchanges' topic is
-                            the child's own answer attempt (see below). */}
-                        <p className="font-jakarta font-bold text-sm sm:text-base text-slate-900">
-                          <span className="text-[#FF6B35]">Q:</span> {firstExchange.topic}
-                        </p>
+                {/* Notebook entries — real homework sessions from
+                    Supabase, for the active subject tab only. Free
+                    users get real access up to FREE_DAILY_NOTEBOOK_VIEWS
+                    views per day, then see this upgrade prompt. */}
+                {isLoadingNotes ? (
+                  <div className="py-10 text-center text-sm text-slate-500">Loading your sessions...</div>
+                ) : notebookLimitReached ? (
+                  <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-amber-50 to-emerald-50 border-2 border-amber-300 text-center space-y-3">
+                    <span className="text-4xl block">📓</span>
+                    <h3 className="font-serif text-lg font-bold text-[#064E3B]">
+                      You've used today's {FREE_DAILY_NOTEBOOK_VIEWS} free notebook views
+                    </h3>
+                    <p className="text-xs text-slate-600 max-w-sm mx-auto">
+                      Upgrade to Basic or Family for unlimited notebook access, plus printing and downloading {profile.name}'s full study notebook anytime.
+                    </p>
+                    <button
+                      onClick={onOpenPricingModal}
+                      className="px-5 py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
+                    >
+                      Upgrade for Unlimited Access
+                    </button>
+                  </div>
+                ) : subjectGroups.length === 0 ? (
+                  <div className="p-6 rounded-2xl bg-white/70 border border-slate-200 text-center space-y-1">
+                    <span className="text-3xl block">📚</span>
+                    <p className="text-sm font-medium text-slate-600">No homework sessions yet</p>
+                    <p className="text-xs text-slate-400">
+                      Chat with Mama Titi about your homework to start building your notebook!
+                    </p>
+                  </div>
+                ) : !activeSubjectGroup ? null : (
+                  <div className="space-y-10 pt-2">
+                    {activeSubjectGroup.sessions.map((session, idx) => {
+                      const firstExchange = session.exchanges[0];
+                      const laterExchanges = session.exchanges.slice(1);
 
-                        {/* Mama Titi's note on the question itself */}
-                        {firstExchange.mamaReply && (
-                          <div className="flex items-start space-x-2.5 pl-1">
-                            <div className="w-1 self-stretch rounded-full bg-amber-400 shrink-0" />
-                            <p className="text-xs sm:text-[13px] text-slate-700 leading-relaxed">
-                              <span className="font-bold text-amber-700 italic">Mama Titi's Note: </span>
-                              <span className="italic">{firstExchange.mamaReply}</span>
+                      return (
+                        <div key={session.sessionId} className="relative space-y-3 pb-8 border-b-2 border-dashed border-slate-300 last:border-b-0">
+
+                          {/* Date + rotated stamp badge, like real ink stamps */}
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="text-xs text-slate-500 font-mono">
+                              {new Date(session.latestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                            <span
+                              className={`shrink-0 -rotate-6 border-2 rounded-md px-3 py-1 text-[11px] font-jakarta font-extrabold tracking-wide uppercase bg-white/70 ${
+                                session.resolved
+                                  ? 'border-emerald-600 text-emerald-700'
+                                  : 'border-amber-500 text-amber-700'
+                              }`}
+                            >
+                              {session.resolved ? 'Correct ✅' : 'Practicing 💪'}
+                            </span>
+                          </div>
+
+                          {/* QUESTION */}
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-[#FF6B35]">
+                              Question
+                            </span>
+                            <p className="font-jakarta font-bold text-sm sm:text-base text-slate-900">
+                              {firstExchange.topic}
                             </p>
                           </div>
-                        )}
 
-                        {/* The child's real answer attempts — every
-                            exchange AFTER the first one is the child's
-                            own typed reply (topic), with Mama Titi's
-                            feedback on it (mamaReply). Earlier attempts
-                            are struck through; the last one is the
-                            child's current/final answer. */}
-                        {session.exchanges.length > 1 && (
-                          <div className="pl-1 space-y-2 pt-1">
-                            {session.exchanges.slice(1, -1).map((exchange, exIdx) => (
-                              <p key={exchange.id} className="text-[11px] text-slate-400 line-through decoration-slate-300">
-                                Attempt {exIdx + 1}: {exchange.topic}
+                          {/* MAMA TITI'S GUIDANCE on the question itself */}
+                          {firstExchange.mamaReply && (
+                            <div className="space-y-1.5">
+                              <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-amber-700">
+                                Mama Titi's Guidance
+                              </span>
+                              <p className="text-xs sm:text-[13px] text-slate-700 leading-relaxed italic pl-3 border-l-2 border-amber-300">
+                                {firstExchange.mamaReply}
                               </p>
-                            ))}
-
-                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-                              <div className="flex items-start space-x-2">
-                                <span className="text-[10px] font-mono font-bold text-slate-400 mt-0.5">A</span>
-                                <p className="text-sm font-bold text-[#064E3B]">
-                                  {finalExchange.topic}
-                                </p>
-                              </div>
-                              {finalExchange.mamaReply && (
-                                <p className="text-[11px] text-slate-600 italic pl-5">
-                                  {finalExchange.mamaReply}
-                                </p>
-                              )}
                             </div>
-                          </div>
-                        )}
+                          )}
 
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                          {/* CHILD'S ANSWER(S) — every exchange after the
+                              first is the child's own typed reply
+                              (topic), with Mama Titi's feedback on it
+                              (mamaReply). Reads top-to-bottom as a real
+                              back-and-forth: earlier tries are struck
+                              through, the last one is highlighted as
+                              the current/final answer. */}
+                          {laterExchanges.length > 0 ? (
+                            <div className="space-y-3 pt-1">
+                              {laterExchanges.map((exchange, exIdx) => {
+                                const isLast = exIdx === laterExchanges.length - 1;
+                                return (
+                                  <div key={exchange.id} className="space-y-1">
+                                    <span className={`text-[10px] font-jakarta font-bold uppercase tracking-wider ${
+                                      isLast && session.resolved ? 'text-emerald-700' : 'text-slate-400'
+                                    }`}>
+                                      {isLast ? `${profile.name}'s Final Answer` : `${profile.name}'s Answer (Attempt ${exIdx + 1})`}
+                                    </span>
+                                    <p className={
+                                      isLast
+                                        ? `p-3 rounded-xl border text-sm font-bold ${
+                                            session.resolved
+                                              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                                              : 'bg-white border-slate-200 text-slate-900'
+                                          }`
+                                        : 'text-xs text-slate-400 line-through decoration-slate-300 pl-1'
+                                    }>
+                                      {exchange.topic}
+                                    </p>
+                                    {isLast && exchange.mamaReply && (
+                                      <p className="text-[11px] text-slate-600 italic pl-3 border-l-2 border-slate-200">
+                                        {exchange.mamaReply}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-slate-400 italic pt-1">
+                              Waiting for {profile.name} to answer this one.
+                            </p>
+                          )}
 
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+              </div>
             </div>
           </div>
         )}
