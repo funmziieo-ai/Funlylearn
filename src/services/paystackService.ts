@@ -12,7 +12,7 @@ export interface PaystackCheckoutParams {
   currency?: 'NGN' | 'GBP';
   onSuccess: (reference: string) => void;
   onCancel?: () => void;
-  onError?: () => void;
+  onError?: (detail: string) => void;
 }
 
 export async function openPaystackCheckout(params: PaystackCheckoutParams) {
@@ -34,26 +34,63 @@ export async function openPaystackCheckout(params: PaystackCheckoutParams) {
   if (Capacitor.isNativePlatform()) {
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const res = await fetch(`${supabaseUrl}/functions/v1/paystack-initialize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: params.email,
-          amount: params.amount,
-          currency: params.currency || 'NGN',
-          reference: ref,
-          metadata
-        })
-      });
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-      const data = await res.json();
-      if (!res.ok || !data.authorizationUrl) {
-        console.error('Failed to initialize Paystack transaction:', data);
-        if (params.onError) params.onError();
+      if (!supabaseUrl || !supabaseAnonKey) {
+        const detail = `Missing config: supabaseUrl=${!!supabaseUrl} anonKey=${!!supabaseAnonKey}`;
+        console.error(detail);
+        if (params.onError) params.onError(detail);
         return;
       }
 
-      await Browser.open({ url: data.authorizationUrl });
+      let res: Response;
+      try {
+        res = await fetch(`${supabaseUrl}/functions/v1/paystack-initialize`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`
+          },
+          body: JSON.stringify({
+            email: params.email,
+            amount: params.amount,
+            currency: params.currency || 'NGN',
+            reference: ref,
+            metadata
+          })
+        });
+      } catch (fetchErr: any) {
+        const detail = `Network request failed: ${fetchErr?.message || fetchErr}`;
+        console.error(detail);
+        if (params.onError) params.onError(detail);
+        return;
+      }
+
+      let data: any;
+      try {
+        data = await res.json();
+      } catch (parseErr: any) {
+        const detail = `Server response was not valid JSON (status ${res.status})`;
+        console.error(detail);
+        if (params.onError) params.onError(detail);
+        return;
+      }
+
+      if (!res.ok || !data.authorizationUrl) {
+        const detail = `Server error (status ${res.status}): ${data.error || JSON.stringify(data)}`;
+        console.error('Failed to initialize Paystack transaction:', detail);
+        if (params.onError) params.onError(detail);
+        return;
+      }
+
+      try {
+        await Browser.open({ url: data.authorizationUrl });
+      } catch (browserErr: any) {
+        const detail = `Could not open browser: ${browserErr?.message || browserErr}`;
+        console.error(detail);
+        if (params.onError) params.onError(detail);
+        return;
+      }
 
       // IMPORTANT: opening a real external browser means we lose the
       // direct onSuccess callback Paystack's inline popup would have
@@ -67,9 +104,10 @@ export async function openPaystackCheckout(params: PaystackCheckoutParams) {
       // this way.
       params.onSuccess(ref);
       return;
-    } catch (error) {
-      console.error('Native checkout failed to open:', error);
-      if (params.onError) params.onError();
+    } catch (error: any) {
+      const detail = `Unexpected error: ${error?.message || error}`;
+      console.error('Native checkout failed to open:', detail);
+      if (params.onError) params.onError(detail);
       return;
     }
   }
@@ -79,8 +117,9 @@ export async function openPaystackCheckout(params: PaystackCheckoutParams) {
   const paystackKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 
   if (!paystackKey) {
-    console.error('VITE_PAYSTACK_PUBLIC_KEY is not set — cannot open checkout.');
-    if (params.onError) params.onError();
+    const detail = 'VITE_PAYSTACK_PUBLIC_KEY is not set';
+    console.error(detail);
+    if (params.onError) params.onError(detail);
     return;
   }
 
@@ -102,8 +141,9 @@ export async function openPaystackCheckout(params: PaystackCheckoutParams) {
         if (params.onCancel) params.onCancel();
       }
     });
-  } catch (error) {
-    console.error('Paystack checkout failed to open:', error);
-    if (params.onError) params.onError();
+  } catch (error: any) {
+    const detail = `Web checkout error: ${error?.message || error}`;
+    console.error(detail);
+    if (params.onError) params.onError(detail);
   }
 }
