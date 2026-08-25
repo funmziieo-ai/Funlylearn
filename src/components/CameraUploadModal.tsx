@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, Upload, X, Sparkles, RotateCcw, Check } from 'lucide-react';
+import { Camera, Upload, X, RotateCcw, Check } from 'lucide-react';
 
 interface CameraUploadModalProps {
   isOpen: boolean;
@@ -250,7 +250,6 @@ export const CameraUploadModal: React.FC<CameraUploadModalProps> = ({
             </div>
 
             <div className="bg-amber-100/70 rounded-xl p-3 border border-amber-300 flex items-center space-x-2 text-xs font-jakarta text-slate-700">
-              <Sparkles className="w-4 h-4 text-[#FF6B35] shrink-0" />
               <span>
                 Next, you can <strong>crop and zoom</strong> into the specific question box!
               </span>
