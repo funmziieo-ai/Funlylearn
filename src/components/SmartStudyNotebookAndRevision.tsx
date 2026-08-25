@@ -912,7 +912,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   {activeSubjectGroup.sessions.map((session, idx) => {
                     const firstExchange = session.exchanges[0];
                     const finalExchange = session.exchanges[session.exchanges.length - 1];
-                    const priorExchanges = session.exchanges.slice(0, -1);
 
                     return (
                       <div key={session.sessionId} className="relative space-y-3 pb-8 border-b border-dashed border-slate-200 last:border-b-0">
@@ -933,18 +932,15 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                           </span>
                         </div>
 
-                        {/* Question, styled like a homework prompt */}
+                        {/* Question, styled like a homework prompt —
+                            only the FIRST exchange's topic is the
+                            actual question; later exchanges' topic is
+                            the child's own answer attempt (see below). */}
                         <p className="font-jakarta font-bold text-sm sm:text-base text-slate-900">
                           <span className="text-[#FF6B35]">Q:</span> {firstExchange.topic}
                         </p>
 
-                        {/* Mama Titi's note — teacher's margin comment.
-                            TEMP: no child-answer field exists yet (see
-                            /people/… discussion), so this note is the
-                            only real text available. Once a genuine
-                            childAnswer field is added, a separate "A"
-                            box will show that instead of repeating
-                            this note. */}
+                        {/* Mama Titi's note on the question itself */}
                         {firstExchange.mamaReply && (
                           <div className="flex items-start space-x-2.5 pl-1">
                             <div className="w-1 self-stretch rounded-full bg-amber-400 shrink-0" />
@@ -955,23 +951,33 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                           </div>
                         )}
 
-                        {/* Prior attempts — struck through, only shown
-                            when the child needed more than one try and
-                            each attempt has a genuinely different note
-                            (avoids repeating the exact same text twice
-                            when mamaReply didn't change between
-                            attempts). */}
-                        {priorExchanges
-                          .filter(exchange => exchange.mamaReply && exchange.mamaReply !== finalExchange.mamaReply)
-                          .length > 0 && (
-                          <div className="pl-1 space-y-1">
-                            {priorExchanges
-                              .filter(exchange => exchange.mamaReply && exchange.mamaReply !== finalExchange.mamaReply)
-                              .map((exchange, exIdx) => (
-                                <p key={exchange.id} className="text-[11px] text-slate-400 line-through decoration-slate-300">
-                                  Attempt {exIdx + 1}: {exchange.mamaReply}
+                        {/* The child's real answer attempts — every
+                            exchange AFTER the first one is the child's
+                            own typed reply (topic), with Mama Titi's
+                            feedback on it (mamaReply). Earlier attempts
+                            are struck through; the last one is the
+                            child's current/final answer. */}
+                        {session.exchanges.length > 1 && (
+                          <div className="pl-1 space-y-2 pt-1">
+                            {session.exchanges.slice(1, -1).map((exchange, exIdx) => (
+                              <p key={exchange.id} className="text-[11px] text-slate-400 line-through decoration-slate-300">
+                                Attempt {exIdx + 1}: {exchange.topic}
+                              </p>
+                            ))}
+
+                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                              <div className="flex items-start space-x-2">
+                                <span className="text-[10px] font-mono font-bold text-slate-400 mt-0.5">A</span>
+                                <p className="text-sm font-bold text-[#064E3B]">
+                                  {finalExchange.topic}
                                 </p>
-                              ))}
+                              </div>
+                              {finalExchange.mamaReply && (
+                                <p className="text-[11px] text-slate-600 italic pl-5">
+                                  {finalExchange.mamaReply}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         )}
 
