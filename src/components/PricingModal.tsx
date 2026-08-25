@@ -83,10 +83,10 @@ export const PricingModal: React.FC<PricingModalProps> = ({
       onCancel: () => {
         setIsLoadingPlan(null);
       },
-      onError: () => {
+      onError: (detail: string) => {
         setIsLoadingPlan(null);
         setPaymentError(
-          'We could not open the payment window. Please check your connection and try again, or contact support on WhatsApp below.'
+          `We could not open the payment window. Details: ${detail}`
         );
       }
     });
