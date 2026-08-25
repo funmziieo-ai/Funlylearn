@@ -818,7 +818,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                     </span>
                   </div>
                 </div>
-                <MamaTitiAvatar size="sm" showOnlineStatus={false} />
               </div>
 
               {/* Stat line */}
@@ -939,44 +938,42 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                           <span className="text-[#FF6B35]">Q:</span> {firstExchange.topic}
                         </p>
 
-                        {/* Mama Titi's note — teacher's margin comment */}
+                        {/* Mama Titi's note — teacher's margin comment.
+                            TEMP: no child-answer field exists yet (see
+                            /people/… discussion), so this note is the
+                            only real text available. Once a genuine
+                            childAnswer field is added, a separate "A"
+                            box will show that instead of repeating
+                            this note. */}
                         {firstExchange.mamaReply && (
                           <div className="flex items-start space-x-2.5 pl-1">
                             <div className="w-1 self-stretch rounded-full bg-amber-400 shrink-0" />
-                            <div className="flex items-start space-x-2">
-                              <MamaTitiAvatar size="xs" showOnlineStatus={false} />
-                              <p className="text-xs sm:text-[13px] text-slate-700 leading-relaxed">
-                                <span className="font-bold text-amber-700 italic">Mama Titi's Note: </span>
-                                <span className="italic">{firstExchange.mamaReply}</span>
-                              </p>
-                            </div>
+                            <p className="text-xs sm:text-[13px] text-slate-700 leading-relaxed">
+                              <span className="font-bold text-amber-700 italic">Mama Titi's Note: </span>
+                              <span className="italic">{firstExchange.mamaReply}</span>
+                            </p>
                           </div>
                         )}
 
                         {/* Prior attempts — struck through, only shown
-                            when the child needed more than one try.
-                            Uses each attempt's own explanation as the
-                            record of that attempt, since the app
-                            doesn't store the child's raw typed answer
-                            text separately. */}
-                        {priorExchanges.length > 0 && (
+                            when the child needed more than one try and
+                            each attempt has a genuinely different note
+                            (avoids repeating the exact same text twice
+                            when mamaReply didn't change between
+                            attempts). */}
+                        {priorExchanges
+                          .filter(exchange => exchange.mamaReply && exchange.mamaReply !== finalExchange.mamaReply)
+                          .length > 0 && (
                           <div className="pl-1 space-y-1">
-                            {priorExchanges.map((exchange, exIdx) => (
-                              <p key={exchange.id} className="text-[11px] text-slate-400 line-through decoration-slate-300">
-                                Attempt {exIdx + 1}: {exchange.mamaReply || exchange.topic}
-                              </p>
-                            ))}
+                            {priorExchanges
+                              .filter(exchange => exchange.mamaReply && exchange.mamaReply !== finalExchange.mamaReply)
+                              .map((exchange, exIdx) => (
+                                <p key={exchange.id} className="text-[11px] text-slate-400 line-through decoration-slate-300">
+                                  Attempt {exIdx + 1}: {exchange.mamaReply}
+                                </p>
+                              ))}
                           </div>
                         )}
-
-                        {/* Final answer box */}
-                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start space-x-2">
-                          <span className="text-[10px] font-mono font-bold text-slate-400 mt-0.5">A</span>
-                          <p className="text-sm font-bold text-[#064E3B]">
-                            {priorExchanges.length > 0 ? '→ ' : ''}
-                            {finalExchange.mamaReply || finalExchange.topic}
-                          </p>
-                        </div>
 
                       </div>
                     );
