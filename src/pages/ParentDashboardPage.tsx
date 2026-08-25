@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Smartphone, 
+  Mail,
   CheckCircle2, 
   ThumbsUp, 
   Award, 
@@ -8,11 +9,11 @@ import {
   Lock, 
   Unlock, 
   Flame, 
-  MessageSquare, 
   Gift,
   Loader2,
   Trophy,
-  TrendingUp
+  TrendingUp,
+  BarChart3
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile, ParentReward, LanguageCode } from '../types';
@@ -22,6 +23,32 @@ interface ParentDashboardPageProps {
   profile: UserProfile;
   onProfileUpdate: (updated: UserProfile) => void;
   userId: string;
+}
+
+// How far back the "weekly performance" view and the automatic weekly
+// email look — kept as one constant so both stay in sync if this ever
+// changes from 7 days.
+const WEEKLY_WINDOW_DAYS = 7;
+
+interface SubjectWeeklyStat {
+  subject: string;
+  total: number;
+  correct: number;
+}
+
+function groupRecordsBySubjectWeekly(records: HomeworkRecord[]): SubjectWeeklyStat[] {
+  const cutoff = Date.now() - WEEKLY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const recent = records.filter(r => new Date(r.createdAt).getTime() >= cutoff);
+
+  const map = new Map<string, SubjectWeeklyStat>();
+  for (const r of recent) {
+    const key = r.subject || 'General';
+    if (!map.has(key)) map.set(key, { subject: key, total: 0, correct: 0 });
+    const stat = map.get(key)!;
+    stat.total += 1;
+    if (r.wasCorrect === true) stat.correct += 1;
+  }
+  return Array.from(map.values()).sort((a, b) => b.total - a.total);
 }
 
 export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
@@ -35,25 +62,34 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
   const [phoneNumber, setPhoneNumber] = useState<string>(profile.parentWhatsApp || '');
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
-  // Real homework records, fetched from Supabase instead of hardcoded
-  const [recentRecords, setRecentRecords] = useState<HomeworkRecord[]>([]);
-  const [isLoadingRecords, setIsLoadingRecords] = useState(true);
-  const [sentIds, setSentIds] = useState<Set<number>>(new Set());
+  // Parent Email State — used by the automatic homework-completed and
+  // weekly performance emails (see the send-homework-email and
+  // weekly-performance-email Edge Functions).
+  const [parentEmail, setParentEmail] = useState<string>(profile.parentEmail || '');
+  const [emailSaveStatus, setEmailSaveStatus] = useState<string | null>(null);
+
+  // Real homework records, fetched from Supabase, used to compute the
+  // weekly-by-subject performance breakdown that replaced the manual
+  // "Send a ping right now" list.
+  const [weeklyRecords, setWeeklyRecords] = useState<HomeworkRecord[]>([]);
+  const [isLoadingWeeklyRecords, setIsLoadingWeeklyRecords] = useState(true);
 
   // A larger set specifically for computing real Mathematics progress
-  // stats — separate from the small "recent activity" list above, since
-  // a meaningful progress summary needs more history than just the last
-  // 5 sessions shown elsewhere on this page.
+  // stats — separate from the weekly view above, since a meaningful
+  // Math progress summary needs more history than just the last 7 days.
   const [mathRecords, setMathRecords] = useState<HomeworkRecord[]>([]);
   const [isLoadingMathRecords, setIsLoadingMathRecords] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoadingRecords(true);
-    fetchHomeworkRecords(userId, 5).then(records => {
+    setIsLoadingWeeklyRecords(true);
+    // 200 is generous headroom for a week's worth of records across
+    // all subjects; groupRecordsBySubjectWeekly filters down to the
+    // real 7-day window itself.
+    fetchHomeworkRecords(userId, 200).then(records => {
       if (!cancelled) {
-        setRecentRecords(records);
-        setIsLoadingRecords(false);
+        setWeeklyRecords(records);
+        setIsLoadingWeeklyRecords(false);
       }
     });
     return () => {
@@ -117,33 +153,14 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
     setTimeout(() => setSaveStatus(null), 3000);
   };
 
-  const handleSendPing = (record: HomeworkRecord) => {
-    setSentIds(prev => new Set(prev).add(record.id));
-
-    const resultLine =
-      record.wasCorrect === true
-        ? 'and got it correct! ✅'
-        : record.wasCorrect === false
-        ? 'and is still practicing this one 💪'
-        : 'with Mama Titi';
-
-    const textMessage = encodeURIComponent(
-      `🌟 *Mama Titi Learning Ping* 🌟\n\nHello Parent!\n${profile.name} just worked on: "${record.topic}" ${resultLine}\n\nTotal Stars Earned: ⭐ ${profile.stars}\nKeep encouraging ${profile.name}! 🎉`
-    );
-
-    const cleanNum = normalizeNigerianPhone(profile.parentWhatsApp || phoneNumber);
-    if (!cleanNum) {
-      alert('Please save a parent WhatsApp number first.');
-      return;
-    }
-    const waUrl = `https://wa.me/${cleanNum}?text=${textMessage}`;
-    window.open(waUrl, '_blank');
-
-    confetti({
-      particleCount: 40,
-      spread: 60,
-      origin: { y: 0.6 }
+  const handleSaveEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    onProfileUpdate({
+      ...profile,
+      parentEmail: parentEmail.trim()
     });
+    setEmailSaveStatus('Email saved — you\'ll get automatic updates here!');
+    setTimeout(() => setEmailSaveStatus(null), 3000);
   };
 
   const handleApproveReward = (id: string) => {
@@ -161,6 +178,8 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
       stars: profile.stars + 50
     });
   };
+
+  const weeklyStats = groupRecordsBySubjectWeekly(weeklyRecords);
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 pb-28 font-sans">
@@ -217,7 +236,7 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
         </div>
 
         <p className="text-xs sm:text-sm text-emerald-100 font-sans leading-relaxed max-w-xl">
-          {activeSubTab === 'notifications' && 'When you finish a homework or quest, your parents get an instant WhatsApp ping.'}
+          {activeSubTab === 'notifications' && 'When homework is completed, parents get an automatic email — no action needed here.'}
           {activeSubTab === 'performance' && `Track ${profile.name}'s learning milestones.`}
           {activeSubTab === 'rewards' && `Approve reward requests with a thumbs-up to motivate ${profile.name}'s study habits!`}
         </p>
@@ -231,8 +250,8 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
                 : 'bg-emerald-800/60 text-emerald-100 hover:bg-emerald-800'
             }`}
           >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span>📲 WhatsApp Notifications</span>
+            <Mail className="w-3.5 h-3.5" />
+            <span>Notifications</span>
           </button>
 
           <button
@@ -261,11 +280,59 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
         </div>
       </div>
 
-      {/* SUB-TAB 1: WHATSAPP NOTIFICATIONS */}
+      {/* SUB-TAB 1: NOTIFICATIONS — contact details for automatic
+          emails, plus a real weekly-by-subject performance breakdown
+          in the space where the manual "Send a ping right now" list
+          used to be. Homework-completed and weekly summary emails are
+          now sent automatically by Edge Functions, not triggered by a
+          button here. */}
       {activeSubTab === 'notifications' && (
         <div className="space-y-5 animate-fadeIn">
-          
-          {/* Card 1: Parent's WhatsApp Number */}
+
+          {/* Card: Parent's Email — powers the automatic emails */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-soft space-y-4">
+            <div className="flex items-center space-x-2">
+              <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
+                <Mail className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-bold text-slate-900">
+                  Parent's email
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Homework-completed alerts and a weekly summary are sent here automatically.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEmail} className="space-y-3">
+              <input
+                type="email"
+                value={parentEmail}
+                onChange={(e) => setParentEmail(e.target.value)}
+                placeholder="parent@example.com"
+                className="w-full px-4 py-3 bg-slate-50 rounded-2xl border border-slate-200 focus:border-[#064E3B] focus:ring-2 focus:ring-emerald-200 text-slate-800 text-sm outline-none transition-all placeholder:text-slate-400"
+              />
+
+              {emailSaveStatus && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-medium flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{emailSaveStatus}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3.5 px-6 rounded-2xl bg-[#064E3B] hover:bg-[#022C22] text-white font-jakarta font-bold text-sm shadow-xs transition-all text-center flex items-center justify-center space-x-2"
+              >
+                <span>Save email</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Card: Parent's WhatsApp Number — kept for the existing
+              automatic every-3rd-correct-answer WhatsApp ping from
+              ChatPage.tsx, unrelated to this email feature. */}
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-soft space-y-4">
             <div>
               <h3 className="font-serif text-lg font-bold text-slate-900">
@@ -303,95 +370,71 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
             </form>
           </div>
 
-          {/* Card 2: Send a ping right now — now real records */}
+          {/* Card: Weekly Performance by Subject — replaces the old
+              manual "Send a ping right now" list. Same data the
+              automatic weekly email sends, shown here too. */}
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-soft space-y-4">
             <div className="flex items-center space-x-2">
-              <span className="text-lg">📨</span>
-              <h3 className="font-serif text-lg font-bold text-slate-900">
-                Send a ping right now
-              </h3>
+              <div className="p-2 rounded-xl bg-amber-100 text-amber-800">
+                <BarChart3 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-bold text-slate-900">
+                  This week's performance by subject
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Last {WEEKLY_WINDOW_DAYS} days · same summary sent in the weekly email
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-slate-500">
-              Tell parents about your most recent homework sessions.
-            </p>
 
-            {isLoadingRecords ? (
+            {isLoadingWeeklyRecords ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
               </div>
-            ) : recentRecords.length === 0 ? (
+            ) : weeklyStats.length === 0 ? (
               <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-1">
                 <span className="text-3xl block">📚</span>
                 <p className="text-sm font-medium text-slate-600">
-                  No homework sessions yet
+                  No homework sessions in the last {WEEKLY_WINDOW_DAYS} days
                 </p>
                 <p className="text-xs text-slate-400">
-                  Once {profile.name} chats with Mama Titi, real sessions will appear here.
+                  Once {profile.name} chats with Mama Titi this week, the breakdown will appear here.
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {recentRecords.map((record) => {
-                  const isSent = sentIds.has(record.id);
+              <div className="space-y-2.5">
+                {weeklyStats.map((stat) => {
+                  const pct = Math.round((stat.correct / stat.total) * 100);
                   return (
                     <div
-                      key={record.id}
-                      className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all hover:border-slate-300"
+                      key={stat.subject}
+                      className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3"
                     >
                       <div className="min-w-0">
                         <h4 className="font-bold text-slate-900 text-sm font-jakarta truncate">
-                          {record.topic}
+                          {stat.subject}
                         </h4>
-                        <p className="text-xs text-slate-500 font-mono mt-0.5">
-                          {new Date(record.createdAt).toLocaleString()}
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {stat.total} question{stat.total === 1 ? '' : 's'} · {stat.correct} correct
                         </p>
-                        {record.wasCorrect !== null && (
-                          <span
-                            className={`inline-block mt-1 text-[11px] font-bold px-2 py-0.5 rounded-md ${
-                              record.wasCorrect
-                                ? 'text-emerald-700 bg-emerald-100'
-                                : 'text-amber-700 bg-amber-100'
-                            }`}
-                          >
-                            {record.wasCorrect ? 'Answered correctly ✅' : 'Still practicing 💪'}
-                          </span>
-                        )}
                       </div>
-
-                      <div className="flex items-center space-x-2 self-end sm:self-center shrink-0">
-                        <button
-                          onClick={() => handleSendPing(record)}
-                          className="p-2.5 rounded-full bg-[#25D366] hover:bg-[#1DA851] text-white shadow-xs transition-all flex items-center justify-center"
-                          title="Send via WhatsApp"
-                        >
-                          <MessageSquare className="w-4 h-4 fill-white" />
-                        </button>
-
-                        <button
-                          onClick={() => handleSendPing(record)}
-                          className="px-4 py-2 rounded-full bg-[#064E3B] hover:bg-[#022C22] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
-                        >
-                          <ThumbsUp className="w-3.5 h-3.5 text-amber-300" />
-                          <span>{isSent ? 'Sent 👍' : 'Tell parents'}</span>
-                        </button>
-                      </div>
+                      <span
+                        className={`shrink-0 text-sm font-bold px-3 py-1.5 rounded-xl ${
+                          pct >= 70
+                            ? 'text-emerald-700 bg-emerald-100'
+                            : pct >= 40
+                            ? 'text-amber-700 bg-amber-100'
+                            : 'text-rose-700 bg-rose-100'
+                        }`}
+                      >
+                        {pct}%
+                      </span>
                     </div>
                   );
                 })}
               </div>
             )}
-          </div>
-
-          {/* Card 3: HOW IT WORKS Banner */}
-          <div className="bg-[#FFFDF5] p-5 sm:p-6 rounded-3xl border-2 border-amber-300/60 shadow-soft space-y-3">
-            <h4 className="font-jakarta font-bold text-xs uppercase tracking-wider text-amber-700">
-              HOW IT WORKS
-            </h4>
-            <ol className="space-y-2 text-xs sm:text-sm text-slate-700 leading-relaxed list-decimal list-inside font-medium">
-              <li>Snap your homework and let Mama Titi explain it step-by-step.</li>
-              <li>Tap "Tell parents" — we open WhatsApp with the message ready.</li>
-              <li>Parents see the win and can reply with 🎉 or unlock rewards!</li>
-            </ol>
           </div>
 
         </div>
