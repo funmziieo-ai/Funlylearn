@@ -403,6 +403,29 @@ export async function saveHomeworkRecord(
       was_correct: wasCorrect,
       session_id: sessionId || null
     });
+
+    // Trigger the homework-completed email directly, instead of via a
+    // Database Webhook — some projects hit a "supabase_functions
+    // schema does not exist" error on Webhooks, so this calls the
+    // Edge Function straight from the app instead. Fire-and-forget:
+    // never blocks or fails the save itself if the email call errors.
+    if (wasCorrect === true && supabaseUrl && supabaseAnonKey) {
+      fetch(`${supabaseUrl}/functions/v1/send-homework-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supabaseAnonKey}`
+        },
+        body: JSON.stringify({
+          record: {
+            user_id: userId,
+            subject: subject || null,
+            topic,
+            was_correct: wasCorrect
+          }
+        })
+      }).catch(e => console.warn('Error triggering homework email:', e));
+    }
   } catch (e) {
     console.warn('Error saving homework record:', e);
   }
