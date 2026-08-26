@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile, ParentReward, LanguageCode } from '../types';
-import { fetchHomeworkRecords, HomeworkRecord } from '../services/supabaseService';
+import { fetchHomeworkRecords, HomeworkRecord, sendWelcomeEmail } from '../services/supabaseService';
 
 interface ParentDashboardPageProps {
   profile: UserProfile;
@@ -155,11 +155,18 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
 
   const handleSaveEmail = (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmed = parentEmail.trim();
     onProfileUpdate({
       ...profile,
-      parentEmail: parentEmail.trim()
+      parentEmail: trimmed
     });
-    setEmailSaveStatus('Email saved — you\'ll get automatic updates here!');
+    // Only send the welcome email if this is a genuinely new address
+    // being saved — avoids re-sending it every time the parent visits
+    // this tab with the same email already filled in.
+    if (trimmed && trimmed !== profile.parentEmail) {
+      sendWelcomeEmail(trimmed, profile.name);
+    }
+    setEmailSaveStatus('Email saved — check your inbox for a welcome message!');
     setTimeout(() => setEmailSaveStatus(null), 3000);
   };
 
