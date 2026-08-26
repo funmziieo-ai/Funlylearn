@@ -385,6 +385,28 @@ export interface HomeworkRecord {
   createdAt: string;
 }
 
+// Fires the welcome email the moment a parent saves their email
+// address (see ParentDashboardPage.tsx's handleSaveEmail), so they get
+// immediate confirmation instead of waiting up to a week for the first
+// real homework or weekly-summary email to arrive. Fire-and-forget —
+// never blocks or fails the profile save itself if the email call
+// errors.
+export async function sendWelcomeEmail(parentEmail: string, childName: string): Promise<void> {
+  if (!parentEmail || !supabaseUrl || !supabaseAnonKey) return;
+  try {
+    await fetch(`${supabaseUrl}/functions/v1/send-welcome-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${supabaseAnonKey}`
+      },
+      body: JSON.stringify({ parentEmail, childName })
+    });
+  } catch (e) {
+    console.warn('Error sending welcome email:', e);
+  }
+}
+
 export async function saveHomeworkRecord(
   userId: string,
   topic: string,
