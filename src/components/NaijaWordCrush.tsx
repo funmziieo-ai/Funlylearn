@@ -421,21 +421,17 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
   const speakWord = async (text: string) => {
     try {
       const res = await fetchAudioTTS(text, language === 'Yoruba' ? 'yo' : 'en');
-      if (res.audioBase64) {
-        const audio = new Audio(res.audioBase64);
+      if (res.audioUrl) {
+        const audio = new Audio(res.audioUrl);
         await audio.play();
-        return;
       }
     } catch (_err) {
-      // Fallback below
-    }
-
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.85;
-      utterance.pitch = 1.1;
-      window.speechSynthesis.speak(utterance);
+      // Real voice failed — fail silently rather than falling back to
+      // the old browser speechSynthesis, matching the same standard
+      // used everywhere else in the app (see YorubaListenButton in
+      // NaijaLingoPage.tsx). The wrong field name here (audioBase64
+      // instead of audioUrl) previously meant this always silently
+      // failed and fell through to the deactivated browser voice.
     }
   };
 
@@ -593,7 +589,18 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
 
     setBuilderWord(target);
 
-    const letters = target.word.toUpperCase().replace(/[^A-Z]/g, '').split('');
+    // Strip both tone-mark diacritics (Ó, Á, etc.) and underdot
+    // diacritics (Ẹ, Ọ, Ṣ, etc.) down to their base ASCII letter,
+    // rather than filtering non-ASCII characters out entirely — the
+    // previous [^A-Z] filter deleted accented letters completely
+    // instead of reducing them to their base letter, so a word like
+    // "Ó dára" (O, D, Á, R, A) lost both its accented letters and only
+    // produced 3 tiles (D, R, A) instead of the real 5.
+    const normalizedWord = target.word
+      .normalize('NFD')
+      .replace(/[\u0300\u0301\u0302\u0304\u0323]/g, '')
+      .normalize('NFC');
+    const letters = normalizedWord.toUpperCase().replace(/[^A-Z]/g, '').split('');
     const jumbled = letters
       .map((l, idx) => ({ id: `${l}-${idx}-${Math.random()}`, letter: l }))
       .sort(() => 0.5 - Math.random());
@@ -752,7 +759,12 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
 
     if (emptyIdx === placedSlots.length - 1) {
       const spelledWord = newPlaced.join('');
-      const targetClean = builderWord.word.toUpperCase().replace(/[^A-Z]/g, '');
+      const targetClean = builderWord.word
+        .normalize('NFD')
+        .replace(/[\u0300\u0301\u0302\u0304\u0323]/g, '')
+        .normalize('NFC')
+        .toUpperCase()
+        .replace(/[^A-Z]/g, '');
 
       if (spelledWord === targetClean) {
         playSynthSound('win');
