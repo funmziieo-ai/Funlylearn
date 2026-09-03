@@ -145,6 +145,39 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       if (ttsData.audioUrl) {
         const audio = new Audio(ttsData.audioUrl);
         audioRef.current = audio;
+
+        // Once the real audio's actual length is known, stop relying on
+        // the word-count estimate above (which has no idea how long the
+        // real speech actually runs) and instead drive the highlighter
+        // directly from the audio's own playback position. This is what
+        // keeps the highlighted word genuinely in sync with Mama Titi's
+        // voice instead of racing ahead of it.
+        audio.addEventListener('loadedmetadata', () => {
+          if (stoppedRef.current || !audio.duration || !isFinite(audio.duration)) return;
+
+          // The estimate-based interval was only ever a placeholder
+          // until we knew the real duration — replace it now.
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+
+          const perWordMs = (audio.duration * 1000) / words.length;
+
+          const syncToAudio = () => {
+            if (stoppedRef.current || !audioRef.current) return;
+            const idx = Math.min(
+              words.length - 1,
+              Math.floor((audio.currentTime * 1000) / perWordMs)
+            );
+            setActiveWordIndex(idx);
+            if (!audio.paused && !audio.ended) {
+              requestAnimationFrame(syncToAudio);
+            }
+          };
+          requestAnimationFrame(syncToAudio);
+        });
+
         await audio.play();
         if (showUiState) {
           setIsLoading(false);
@@ -155,9 +188,9 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           audioRef.current = null;
           if (showUiState) setIsRealAudioPlaying(false);
           URL.revokeObjectURL(ttsData.audioUrl!);
-          // Reading pacer keeps running on its own estimated timing —
-          // not stopped here, since it may still have words left even
-          // if audio finished slightly early or late.
+          setActiveWordIndex(null);
+          setIsPlaying(false);
+          if (onSpeechStateChange) onSpeechStateChange(false);
         };
 
         audio.onerror = () => {
