@@ -46,6 +46,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
   const cleanText = normalizeText(text);
   const words = cleanText.split(/\s+/).filter(w => w.length > 0);
+  const isYoruba = language === 'yo';
 
   useEffect(() => {
     if (autoPlay) {
@@ -257,17 +258,21 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
             {isRealAudioPlaying ? (
               <>
                 <Pause className="w-3.5 h-3.5 animate-pulse text-amber-200" />
-                <span>Mama Titi is Speaking...</span>
+                <span>{isYoruba ? 'Mama Titi n sọrọ...' : 'Mama Titi is Speaking...'}</span>
               </>
             ) : isLoading ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-700" />
-                <span>Loading Voice...</span>
+                <span>
+                  {isYoruba
+                    ? 'Ohùn ń bọ̀ — tẹ̀síwájú ẹ̀kọ́, ọmọ mi olóòyè!'
+                    : 'Voice is on its way — keep learning, Scholar!'}
+                </span>
               </>
             ) : (
               <>
                 <Volume2 className="w-3.5 h-3.5 text-amber-300" />
-                <span>Listen to Voice</span>
+                <span>{isYoruba ? 'Gbọ́ Ohùn' : 'Listen to Voice'}</span>
               </>
             )}
           </button>
