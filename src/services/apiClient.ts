@@ -166,6 +166,106 @@ export async function sendMessageToMamaTiti(params: {
   }
 }
 
+// ---------------------------------------------------------------------
+// TTS AUDIO CACHE — IndexedDB
+//
+// Keyed by a hash of (cleaned text + voice + language). The single
+// biggest source of "Loading Voice..." delay was that identical text
+// (the welcome message above all — the same string for every guest,
+// every session) was being re-synthesized from scratch every single
+// time. This cache means the SECOND time any device ever needs that
+// exact audio, it plays back instantly from local storage instead of
+// making a network call at all. First-time-ever-on-this-device still
+// needs the real network call — for that, the fix has to happen
+// server-side in the yarngpt-proxy Edge Function (a separate, larger
+// change), not here.
+// ---------------------------------------------------------------------
+
+const DB_NAME = 'funlylearn_tts_cache';
+const DB_VERSION = 1;
+const STORE_NAME = 'audio';
+// Cache entries older than this are treated as stale and refetched —
+// mainly a hedge against the voice provider ever changing its output
+// for the same text (a re-recorded phrase, a voice model update).
+const CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
+
+function openTtsCacheDb(): Promise<IDBDatabase | null> {
+  return new Promise((resolve) => {
+    if (!('indexedDB' in window)) {
+      resolve(null);
+      return;
+    }
+    try {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function hashCacheKey(text: string, voice: string, language: string): Promise<string> {
+  const raw = `${language}::${voice}::${text}`;
+  try {
+    const enc = new TextEncoder().encode(raw);
+    const digest = await crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(digest))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    // Fallback for environments without SubtleCrypto — good enough for
+    // a cache key, just not cryptographically strong (not needed here).
+    let h = 0;
+    for (let i = 0; i < raw.length; i++) {
+      h = (h * 31 + raw.charCodeAt(i)) | 0;
+    }
+    return String(h);
+  }
+}
+
+async function getCachedAudioBlob(key: string): Promise<Blob | null> {
+  const db = await openTtsCacheDb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(key);
+      req.onsuccess = () => {
+        const entry = req.result;
+        if (entry && entry.blob && Date.now() - entry.storedAt < CACHE_MAX_AGE_MS) {
+          resolve(entry.blob as Blob);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function setCachedAudioBlob(key: string, blob: Blob): Promise<void> {
+  const db = await openTtsCacheDb();
+  if (!db) return;
+  try {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    store.put({ key, blob, storedAt: Date.now() });
+  } catch {
+    // Caching is best-effort — a failed write just means no caching
+    // benefit for this entry, never a broken app.
+  }
+}
+
 export async function fetchAudioTTS(
   text: string,
   language: string
@@ -175,6 +275,7 @@ export async function fetchAudioTTS(
   textToSpeak?: string;
   voice?: string;
   quotaMessage?: string;
+  fromCache?: boolean;
 }> {
   try {
     if (!text || text.trim().length === 0) {
@@ -189,22 +290,47 @@ export async function fetchAudioTTS(
       .replace(/[✅❌⭐🌟📚🎮🇳🇬🇬🇧👍💪🔊📝🎯🏆🎉]/gu, '')
       .trim();
 
-    const res = await fetch(
-      SUPABASE_FUNCTIONS_URL + '/yarngpt-proxy',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_PUBLISHABLE_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_PUBLISHABLE_KEY
-        },
-        body: JSON.stringify({
-          text: cleanText,
-          voice: 'Idera',
-          response_format: 'mp3'
-        })
-      }
-    );
+    const voice = 'Idera';
+    const cacheKey = await hashCacheKey(cleanText, voice, language);
+
+    // Check the local cache first — this is what makes repeat text
+    // (the welcome message, common celebration phrases, etc.) play
+    // back instantly instead of re-hitting the network every time.
+    const cachedBlob = await getCachedAudioBlob(cacheKey);
+    if (cachedBlob) {
+      const audioUrl = URL.createObjectURL(cachedBlob);
+      return { audioUrl, voice, fromCache: true };
+    }
+
+    // Give the real voice provider a bounded amount of time — if it's
+    // hanging (cold start, network trouble), fail fast and fall back
+    // to client speech instead of leaving "Loading Voice..." stuck
+    // indefinitely on screen.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    let res: Response;
+    try {
+      res = await fetch(
+        SUPABASE_FUNCTIONS_URL + '/yarngpt-proxy',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_PUBLISHABLE_KEY
+          },
+          body: JSON.stringify({
+            text: cleanText,
+            voice,
+            response_format: 'mp3'
+          }),
+          signal: controller.signal
+        }
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -234,6 +360,10 @@ export async function fetchAudioTTS(
       throw new Error('Audio blob too small');
     }
 
+    // Save to the local cache for next time — fire-and-forget, never
+    // blocks or delays returning the audio to the caller.
+    setCachedAudioBlob(cacheKey, blob);
+
     // Using a blob URL instead of converting to base64 — base64 adds
     // roughly a third more data plus a full encode/decode pass before
     // playback can start, which is fast enough to be invisible in a
@@ -242,7 +372,7 @@ export async function fetchAudioTTS(
     // directly at the audio data in memory, skipping that overhead.
     const audioUrl = URL.createObjectURL(blob);
 
-    return { audioUrl, voice: 'Idera' };
+    return { audioUrl, voice };
   } catch (err) {
     console.error('YarnGPT call failed:', err);
     const msg = err instanceof Error ? err.message : String(err);
