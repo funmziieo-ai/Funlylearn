@@ -305,13 +305,14 @@ export async function fetchAudioTTS(
     // Give the real voice provider a bounded amount of time — if it's
     // hanging (cold start, network trouble), fail fast and fall back
     // to client speech instead of leaving "Loading Voice..." stuck
-    // indefinitely on screen. Raised from 12s to 25s after confirming
-    // via real logs that longer text (e.g. the ~60-word welcome
-    // message) can genuinely take that long to synthesize — the
-    // shorter timeout was aborting requests that would have
-    // succeeded, not just truly-stuck ones.
+    // indefinitely on screen. The server itself (yarngpt-proxy) can
+    // take up to ~40s in the worst case (two 20s YarnGPT attempts back
+    // to back on a genuine cache miss), so this needs to comfortably
+    // exceed that — otherwise the client aborts a request that the
+    // server would have eventually completed. Cache HITS (the common
+    // case for repeated text) return in well under a second regardless.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
     let res: Response;
     try {
