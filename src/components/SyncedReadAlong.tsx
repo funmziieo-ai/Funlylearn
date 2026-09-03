@@ -26,6 +26,13 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   const isManualRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stoppedRef = useRef(false);
+  // Delays showing "Loading Voice..." — cached audio (the common case
+  // for repeated text like the welcome message) now resolves in
+  // milliseconds, and flashing a loading spinner for that is worse
+  // than just not showing one. Only a call that's genuinely taking a
+  // moment gets the loading indicator, avoiding a distracting flicker
+  // on every fast/cached play.
+  const loadingIndicatorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const normalizeText = (raw: string): string => {
     return raw
@@ -55,6 +62,10 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
+    }
+    if (loadingIndicatorTimeoutRef.current) {
+      clearTimeout(loadingIndicatorTimeoutRef.current);
+      loadingIndicatorTimeoutRef.current = null;
     }
     if (audioRef.current) {
       audioRef.current.pause();
@@ -110,9 +121,24 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     // exact same logic underneath, but stays silent at the button
     // level, letting the word highlighting alone carry the moment.
     const showUiState = isManualRef.current;
-    if (showUiState) setIsLoading(true);
+
+    // Only show the loading spinner if the fetch is still pending after
+    // 300ms — a cache hit typically resolves well under that, so this
+    // keeps cached playback feeling instant instead of flickering a
+    // spinner that immediately disappears.
+    if (showUiState) {
+      loadingIndicatorTimeoutRef.current = setTimeout(() => {
+        if (!stoppedRef.current) setIsLoading(true);
+      }, 300);
+    }
+
     try {
       const ttsData = await fetchAudioTTS(cleanText, language);
+
+      if (loadingIndicatorTimeoutRef.current) {
+        clearTimeout(loadingIndicatorTimeoutRef.current);
+        loadingIndicatorTimeoutRef.current = null;
+      }
 
       if (stoppedRef.current) return;
 
@@ -148,6 +174,10 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     } catch {
       // Real voice fetch failed entirely — the reading pacer above is
       // completely unaffected and keeps running silently.
+      if (loadingIndicatorTimeoutRef.current) {
+        clearTimeout(loadingIndicatorTimeoutRef.current);
+        loadingIndicatorTimeoutRef.current = null;
+      }
       if (showUiState) setIsLoading(false);
     }
   };
