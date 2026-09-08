@@ -27,8 +27,6 @@ import { UserProfile, UserSubscription } from '../types';
 import { MamaTitiAvatar } from './MamaTitiAvatar';
 import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow, getNotebookDailyViewCount, incrementNotebookDailyViewCount, getExamPrepDailyAttemptCount, incrementExamPrepDailyAttemptCount } from '../services/supabaseService';
 
-// Local types replacing the ones previously imported from the static
-// examRevisionData.ts file, now built at runtime from live Supabase rows.
 export interface ExamQuestion {
   id: string;
   question: string;
@@ -58,8 +56,6 @@ export interface ExamType {
   subjects: ExamSubject[];
 }
 
-// Stable structural metadata only — no actual questions/subjects here.
-// Real content is fetched live from Supabase and grouped in at runtime.
 const EXAM_META: Omit<ExamType, 'subjects'>[] = [
   {
     id: 'fslc',
@@ -84,8 +80,6 @@ const EXAM_META: Omit<ExamType, 'subjects'>[] = [
   }
 ];
 
-// Groups flat rows fetched from Supabase into the nested
-// Subject -> Topic -> Question structure the UI renders.
 function groupQuestionsIntoSubjects(rows: ExamQuestionRow[]): ExamSubject[] {
   const subjectMap = new Map<string, ExamSubject>();
 
@@ -132,10 +126,6 @@ interface SmartStudyNotebookAndRevisionProps {
   onOpenPricingModal: () => void;
 }
 
-// Same premium check as ChatPage.tsx — active paid plan, or a still-valid
-// trial period. Smart Notebook viewing/export is Basic/Family only; the
-// underlying homework records still accumulate for free either way, so
-// by the time a parent upgrades there's already real progress to see.
 function isPremiumActive(subscription?: UserSubscription): boolean {
   if (!subscription) return false;
   if (subscription.status === 'active' && subscription.plan !== 'free') {
@@ -147,11 +137,6 @@ function isPremiumActive(subscription?: UserSubscription): boolean {
   return false;
 }
 
-// Subjects that are planned but don't have real question content yet.
-// Shown as disabled "Coming Soon" buttons so the gap is honest instead
-// of just silently missing from the list. ALL subjects are here right
-// now, including previously-live ones, since every subject was pulled
-// pending individual verification against real fetched NERDC documents.
 const COMING_SOON_SUBJECTS: Record<string, { name: string; icon: string }[]> = {
   fslc: [
     { name: 'Mathematics', icon: '📐' },
@@ -178,19 +163,8 @@ const COMING_SOON_SUBJECTS: Record<string, { name: string; icon: string }[]> = {
   ]
 };
 
-// How many questions to show per round — the rest of the topic's real
-// question pool stays available for the next "New Questions" refresh.
 const QUESTIONS_PER_ROUND = 8;
-
-// Free users get this many notebook views per day before being
-// prompted to upgrade — same rhythm as chat's 5 free daily messages,
-// rather than the notebook being fully locked from the very first
-// visit.
 const FREE_DAILY_NOTEBOOK_VIEWS = 5;
-
-// Same limit, separate constant for clarity - free users get this
-// many Exam Prep quiz attempts per day before being prompted to
-// upgrade, matching the same rhythm as chat and the notebook.
 const FREE_DAILY_EXAM_ATTEMPTS = 5;
 
 function pickRandomQuestions(pool: ExamQuestion[], count: number): ExamQuestion[] {
@@ -198,13 +172,6 @@ function pickRandomQuestions(pool: ExamQuestion[], count: number): ExamQuestion[
   return shuffled.slice(0, Math.min(count, pool.length));
 }
 
-// A real study session: one or more exchanges on the same topic,
-// grouped together by session_id, from the first attempt through to
-// the child finally getting it right (or the most recent attempt, if
-// still unresolved). Records without a session_id (older data, or
-// subjects not yet covered by session grouping) each become their own
-// single-exchange session, so nothing from before this feature existed
-// disappears from the notebook.
 interface StudySession {
   sessionId: string;
   subject: string | null;
@@ -233,17 +200,11 @@ function groupIntoSessions(records: HomeworkRecord[]): StudySession[] {
     if (record.wasCorrect) session.resolved = true;
   }
 
-  // Most recent session first, matching how the notebook displayed
-  // records before this change.
   return Array.from(sessionMap.values()).sort(
     (a, b) => new Date(b.latestDate).getTime() - new Date(a.latestDate).getTime()
   );
 }
 
-// One card per subject, not per topic — every session (topic) for
-// that subject nests inside it, so the notebook stays compact instead
-// of growing a new top-level card for every single topic ever asked
-// about. Sessions without a recognized subject group under "General."
 interface SubjectGroup {
   subject: string;
   sessions: StudySession[];
@@ -279,41 +240,29 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 }) => {
   const isPremium = isPremiumActive(subscription);
 
-  // Free notebook view tracking — resets daily, same rhythm as chat's
-  // message limit. Only relevant for non-premium users; premium users
-  // always have full access regardless of this count.
   const [notebookViewCount, setNotebookViewCount] = useState<number>(
     () => getNotebookDailyViewCount().count
   );
   const notebookLimitReached = !isPremium && notebookViewCount >= FREE_DAILY_NOTEBOOK_VIEWS;
 
-  // Free exam prep attempt tracking — same daily rhythm again. Each
-  // quiz submission (Check My Answers) counts as one attempt.
   const [examAttemptCount, setExamAttemptCount] = useState<number>(
     () => getExamPrepDailyAttemptCount().count
   );
   const examPrepLimitReached = !isPremium && examAttemptCount >= FREE_DAILY_EXAM_ATTEMPTS;
 
-  // Navigation & View States
   const [activeView, setActiveView] = useState<'hub' | 'notebook' | 'revision'>('hub');
   
-  // Revision Flow States (Max 4 Taps Deep: Exam -> Subject -> Topic -> Questions)
   const [selectedExam, setSelectedExam] = useState<ExamType | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<ExamSubject | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<ExamTopic | null>(null);
   
-  // Interactive "Solve Here" Quiz State
   const [userAnswers, setUserAnswers] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [mode, setMode] = useState<'choose' | 'solve' | 'print'>('choose');
 
-  // The current round of questions being shown, refreshable to pull a
-  // different random subset from the topic's full question pool.
   const [displayedQuestions, setDisplayedQuestions] = useState<ExamQuestion[]>([]);
   const [roundNumber, setRoundNumber] = useState(0);
 
-  // Real homework sessions from Supabase, replacing the previous
-  // hardcoded mock notebook entries.
   const [compiledNotes, setCompiledNotes] = useState<HomeworkRecord[]>([]);
   const [isLoadingNotes, setIsLoadingNotes] = useState(true);
 
@@ -331,21 +280,10 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     };
   }, [userId]);
 
-  // Groups the flat records into real study sessions — currently only
-  // Math gets true multi-exchange grouping (see ChatPage.tsx), other
-  // subjects each become their own single-exchange session so nothing
-  // is hidden while this feature expands to more subjects over time.
   const studySessions = useMemo(() => groupIntoSessions(compiledNotes), [compiledNotes]);
 
-  // Then grouped again by subject — one notebook "chapter" per subject,
-  // all its sessions nested inside, matching the Stitch mockup's
-  // Mathematics / Science tab layout.
   const subjectGroups = useMemo(() => groupSessionsBySubject(studySessions), [studySessions]);
 
-  // Which subject TAB is active in the notebook view (Stitch-style
-  // "Mathematics | Science" tabs, replacing the old accordion cards).
-  // Defaults to the first subject once data loads; reset whenever the
-  // set of subjects actually changes (e.g. a brand-new subject arrives).
   const [activeNotebookSubject, setActiveNotebookSubject] = useState<string | null>(null);
   React.useEffect(() => {
     if (subjectGroups.length === 0) {
@@ -362,8 +300,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
-  // Live exam data — real questions fetched from Supabase per exam type,
-  // combined with stable structural metadata, instead of a bundled file.
   const [examData, setExamData] = useState<ExamType[]>(
     EXAM_META.map(meta => ({ ...meta, subjects: [] }))
   );
@@ -386,12 +322,10 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     };
   }, []);
 
-  // Action: Print Personal Notebook or Exam Revision
   const handlePrint = () => {
     window.print();
   };
 
-  // Action: Download Personal Notebook
   const handleDownloadNotebook = (subjectFilter?: string) => {
     const groupsToInclude = subjectFilter
       ? subjectGroups.filter(g => g.subject === subjectFilter)
@@ -448,7 +382,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     setShowDownloadMenu(false);
   };
 
-  // Select Exam
   const handleSelectExam = (exam: ExamType) => {
     setSelectedExam(exam);
     setSelectedSubject(null);
@@ -458,7 +391,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     setMode('choose');
   };
 
-  // Select Subject
   const handleSelectSubject = (subject: ExamSubject) => {
     setSelectedSubject(subject);
     setSelectedTopic(null);
@@ -467,7 +399,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     setMode('choose');
   };
 
-  // Select Topic — pulls the first random round of questions
   const handleSelectTopic = (topic: ExamTopic) => {
     setSelectedTopic(topic);
     setSubmitted(false);
@@ -477,7 +408,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     setRoundNumber(1);
   };
 
-  // Refresh — pulls a new random round from the same topic's full pool
   const handleRefreshQuestions = () => {
     if (!selectedTopic) return;
     setSubmitted(false);
@@ -486,7 +416,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     setRoundNumber(r => r + 1);
   };
 
-  // Select Quiz Answer Option
   const handleOptionSelect = (questionId: string, optionIdx: number) => {
     if (submitted) return;
     setUserAnswers((prev) => ({
@@ -495,7 +424,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     }));
   };
 
-  // Submit Interactive Quiz
   const handleSubmitQuiz = () => {
     setSubmitted(true);
 
@@ -523,7 +451,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     }
   };
 
-  // Calculate score
   const getScore = () => {
     let correct = 0;
     displayedQuestions.forEach((q) => {
@@ -536,16 +463,12 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
   const comingSoonForExam = selectedExam ? (COMING_SOON_SUBJECTS[selectedExam.id] || []) : [];
 
-  // Total topics + total correct across ALL subjects, for the cover
-  // page stat line (Stitch mockup's "12 TOPICS COVERED / 9 CORRECT
-  // ANSWERS"), not just the active tab's subject.
   const totalTopics = studySessions.length;
   const totalCorrect = studySessions.filter(s => s.resolved).length;
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 pb-28 font-sans">
       
-      {/* Printable Sheet Header (Only visible during printing) */}
       <div className="hidden print:block print:p-0 print:m-0 print:bg-white print:text-black">
         <div className="border-b-2 border-slate-900 pb-4 mb-6">
           <div className="flex justify-between items-center">
@@ -563,7 +486,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
           </div>
         </div>
 
-        {/* Print Content for Notebook or Revision */}
         {activeView === 'notebook' ? (
           <div className="space-y-6">
             <h2 className="text-xl font-serif font-bold text-slate-900 border-b border-slate-300 pb-2">
@@ -620,7 +542,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
             </div>
 
             <div className="p-4 border-2 border-slate-800 rounded-lg space-y-2">
-              <h3 className="font-bold text-sm uppercase">🎯 Official Learning Objectives</h3>
+              <h3 className="font-bold text-sm uppercase">🎯 Learning Objectives</h3>
               <ul className="list-disc list-inside text-xs text-slate-800 space-y-1">
                 {selectedTopic.objectives.map((obj, i) => (
                   <li key={i}>{obj}</li>
@@ -654,14 +576,12 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
         ) : null}
 
         <div className="mt-8 pt-4 border-t border-slate-300 text-center text-xs text-slate-500">
-          Generated via FunlyLearn Companion · Grounded in official Nigerian NERDC Curriculum
+          Generated via FunlyLearn Companion
         </div>
       </div>
 
-      {/* Screen Content (Hidden when printing) */}
       <div className="print:hidden space-y-6">
         
-        {/* Top Profile Header Bar */}
         <div className="bg-[#064E3B] text-white p-5 sm:p-6 rounded-3xl border-2 border-amber-400/40 shadow-xl space-y-4 relative overflow-hidden">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center space-x-3.5">
@@ -690,10 +610,8 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
           </div>
         </div>
 
-        {/* TWO CLEAR ENTRY POINTS AT TOP OF SCREEN */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           
-          {/* ENTRY POINT A: "Create Notebook" Button / Card */}
           <button
             onClick={() => {
               if (!isPremium) {
@@ -731,7 +649,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
             </div>
           </button>
 
-          {/* ENTRY POINT B: Exam Revision Folder Card */}
           <button
             onClick={() => {
               setActiveView('revision');
@@ -774,8 +691,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
         {activeView === 'notebook' && (
           <div className="rounded-3xl border-2 border-amber-300/80 shadow-xl overflow-hidden animate-fadeIn bg-amber-100">
 
-            {/* Subject Tabs — folder-style tabs that visually attach to
-                the page below, like real notebook chapter dividers. */}
             {subjectGroups.length > 1 && (
               <div className="flex items-end space-x-1 px-4 sm:px-6 pt-4 overflow-x-auto no-scrollbar">
                 {subjectGroups.map((group) => (
@@ -794,19 +709,14 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </div>
             )}
 
-            {/* The "page" itself — ruled paper texture + spiral
-                binding holes down the left edge, like a real
-                notebook page. */}
             <div className="relative bg-[#FFFBF5] pl-8 pr-5 py-6 sm:pl-14 sm:pr-8 sm:py-8">
 
-              {/* Spiral binding holes */}
               <div className="absolute left-2.5 sm:left-5 top-0 bottom-0 w-3 flex flex-col justify-evenly py-6">
                 {Array.from({ length: 10 }).map((_, i) => (
                   <span key={i} className="w-3 h-3 rounded-full bg-amber-100 border border-amber-300/70 shadow-inner" />
                 ))}
               </div>
 
-              {/* Ruled lines background */}
               <div
                 className="absolute inset-0 pointer-events-none"
                 style={{
@@ -815,12 +725,10 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   backgroundPosition: '0 90px'
                 }}
               />
-              {/* Left margin rule, like a school exercise book */}
               <div className="absolute left-14 sm:left-24 top-0 bottom-0 w-px bg-rose-300/50 hidden sm:block" />
 
               <div className="relative space-y-6">
 
-                {/* Cover / header block */}
                 <div className="flex items-start justify-between gap-4 flex-wrap border-b-2 border-slate-800/80 pb-5">
                   <div>
                     <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#064E3B]">
@@ -837,7 +745,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </div>
                 </div>
 
-                {/* Stat line */}
                 <div className="flex items-center gap-8">
                   <div>
                     <p className="font-serif text-2xl font-bold text-[#064E3B]">{totalTopics}</p>
@@ -853,7 +760,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </div>
                 </div>
 
-                {/* Action Buttons: Print & Download — Basic/Family only */}
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={isPremium ? handlePrint : onOpenPricingModal}
@@ -894,10 +800,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </div>
                 </div>
 
-                {/* Notebook entries — real homework sessions from
-                    Supabase, for the active subject tab only. Free
-                    users get real access up to FREE_DAILY_NOTEBOOK_VIEWS
-                    views per day, then see this upgrade prompt. */}
                 {isLoadingNotes ? (
                   <div className="py-10 text-center text-sm text-slate-500">Loading your sessions...</div>
                 ) : notebookLimitReached ? (
@@ -933,7 +835,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                       return (
                         <div key={session.sessionId} className="relative space-y-3 pb-8 border-b-2 border-dashed border-slate-300 last:border-b-0">
 
-                          {/* Date + rotated stamp badge, like real ink stamps */}
                           <div className="flex items-start justify-between gap-3">
                             <span className="text-xs text-slate-500 font-mono">
                               {new Date(session.latestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -949,7 +850,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                             </span>
                           </div>
 
-                          {/* QUESTION */}
                           <div className="space-y-1.5">
                             <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-[#FF6B35]">
                               Question
@@ -959,7 +859,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                             </p>
                           </div>
 
-                          {/* MAMA TITI'S GUIDANCE on the question itself */}
                           {firstExchange.mamaReply && (
                             <div className="space-y-1.5">
                               <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-amber-700">
@@ -971,13 +870,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                             </div>
                           )}
 
-                          {/* CHILD'S ANSWER(S) — every exchange after the
-                              first is the child's own typed reply
-                              (topic), with Mama Titi's feedback on it
-                              (mamaReply). Reads top-to-bottom as a real
-                              back-and-forth: earlier tries are struck
-                              through, the last one is highlighted as
-                              the current/final answer. */}
                           {laterExchanges.length > 0 ? (
                             <div className="space-y-3 pt-1">
                               {laterExchanges.map((exchange, exIdx) => {
@@ -1026,11 +918,9 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
           </div>
         )}
 
-        {/* VIEW 2: EXAM REVISION FLOW (Max 4 Taps Deep) */}
         {activeView === 'revision' && (
           <div className="space-y-5 animate-fadeIn">
             
-            {/* Folder Breadcrumb Navigation */}
             <div className="flex items-center space-x-2 text-xs font-jakarta font-bold text-slate-600 bg-slate-100 p-3 rounded-2xl overflow-x-auto">
               <button
                 onClick={() => {
@@ -1079,7 +969,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               )}
             </div>
 
-            {/* STEP 1: CHOOSE YOUR EXAM */}
             {!selectedExam && (
               <div className="space-y-4">
                 <div className="border-b border-slate-200 pb-2">
@@ -1123,11 +1012,9 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </div>
             )}
 
-            {/* STEP 2: CHOOSE SUBJECT AND TOPIC */}
             {selectedExam && !selectedTopic && (
               <div className="space-y-6">
                 
-                {/* Exam Title Banner */}
                 <div className="flex items-center justify-between bg-[#064E3B] text-white p-4 rounded-2xl">
                   <div>
                     <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-amber-300">
@@ -1143,14 +1030,12 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </button>
                 </div>
 
-                {/* Honest status while every subject is being rebuilt with verified content */}
                 {selectedExam.subjects.length === 0 && (
                   <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-xs text-amber-900 leading-relaxed">
                     <strong>Rebuilding with verified curriculum:</strong> we removed all questions here to check each one against the real official Nigerian curriculum documents before bringing them back. Subjects below will unlock as they're verified.
                   </div>
                 )}
 
-                {/* Subject Selector Buttons — real subjects + honest Coming Soon ones */}
                 <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar pb-1">
                   {selectedExam.subjects.map((subj) => (
                     <button
@@ -1183,13 +1068,12 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   ))}
                 </div>
 
-                {/* Topics Folder List under selected subject */}
                 {selectedSubject ? (
                   <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-soft space-y-4">
                     <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
                       <h4 className="font-serif font-bold text-base text-slate-900 flex items-center space-x-2">
                         <span>{selectedSubject.icon}</span>
-                        <span>{selectedSubject.name} NERDC Topics</span>
+                        <span>{selectedSubject.name} Topics</span>
                       </h4>
                       <span className="text-xs text-slate-400 font-mono">
                         {selectedSubject.topics.length} Topics
@@ -1223,7 +1107,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   <div className="p-8 text-center bg-white rounded-3xl border border-slate-200 space-y-2">
                     <Folder className="w-10 h-10 text-slate-300 mx-auto" />
                     <p className="text-xs text-slate-600 font-jakarta font-bold">
-                      Tap a subject icon above to view NERDC curriculum topics.
+                      Tap a subject icon above to view topics.
                     </p>
                   </div>
                 )}
@@ -1231,7 +1115,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </div>
             )}
 
-            {/* STEP 3 & STEP 4: GENERATE REVISION QUESTIONS + SOLVE OR PRINT */}
             {selectedExam && selectedTopic && examPrepLimitReached ? (
               <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-amber-300 shadow-soft text-center space-y-3">
                 <span className="text-4xl block">🎓</span>
@@ -1251,7 +1134,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
             ) : selectedExam && selectedTopic && (
               <div className="bg-white p-5 sm:p-6 rounded-3xl border-2 border-emerald-200 shadow-soft space-y-6">
                 
-                {/* Topic Header & Actions */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div>
                     <span className="text-[10px] font-mono font-bold uppercase text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
@@ -1262,7 +1144,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                     </h2>
                   </div>
 
-                  {/* Step 4: Solve or Print Options */}
                   <div className="flex items-center space-x-2 shrink-0">
                     <button
                       onClick={() => setMode('solve')}
@@ -1286,12 +1167,11 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </div>
                 </div>
 
-                {/* CLEAR LEARNING OBJECTIVES FOR THE TOPIC */}
                 <div className="p-4 rounded-2xl bg-[#022C22] text-white space-y-2 border border-amber-400/40 shadow-xs">
                   <div className="flex items-center space-x-2 text-amber-300">
                     <Sparkles className="w-4 h-4" />
                     <h3 className="font-serif font-bold text-xs uppercase tracking-wider">
-                      NERDC Official Learning Objectives
+                      Learning Objectives
                     </h3>
                   </div>
                   <ul className="space-y-1.5 text-xs text-emerald-100 leading-relaxed font-sans">
@@ -1304,7 +1184,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </ul>
                 </div>
 
-                {/* REVISION QUESTIONS LIST */}
                 <div className="space-y-6 pt-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <h3 className="font-serif font-bold text-lg text-slate-900">
@@ -1345,7 +1224,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                           Q{qIdx + 1}. {q.question}
                         </p>
 
-                        {/* Multiple Choice Options */}
                         <div className="space-y-2">
                           {q.options.map((opt, oIdx) => {
                             const optionChosen = userAnswers[q.id] === oIdx;
@@ -1380,7 +1258,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                           })}
                         </div>
 
-                        {/* Text-based Feedback from Mama Titi */}
                         {submitted && (
                           <div className={`p-3 rounded-xl text-xs space-y-1 font-sans ${
                             isCorrect ? 'bg-emerald-100 text-emerald-950 border border-emerald-300' : 'bg-rose-100 text-rose-950 border border-rose-300'
@@ -1395,7 +1272,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                     );
                   })}
 
-                  {/* Submit Answers Button */}
                   {!submitted ? (
                     <button
                       onClick={handleSubmitQuiz}
