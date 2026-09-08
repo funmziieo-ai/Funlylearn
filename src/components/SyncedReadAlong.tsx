@@ -77,8 +77,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
   useEffect(() => {
     if (autoPlay) {
-      isManualRef.current = false;
-      handlePlay();
+      handlePlay(false);
     }
     return () => {
       stopAll();
@@ -117,14 +116,22 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     if (onSpeechStateChange) onSpeechStateChange(false);
   };
 
-  const handlePlay = async () => {
+  // `manual` is passed explicitly by the caller (true for a real
+  // button tap, false for the autoplay effect) rather than read from
+  // a ref the caller sets beforehand — that pattern was the actual
+  // bug: the button's onClick used to set isManualRef.current = true
+  // BEFORE calling this function, so the "was this silently playing?"
+  // check below always saw true already and could never detect the
+  // silent-autoplay case, falling straight through to stopAll() every
+  // time. A tap would stop it, and the very next tap would start it
+  // fresh — exactly the stop-then-restart behaviour being reported.
+  const handlePlay = async (manual: boolean) => {
     if (isPlaying) {
-      if (!isManualRef.current) {
+      if (manual && !isManualRef.current) {
         // This message is already playing silently from autoplay — a
         // tap here means "show me what's happening", not "stop it".
         // Reveal the current status instead of killing the in-progress
-        // playback and forcing a restart from scratch (which is what
-        // caused the highlighting to visibly stop-then-restart before).
+        // playback and forcing a restart from scratch.
         isManualRef.current = true;
         if (audioRef.current && !audioRef.current.paused && !audioRef.current.ended) {
           setIsRealAudioPlaying(true);
@@ -133,11 +140,17 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         }
         return;
       }
-      // Already in a visible, manually-started playback — a second tap
-      // here is a genuine "stop" request.
-      stopAll();
+      if (manual) {
+        // Already in a visible, manually-started playback — a second
+        // tap here is a genuine "stop" request.
+        stopAll();
+      }
+      // A non-manual (autoplay) call landing while already playing
+      // (shouldn't normally happen, but just in case) does nothing.
       return;
     }
+
+    isManualRef.current = manual;
 
     // Silence any other message's audio that might currently be
     // playing (autoplay on another bubble, a leftover from a previous
@@ -345,10 +358,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
       <div className="pt-1 flex items-center space-x-2">
         <button
-            onClick={() => {
-              isManualRef.current = true;
-              handlePlay();
-            }}
+            onClick={() => handlePlay(true)}
             type="button"
             className={
               'inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ' +
