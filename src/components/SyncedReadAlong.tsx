@@ -2,6 +2,26 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Pause, Loader2 } from 'lucide-react';
 import { fetchAudioTTS } from '../services/apiClient';
 
+// Shared across EVERY SyncedReadAlong instance in the app (one per
+// message bubble). Without this, an autoplaying message's audio and a
+// manually-tapped "Listen to Voice" on another message (or even the
+// same one, on a fast double-invocation) could both start real audio
+// playback with nothing stopping the other — causing two voices to
+// play over each other, and leaving one component's loading state
+// orphaned since its audio silently lost the "race" for the speaker.
+// This guarantees at most one real Mama Titi voice plays at any time,
+// app-wide, no matter which message triggered it.
+let globalActiveAudio: HTMLAudioElement | null = null;
+let globalStopActive: (() => void) | null = null;
+
+function stopAnyOtherActiveAudio() {
+  if (globalStopActive) {
+    globalStopActive();
+  }
+  globalActiveAudio = null;
+  globalStopActive = null;
+}
+
 interface SyncedReadAlongProps {
   text: string;
   language?: string;
@@ -33,6 +53,13 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   // moment gets the loading indicator, avoiding a distracting flicker
   // on every fast/cached play.
   const loadingIndicatorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Incremented every time handlePlay actually starts a new attempt.
+  // Any async work below only applies its result if callTokenRef still
+  // matches the token it captured at the start — so a second call
+  // (double-tap, or autoplay racing a manual tap) that starts while an
+  // earlier one is still in flight can't have its state updates
+  // clobbered by, or clobber, the other call.
+  const callTokenRef = useRef(0);
 
   const normalizeText = (raw: string): string => {
     return raw
@@ -60,6 +87,10 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
   const stopAll = () => {
     stoppedRef.current = true;
+    // Bump the token so any in-flight fetch/play promise for THIS
+    // component that resolves after this point knows it's stale and
+    // skips applying its result (see the token checks below).
+    callTokenRef.current += 1;
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -71,6 +102,10 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
+    }
+    if (globalActiveAudio === audioRef.current) {
+      globalActiveAudio = null;
+      globalStopActive = null;
     }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -88,6 +123,13 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       return;
     }
 
+    // Silence any other message's audio that might currently be
+    // playing (autoplay on another bubble, a leftover from a previous
+    // tap, etc.) BEFORE starting this one — this is what guarantees
+    // only one Mama Titi voice is ever audible at a time, app-wide.
+    stopAnyOtherActiveAudio();
+
+    const myToken = ++callTokenRef.current;
     stoppedRef.current = false;
     setIsPlaying(true);
     if (onSpeechStateChange) onSpeechStateChange(true);
@@ -141,11 +183,29 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         loadingIndicatorTimeoutRef.current = null;
       }
 
-      if (stoppedRef.current) return;
+      // This call is no longer the current one for this component
+      // (stopped, or superseded by a newer call) — drop its result
+      // entirely rather than let a late response flip state back on.
+      if (stoppedRef.current || callTokenRef.current !== myToken) return;
 
       if (ttsData.audioUrl) {
         const audio = new Audio(ttsData.audioUrl);
         audioRef.current = audio;
+
+        // Register this as THE app-wide active audio right away (before
+        // awaiting play) — if another message's "Listen to Voice" gets
+        // tapped while this is still starting up, it can find and stop
+        // this one via the same guard this call itself just used above.
+        globalActiveAudio = audio;
+        globalStopActive = () => {
+          audio.pause();
+          if (audioRef.current === audio) audioRef.current = null;
+          setIsPlaying(false);
+          setIsLoading(false);
+          setIsRealAudioPlaying(false);
+          setActiveWordIndex(null);
+          if (onSpeechStateChange) onSpeechStateChange(false);
+        };
 
         // Once the real audio's actual length is known, stop relying on
         // the word-count estimate above (which has no idea how long the
@@ -154,7 +214,8 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         // keeps the highlighted word genuinely in sync with Mama Titi's
         // voice instead of racing ahead of it.
         audio.addEventListener('loadedmetadata', () => {
-          if (stoppedRef.current || !audio.duration || !isFinite(audio.duration)) return;
+          if (stoppedRef.current || callTokenRef.current !== myToken) return;
+          if (!audio.duration || !isFinite(audio.duration)) return;
 
           // The estimate-based interval was only ever a placeholder
           // until we knew the real duration — replace it now.
@@ -166,7 +227,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           const perWordMs = (audio.duration * 1000) / words.length;
 
           const syncToAudio = () => {
-            if (stoppedRef.current || !audioRef.current) return;
+            if (stoppedRef.current || callTokenRef.current !== myToken || !audioRef.current) return;
             const idx = Math.min(
               words.length - 1,
               Math.floor((audio.currentTime * 1000) / perWordMs)
@@ -180,6 +241,18 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         });
 
         await audio.play();
+
+        // Re-check after the await — a stop or a newer call could have
+        // landed while play() itself was resolving.
+        if (stoppedRef.current || callTokenRef.current !== myToken) {
+          audio.pause();
+          return;
+        }
+
+        // Real audio is genuinely audible now — flip out of the
+        // "loading" state immediately rather than leaving the
+        // reassurance message showing after Mama Titi has already
+        // started talking.
         if (showUiState) {
           setIsLoading(false);
           setIsRealAudioPlaying(true);
@@ -187,15 +260,27 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
         audio.onended = () => {
           audioRef.current = null;
-          if (showUiState) setIsRealAudioPlaying(false);
+          if (globalActiveAudio === audio) {
+            globalActiveAudio = null;
+            globalStopActive = null;
+          }
+          if (callTokenRef.current === myToken) {
+            if (showUiState) setIsRealAudioPlaying(false);
+            setActiveWordIndex(null);
+            setIsPlaying(false);
+            if (onSpeechStateChange) onSpeechStateChange(false);
+          }
           URL.revokeObjectURL(ttsData.audioUrl!);
-          setActiveWordIndex(null);
-          setIsPlaying(false);
-          if (onSpeechStateChange) onSpeechStateChange(false);
         };
 
         audio.onerror = () => {
-          if (showUiState) setIsRealAudioPlaying(false);
+          if (globalActiveAudio === audio) {
+            globalActiveAudio = null;
+            globalStopActive = null;
+          }
+          if (callTokenRef.current === myToken && showUiState) {
+            setIsRealAudioPlaying(false);
+          }
           // Real audio failed mid-way — the reading pacer above is
           // completely unaffected and keeps running silently.
           audioRef.current = null;
@@ -212,7 +297,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         clearTimeout(loadingIndicatorTimeoutRef.current);
         loadingIndicatorTimeoutRef.current = null;
       }
-      if (showUiState) setIsLoading(false);
+      if (callTokenRef.current === myToken && showUiState) setIsLoading(false);
     }
   };
 
