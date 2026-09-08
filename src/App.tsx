@@ -30,6 +30,17 @@ import { SmartNotebookPage } from './pages/SmartNotebookPage';
 import { ParentDashboardPage } from './pages/ParentDashboardPage';
 import { ProfilePage } from './pages/ProfilePage';
 
+// A profile only counts as "real" once onboarding has genuinely given
+// it a name — the onboarding form's Continue button is disabled until
+// something is typed, so any profile with a real name here reflects a
+// person who actually went through onboarding, not a blank session
+// created just by loading the page. Used to gate every write to
+// Supabase below, so a bare page visit (landing page, someone who
+// bounces immediately) never creates a ghost row in child_profiles.
+function hasRealName(p: UserProfile): boolean {
+  return Boolean(p.name && p.name.trim().length > 0);
+}
+
 export default function App() {
   const [profile, setProfile] = useState<UserProfile>(() => getStoredProfile());
   const [view, setView] = useState<'landing' | 'auth' | 'onboarding' | 'app' | 'reset-password'>('landing');
@@ -116,7 +127,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Always safe to keep in localStorage regardless of completeness —
+    // this is just this browser's own local cache, not shared data.
     saveStoredProfile(profile);
+
+    // Only write to Supabase once onboarding has genuinely given this
+    // profile a real name. Without this guard, this effect fired on
+    // EVERY page load — including a visitor who never got past the
+    // landing page — immediately minting a guest session id and
+    // writing a blank-name row into child_profiles. That's what was
+    // actually filling up the leaderboard with empty "Scholar" ghosts,
+    // not real guest usage.
+    if (!hasRealName(profile)) return;
+
     const userId = user?.id || getOrCreateGuestSessionId();
     saveChildProfileToSupabase(profile, userId);
   }, [profile, user]);
@@ -145,6 +168,10 @@ export default function App() {
   const handleProfileUpdate = (updated: UserProfile) => {
     setProfile(updated);
     saveStoredProfile(updated);
+    // Same guard as the effect above — this function is called
+    // directly from several pages (coin/star updates, settings
+    // changes) and would otherwise bypass that protection entirely.
+    if (!hasRealName(updated)) return;
     const userId = user?.id || getOrCreateGuestSessionId();
     saveChildProfileToSupabase(updated, userId);
   };
