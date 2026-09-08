@@ -537,6 +537,13 @@ export async function fetchLeaderboard(
       .from('child_profiles')
       .select('user_id, name, stars, class_level, level')
       .eq('class_level', classLevel)
+      // Only children who have genuinely earned at least one star show
+      // up here — a completed onboarding alone (name + class level)
+      // isn't proof of real learning with Mama Titi, and including
+      // every such account made the board read as "everyone with an
+      // account in this class" rather than "who's actually learning
+      // well right now."
+      .gt('stars', 0)
       .order('stars', { ascending: false })
       .limit(limit);
     if (error || !data) return [];
