@@ -119,6 +119,22 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
   const handlePlay = async () => {
     if (isPlaying) {
+      if (!isManualRef.current) {
+        // This message is already playing silently from autoplay — a
+        // tap here means "show me what's happening", not "stop it".
+        // Reveal the current status instead of killing the in-progress
+        // playback and forcing a restart from scratch (which is what
+        // caused the highlighting to visibly stop-then-restart before).
+        isManualRef.current = true;
+        if (audioRef.current && !audioRef.current.paused && !audioRef.current.ended) {
+          setIsRealAudioPlaying(true);
+        } else {
+          setIsLoading(true);
+        }
+        return;
+      }
+      // Already in a visible, manually-started playback — a second tap
+      // here is a genuine "stop" request.
       stopAll();
       return;
     }
@@ -159,17 +175,18 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
     // Real voice fetch happens in parallel — a bonus layer, not a
     // requirement for the reading pacer above to keep running. The
-    // Loading/Speaking UI states only ever surface for an explicit tap
-    // — an auto-triggered play (arriving message, greeting) runs this
-    // exact same logic underneath, but stays silent at the button
-    // level, letting the word highlighting alone carry the moment.
-    const showUiState = isManualRef.current;
+    // Loading/Speaking UI states only ever surface once a tap has made
+    // this a "manual" playback — checked LIVE via isManualRef.current
+    // at each point below (not captured once here), specifically so
+    // that tapping mid-flight (the reveal path above) can retroactively
+    // turn on the visible UI for a call that started out silent.
+    const isCurrentlyManual = () => isManualRef.current;
 
     // Only show the loading spinner if the fetch is still pending after
     // 300ms — a cache hit typically resolves well under that, so this
     // keeps cached playback feeling instant instead of flickering a
     // spinner that immediately disappears.
-    if (showUiState) {
+    if (isCurrentlyManual()) {
       loadingIndicatorTimeoutRef.current = setTimeout(() => {
         if (!stoppedRef.current) setIsLoading(true);
       }, 300);
@@ -252,8 +269,10 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         // Real audio is genuinely audible now — flip out of the
         // "loading" state immediately rather than leaving the
         // reassurance message showing after Mama Titi has already
-        // started talking.
-        if (showUiState) {
+        // started talking. Checked live so a tap that arrived mid-
+        // flight (turning this from silent to manual) still gets the
+        // visible "Speaking" state the moment it's true.
+        if (isCurrentlyManual()) {
           setIsLoading(false);
           setIsRealAudioPlaying(true);
         }
@@ -265,7 +284,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
             globalStopActive = null;
           }
           if (callTokenRef.current === myToken) {
-            if (showUiState) setIsRealAudioPlaying(false);
+            if (isCurrentlyManual()) setIsRealAudioPlaying(false);
             setActiveWordIndex(null);
             setIsPlaying(false);
             if (onSpeechStateChange) onSpeechStateChange(false);
@@ -278,7 +297,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
             globalActiveAudio = null;
             globalStopActive = null;
           }
-          if (callTokenRef.current === myToken && showUiState) {
+          if (callTokenRef.current === myToken && isCurrentlyManual()) {
             setIsRealAudioPlaying(false);
           }
           // Real audio failed mid-way — the reading pacer above is
@@ -288,7 +307,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       } else {
         // No real audio available — the reading pacer above is already
         // running on its own and needs nothing further here.
-        if (showUiState) setIsLoading(false);
+        if (isCurrentlyManual()) setIsLoading(false);
       }
     } catch {
       // Real voice fetch failed entirely — the reading pacer above is
@@ -297,7 +316,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         clearTimeout(loadingIndicatorTimeoutRef.current);
         loadingIndicatorTimeoutRef.current = null;
       }
-      if (callTokenRef.current === myToken && showUiState) setIsLoading(false);
+      if (callTokenRef.current === myToken && isCurrentlyManual()) setIsLoading(false);
     }
   };
 
@@ -336,7 +355,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
               (isRealAudioPlaying
                 ? 'bg-[#FF6B35] text-white hover:bg-[#E85523] ring-2 ring-amber-300'
                 : isLoading
-                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                ? 'bg-gradient-to-r from-amber-400 via-orange-400 to-amber-400 text-slate-900 shadow-sm'
                 : 'bg-[#064E3B] text-white hover:bg-[#022C22]')
             }
           >
@@ -347,7 +366,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
               </>
             ) : isLoading ? (
               <>
-                <Volume2 className="w-3.5 h-3.5 text-amber-700" />
+                <Volume2 className="w-3.5 h-3.5 text-[#064E3B]" />
                 <span>
                   {isYoruba
                     ? 'Ohùn ń bọ̀ — tẹ̀síwájú ẹ̀kọ́, ọmọ mi olóòyè!'
