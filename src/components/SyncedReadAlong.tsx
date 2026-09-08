@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Pause, Loader2 } from 'lucide-react';
+import { Volume2, Pause } from 'lucide-react';
 import { fetchAudioTTS } from '../services/apiClient';
 
 // Shared across EVERY SyncedReadAlong instance in the app (one per
@@ -347,7 +347,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
               </>
             ) : isLoading ? (
               <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-700" />
+                <Volume2 className="w-3.5 h-3.5 text-amber-700" />
                 <span>
                   {isYoruba
                     ? 'Ohùn ń bọ̀ — tẹ̀síwájú ẹ̀kọ́, ọmọ mi olóòyè!'
