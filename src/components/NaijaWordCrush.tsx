@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import confetti from 'canvas-confetti';
 import {
   Sparkles, Flame, Trophy, Play, CheckCircle2, RotateCcw,
-  Volume2, Heart, Crown, Share2, Award, ArrowRight, ArrowLeft, RefreshCw, MessageCircle
+  Volume2, Heart, Crown, Share2, Award, ArrowRight, ArrowLeft, RefreshCw
 } from 'lucide-react';
 import {
-  WORD_CRUSH_VOCABULARY, NIGERIAN_ITEMS, GRANDMA_SCRIPTS,
+  WORD_CRUSH_VOCABULARY, NIGERIAN_ITEMS,
   CrushWord, NigerianItem
 } from '../data/naijaWordCrushData';
 import { fetchAudioTTS } from '../services/apiClient';
@@ -283,7 +283,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
 
   const [showLevelComplete, setShowLevelComplete] = useState<boolean>(false);
   const [showGameOver, setShowGameOver] = useState<boolean>(false);
-  const [showGrandmaScript, setShowGrandmaScript] = useState<boolean>(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string>('Swap adjacent fruits to match 3 in a row!');
   const [shakingItemId, setShakingItemId] = useState<string | null>(null);
 
@@ -922,11 +921,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  const handleShareGrandma = (script: { yo: string; en: string }) => {
-    const text = `🇳🇬 Hi Grandma! Here is my message in ${language}:\n\n"${script.yo}"\n(${script.en})\n\nSent with love from Mama Titi AI Scholar! 🌟`;
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
   return (
     <div className="min-h-screen bg-[#FDF6EC] text-slate-900 font-jakarta flex flex-col relative overflow-hidden pb-12">
       
@@ -1000,7 +994,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
 
         </div>
 
-        <div className="max-w-xl mx-auto mt-2.5 flex items-center justify-between gap-2 border-t border-emerald-800/80 pt-2">
+        <div className="max-w-xl mx-auto mt-2.5 flex items-center gap-2 border-t border-emerald-800/80 pt-2">
           <div className="flex items-center space-x-1">
             <button
               className="px-3 py-1 rounded-full font-bold text-xs bg-[#005029] text-emerald-100 border-2 border-emerald-400 shadow-md scale-105"
@@ -1024,13 +1018,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
               <span className="text-[9px] bg-amber-400/80 text-slate-900 px-1.5 rounded-full">Soon</span>
             </button>
           </div>
-
-          <button
-            onClick={() => setShowGrandmaScript(true)}
-            className="px-2.5 py-1 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] shadow-xs flex items-center space-x-1"
-          >
-            <span>👵 Grandma Script</span>
-          </button>
         </div>
       </header>
 
@@ -1360,75 +1347,6 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
                 <span>Share Score on WhatsApp</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {showGrandmaScript && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-md rounded-3xl border-4 border-amber-400 shadow-2xl overflow-hidden font-jakarta animate-scaleUp">
-            
-            <div className="bg-[#005029] text-white p-4 flex items-center justify-between border-b-2 border-amber-400">
-              <div className="flex items-center space-x-2">
-                <span className="text-2xl">👵</span>
-                <div>
-                  <h3 className="font-serif font-bold text-base text-amber-300">
-                    Grandma Script Unlocked!
-                  </h3>
-                  <p className="text-[11px] text-emerald-200">
-                    Say these sweet words to Grandma in {language}!
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowGrandmaScript(false)}
-                className="p-1 rounded-full bg-emerald-950 text-emerald-200 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3">
-              {GRANDMA_SCRIPTS[language].map((script, idx) => (
-                <div
-                  key={idx}
-                  className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 flex items-center justify-between gap-2"
-                >
-                  <div className="space-y-0.5">
-                    <span className="font-serif font-extrabold text-sm text-[#005029] block">
-                      "{script.yo}"
-                    </span>
-                    <span className="text-xs text-slate-600 font-medium block">
-                      ({script.en})
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-1 shrink-0">
-                    <button
-                      onClick={() => speakWord(script.yo)}
-                      className="p-2 rounded-xl bg-amber-400 text-slate-950 hover:bg-amber-300"
-                      title="Listen"
-                    >
-                      <Volume2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleShareGrandma(script)}
-                      className="p-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
-                      title="Send to Grandma on WhatsApp"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              <button
-                onClick={() => setShowGrandmaScript(false)}
-                className="w-full py-3 rounded-2xl bg-[#005029] text-amber-300 font-extrabold text-xs shadow-md mt-2"
-              >
-                Got It! Back to Game
-              </button>
-            </div>
-
           </div>
         </div>
       )}
