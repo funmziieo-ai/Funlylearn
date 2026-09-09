@@ -178,7 +178,12 @@ export default function App() {
 
   const handleStartLearning = () => {
     if (user || isGuest) {
-      setView('onboarding');
+      // A returning user/guest with a real saved profile should go
+      // straight into the app, not back through onboarding again —
+      // this was previously unconditional, which is exactly what sent
+      // returning users through the "What class are you in?" screen
+      // every single time instead of just once.
+      setView(hasRealName(profile) ? 'app' : 'onboarding');
     } else {
       setView('auth');
     }
@@ -187,7 +192,7 @@ export default function App() {
   const handleStartCatchingUp = () => {
     setProfile(prev => ({ ...prev, isOutOfSchool: true }));
     if (user || isGuest) {
-      setView('onboarding');
+      setView(hasRealName(profile) ? 'app' : 'onboarding');
     } else {
       setView('auth');
     }
@@ -203,9 +208,15 @@ export default function App() {
     setIsGuest(true);
     setUser(null);
     getOrCreateGuestSessionId();
-    // Route to onboarding or chat app
-    setView('onboarding');
+    // This was the actual reported bug: onboarding was forced
+    // unconditionally here, every time, even for a returning guest on
+    // the same device who already has a real saved profile (name,
+    // class level) sitting in local storage. Onboarding should only
+    // ever run once per profile — a returning guest goes straight into
+    // the app instead.
+    setView(hasRealName(profile) ? 'app' : 'onboarding');
   };
+
 
   const handleSignOut = async () => {
     // Always clear local state, even if the remote sign-out call fails
@@ -258,9 +269,6 @@ export default function App() {
           onNavigateLanding={() => setView('landing')}
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          onOpenPricingModal={() => setIsPricingOpen(true)}
-          onOpenProfileModal={() => setIsProfileModalOpen(true)}
-          onOpenVoiceKeyModal={() => setIsVoiceKeyModalOpen(true)}
         />
       )}
 
@@ -398,7 +406,12 @@ export default function App() {
 
       {/* Bottom Navigation Bar */}
       {view === 'app' && (
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+        <BottomNav
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onOpenPricingModal={() => setIsPricingOpen(true)}
+          onOpenProfileModal={() => setIsProfileModalOpen(true)}
+        />
       )}
 
     </div>
