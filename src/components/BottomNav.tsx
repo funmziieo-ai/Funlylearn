@@ -1,42 +1,66 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home, Camera, GraduationCap, Languages, Trophy, Smartphone, MoreHorizontal, User, X } from 'lucide-react';
+import { Home, Camera, GraduationCap, Languages, Trophy, Smartphone, MoreHorizontal, User, Crown, X } from 'lucide-react';
 
 interface BottomNavProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onOpenPricingModal?: () => void;
+  onOpenProfileModal?: () => void;
 }
 
 // Consolidated from 6 visible tabs down to 4, per direct parent
 // feedback that the nav felt cluttered. The core learning loop (Home,
-// Snap Homework, Exam Prep) stays front and center — these are the
-// tabs parents specifically said they valued most and a child moves
-// between constantly. Lingo, Board, and Parents move into "More"
-// rather than disappearing — they're a tap further away, not removed.
+// Snap Homework, Exam Prep) stays front and center. Everything else --
+// Lingo, Board, Parents, and now also Subscription/Profile (merged in
+// from the header's removed three-dot menu) -- lives in one single
+// "More" popover instead of two separate menus a parent had to check.
 const PRIMARY_ITEMS = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'chat', label: 'Snap Homework', icon: Camera },
   // Fixed a real routing bug here: this was previously id: 'me', which
-  // App.tsx actually routes to the Profile page, not Exam Prep — so
+  // App.tsx actually routes to the Profile page, not Exam Prep -- so
   // tapping "Exam Prep" silently opened Profile instead. 'notebook' is
   // the id App.tsx actually uses for SmartNotebookPage (Exam Prep).
   { id: 'notebook', label: 'Exam Prep', icon: GraduationCap }
 ];
 
-const MORE_ITEMS = [
-  { id: 'lingo', label: 'Naija Lingo', icon: Languages },
-  { id: 'board', label: 'Leaderboard', icon: Trophy },
-  { id: 'parent', label: 'Parents', icon: Smartphone },
-  { id: 'me', label: 'My Profile', icon: User }
-];
-
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({
+  activeTab,
+  onTabChange,
+  onOpenPricingModal,
+  onOpenProfileModal
+}) => {
   const [showMore, setShowMore] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
 
-  // "More" is active (highlighted) whenever the currently active tab
-  // is one of the items tucked inside it — otherwise tapping into
-  // Lingo, say, would leave every nav button looking unselected.
-  const isMoreItemActive = MORE_ITEMS.some((item) => item.id === activeTab);
+  // Each item either switches to a real tab (isTabItem: true) or fires
+  // a modal-opening callback (Subscription, Profile) -- merged from
+  // the old Navbar three-dot menu so both live in this one popover.
+  const moreItems = [
+    { id: 'lingo', label: 'Naija Lingo', icon: Languages, onSelect: () => onTabChange('lingo'), isTabItem: true },
+    { id: 'board', label: 'Leaderboard', icon: Trophy, onSelect: () => onTabChange('board'), isTabItem: true },
+    { id: 'parent', label: 'Parents', icon: Smartphone, onSelect: () => onTabChange('parent'), isTabItem: true },
+    {
+      id: 'profile',
+      label: 'My Scholar Profile',
+      icon: User,
+      onSelect: () => (onOpenProfileModal ? onOpenProfileModal() : onTabChange('me')),
+      isTabItem: false
+    },
+    {
+      id: 'subscription',
+      label: 'Subscription & Billing',
+      icon: Crown,
+      onSelect: () => onOpenPricingModal && onOpenPricingModal(),
+      isTabItem: false
+    }
+  ];
+
+  // "More" is active (highlighted) whenever the currently active TAB is
+  // one of the tab-based items tucked inside it -- modal items
+  // (Profile, Subscription) don't have a matching activeTab, so they
+  // are excluded from this check.
+  const isMoreItemActive = moreItems.some((item) => item.isTabItem && item.id === activeTab);
 
   useEffect(() => {
     if (!showMore) return;
@@ -49,14 +73,13 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showMore]);
 
-  const handleMoreItemClick = (id: string) => {
-    onTabChange(id);
+  const handleMoreItemClick = (onSelect: () => void) => {
+    onSelect();
     setShowMore(false);
   };
 
   return (
     <>
-      {/* "More" popover — sits just above the nav bar itself */}
       {showMore && (
         <div
           ref={moreRef}
@@ -75,13 +98,13 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
             </button>
           </div>
           <div className="p-2">
-            {MORE_ITEMS.map((item) => {
+            {moreItems.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = item.isTabItem && activeTab === item.id;
               return (
                 <button
                   key={item.id}
-                  onClick={() => handleMoreItemClick(item.id)}
+                  onClick={() => handleMoreItemClick(item.onSelect)}
                   className={`w-full flex items-center space-x-3 px-3 py-3 rounded-2xl transition-all ${
                     isActive
                       ? 'bg-[#FFE8DE] text-[#FF6B35] font-bold'
