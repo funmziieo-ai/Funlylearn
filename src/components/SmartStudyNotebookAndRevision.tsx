@@ -167,6 +167,21 @@ const QUESTIONS_PER_ROUND = 8;
 const FREE_DAILY_NOTEBOOK_VIEWS = 5;
 const FREE_DAILY_EXAM_ATTEMPTS = 5;
 
+// Derives which JSS grade(s) a topic's questions come from, based on
+// its stored nerdcUnit text — e.g. "JSS1 Chapter 5" -> ['JSS1'],
+// "BECE Chapter — Simple Equations (JSS1-3)" -> all three, since that
+// topic deliberately blends questions from every JSS year. No separate
+// database column needed; the grade info was already being stored,
+// just not shown in the UI after the earlier chapter-label cleanup.
+function getTopicGrades(nerdcUnit: string): string[] {
+  const grades: string[] = [];
+  if (/jss1-3|jss 1-3/i.test(nerdcUnit)) return ['JSS1', 'JSS2', 'JSS3'];
+  if (/jss1/i.test(nerdcUnit)) grades.push('JSS1');
+  if (/jss2/i.test(nerdcUnit)) grades.push('JSS2');
+  if (/jss3/i.test(nerdcUnit)) grades.push('JSS3');
+  return grades;
+}
+
 function pickRandomQuestions(pool: ExamQuestion[], count: number): ExamQuestion[] {
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(count, pool.length));
@@ -255,6 +270,13 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   const [selectedExam, setSelectedExam] = useState<ExamType | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<ExamSubject | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<ExamTopic | null>(null);
+  // Lets a student narrow the topic list to a specific JSS grade, since
+  // BECE genuinely covers JSS1-3 cumulatively and some topics (e.g.
+  // Simple Equations) intentionally blend all three grades together.
+  // Derived from each topic's stored nerdcUnit text rather than a
+  // separate database column, since that value already encodes grade
+  // info (e.g. "JSS1 Chapter 5", "BECE Chapter — X (JSS1-3)").
+  const [gradeFilter, setGradeFilter] = useState<'all' | 'JSS1' | 'JSS2' | 'JSS3'>('all');
   
   const [userAnswers, setUserAnswers] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState<boolean>(false);
@@ -397,6 +419,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
     setSubmitted(false);
     setUserAnswers({});
     setMode('choose');
+    setGradeFilter('all');
   };
 
   const handleSelectTopic = (topic: ExamTopic) => {
@@ -538,7 +561,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               <h2 className="text-xl font-serif font-bold text-slate-900">
                 Topic: {selectedTopic.name}
               </h2>
-              <p className="text-xs text-slate-600">Unit: {selectedTopic.nerdcUnit}</p>
             </div>
 
             <div className="p-4 border-2 border-slate-800 rounded-lg space-y-2">
@@ -1080,17 +1102,39 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                       </span>
                     </div>
 
+                    {/* JSS grade filter — lets a student narrow to just
+                        their own year's topics, since BECE deliberately
+                        covers JSS1-3 cumulatively and some topics blend
+                        multiple grades together. */}
+                    <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      {(['all', 'JSS1', 'JSS2', 'JSS3'] as const).map((g) => (
+                        <button
+                          key={g}
+                          onClick={() => setGradeFilter(g)}
+                          className={`px-3 py-1.5 rounded-full text-[11px] font-jakarta font-bold whitespace-nowrap transition-all ${
+                            gradeFilter === g
+                              ? 'bg-[#064E3B] text-white'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {g === 'all' ? 'All Topics' : g}
+                        </button>
+                      ))}
+                    </div>
+
                     <div className="space-y-2.5">
-                      {selectedSubject.topics.map((topic, tIdx) => (
+                      {selectedSubject.topics
+                        .filter((topic) => {
+                          if (gradeFilter === 'all') return true;
+                          return getTopicGrades(topic.nerdcUnit).includes(gradeFilter);
+                        })
+                        .map((topic, tIdx) => (
                         <button
                           key={topic.id}
                           onClick={() => handleSelectTopic(topic)}
                           className="w-full p-4 rounded-2xl bg-slate-50 hover:bg-emerald-50/80 border border-slate-200/80 hover:border-emerald-300 text-left transition-all flex items-center justify-between group"
                         >
                           <div className="space-y-0.5">
-                            <span className="text-[10px] font-mono text-emerald-800 font-bold uppercase">
-                              {topic.nerdcUnit}
-                            </span>
                             <h5 className="font-serif font-bold text-sm text-slate-900 group-hover:text-[#064E3B]">
                               {tIdx + 1}. {topic.name}
                             </h5>
@@ -1101,6 +1145,13 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                           <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#064E3B] group-hover:translate-x-1 transition-transform shrink-0" />
                         </button>
                       ))}
+                      {selectedSubject.topics.filter((topic) =>
+                        gradeFilter === 'all' ? true : getTopicGrades(topic.nerdcUnit).includes(gradeFilter)
+                      ).length === 0 && (
+                        <p className="text-xs text-slate-400 text-center py-4">
+                          No {gradeFilter} topics in this subject yet.
+                        </p>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -1137,7 +1188,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div>
                     <span className="text-[10px] font-mono font-bold uppercase text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
-                      {selectedExam.title} · {selectedTopic.nerdcUnit}
+                      {selectedExam.title}
                     </span>
                     <h2 className="font-serif text-xl sm:text-2xl font-bold text-slate-900 mt-1">
                       {selectedTopic.name}
@@ -1187,7 +1238,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                 <div className="space-y-6 pt-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <h3 className="font-serif font-bold text-lg text-slate-900">
-                      Past Revision Questions
+                      Practice Questions
                     </h3>
                     <div className="flex items-center space-x-2">
                       <span className="text-xs text-slate-500 font-mono">
