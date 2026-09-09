@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, MoreVertical, Crown, User } from 'lucide-react';
+import React, { useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { UserProfile, LanguageCode } from '../types';
 import mamaTitiImg from '../assets/images/mama_titi_official_1784860280943.jpg';
 
@@ -9,43 +9,25 @@ interface NavbarProps {
   onNavigateLanding?: () => void;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
-  onOpenPricingModal?: () => void;
-  onOpenProfileModal?: () => void;
-  onOpenVoiceKeyModal?: () => void;
 }
 
+// The three-dot menu previously lived here, holding two items:
+// "Subscription & Billing" and "My Scholar Profile". Per direct parent
+// feedback that the app had too many separate menus, both items moved
+// into BottomNav's "More" popover instead — one place to find
+// everything that isn't a primary tab, rather than two different menus
+// (header dots + bottom nav) a parent had to check separately.
 export const Navbar: React.FC<NavbarProps> = ({
   profile,
   onProfileUpdate,
   onNavigateLanding,
-  activeTab,
-  onTabChange,
-  onOpenPricingModal,
-  onOpenProfileModal,
-  onOpenVoiceKeyModal
+  onTabChange
 }) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   const toggleLanguage = () => {
     const newLang: LanguageCode = profile.language === 'en' ? 'yo' : 'en';
     onProfileUpdate({ ...profile, language: newLang });
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleMenuItemClick = (action: () => void) => {
-    setIsMenuOpen(false);
-    action();
   };
 
   return (
@@ -142,81 +124,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </button>
 
-          {/* Three dots menu */}
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-1.5 text-amber-300 hover:text-white hover:bg-emerald-800 rounded-full transition-colors flex items-center justify-center border border-amber-400/30 bg-[#022C22]"
-            >
-              <MoreVertical className="w-5 h-5" />
-            </button>
-
-            {isMenuOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white text-slate-800 rounded-2xl shadow-2xl border-2 border-amber-400/80 py-2 z-50 font-sans">
-
-                {/* Profile header in menu — text only, avatar removed since it duplicated the brand logo above */}
-                <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Scholar
-                  </p>
-                  <p className="text-xs font-bold text-[#064E3B]">
-                    {profile.name} · {profile.classLevel}
-                  </p>
-                </div>
-
-                {/* Subscription */}
-                {onOpenPricingModal && (
-                  <button
-                    onClick={() => handleMenuItemClick(onOpenPricingModal)}
-                    className="w-full text-left px-4 py-2.5 hover:bg-amber-50 font-bold text-xs flex items-center space-x-2.5 transition-colors group border-b border-slate-100"
-                  >
-                    <div className="p-1.5 rounded-xl bg-amber-400 text-slate-950 group-hover:scale-105 transition-transform">
-                      <Crown className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="block text-slate-900 font-bold">Subscription & Billing 💳</span>
-                      <span className="block text-[10px] text-slate-500 font-normal">
-                        Upgrade plan or view status
-                      </span>
-                    </div>
-                  </button>
-                )}
-
-                {/* Profile */}
-                {onOpenProfileModal ? (
-                  <button
-                    onClick={() => handleMenuItemClick(onOpenProfileModal)}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-100 font-bold text-xs flex items-center space-x-2.5 transition-colors group"
-                  >
-                    <div className="p-1.5 rounded-xl bg-emerald-100 text-[#064E3B]">
-                      <User className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="block text-slate-900 font-bold">My Scholar Profile 👤</span>
-                      <span className="block text-[10px] text-slate-500 font-normal">
-                        Edit name and class level
-                      </span>
-                    </div>
-                  </button>
-                ) : onTabChange ? (
-                  <button
-                    onClick={() => handleMenuItemClick(() => onTabChange('me'))}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-100 font-bold text-xs flex items-center space-x-2.5 transition-colors group"
-                  >
-                    <div className="p-1.5 rounded-xl bg-emerald-100 text-[#064E3B]">
-                      <User className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="block text-slate-900 font-bold">My Scholar Profile 👤</span>
-                      <span className="block text-[10px] text-slate-500 font-normal">
-                        Edit name and class level
-                      </span>
-                    </div>
-                  </button>
-                ) : null}
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </header>
