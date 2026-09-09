@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { supabase, resetPasswordForEmail } from '../services/supabaseService';
-import { MamaTitiAvatar } from './MamaTitiAvatar';
 
 interface AuthScreenProps {
   onAuthSuccess: (user: any) => void;
@@ -89,15 +88,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
   };
 
   return (
-    <div className="min-h-screen bg-[#064E3B] flex flex-col items-center px-5 pt-10 pb-8">
-      {/* Mascot + welcome */}
-      <MamaTitiAvatar size="xl" showOnlineStatus={false} className="mb-3" />
-      <h1 className="text-white text-2xl font-bold text-center">Welcome to FunlyLearn!</h1>
-      <p className="text-emerald-200 text-sm text-center mt-1 mb-8">
-        Learn, play, and grow with Mama Titi
-      </p>
+    <div className="min-h-screen bg-[#064E3B] flex flex-col items-center justify-center px-5 py-10">
+      {/* The full "Welcome to FunlyLearn!" mascot + heading previously
+          shown here has been removed — it duplicated the real Landing
+          Page a user already saw immediately before this screen. This
+          screen now only ever shows the functional sign-in/guest
+          content, exactly once, per direct parent feedback about two
+          near-identical splash screens in a row. */}
 
-      {/* Primary action */}
       <div className="w-full max-w-sm space-y-3">
         <button
           onClick={onContinueAsGuest}
