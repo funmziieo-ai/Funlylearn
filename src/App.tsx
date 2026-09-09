@@ -24,6 +24,7 @@ import { NaijaWordCrush } from './components/NaijaWordCrush';
 import { LandingPage } from './pages/LandingPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { ChatPage } from './pages/ChatPage';
+import { HomePage } from './pages/HomePage';
 import { NaijaLingoPage } from './pages/NaijaLingoPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { SmartNotebookPage } from './pages/SmartNotebookPage';
@@ -304,7 +305,15 @@ export default function App() {
 
         {view === 'app' && (
           <>
-            {(activeTab === 'home' || activeTab === 'chat') && (
+            {activeTab === 'home' && (
+              <HomePage
+                profile={profile}
+                userId={user?.id || getOrCreateGuestSessionId()}
+                onNavigate={setActiveTab}
+              />
+            )}
+
+            {activeTab === 'chat' && (
               <ChatPage
                 profile={profile}
                 subscription={subscription}
@@ -314,6 +323,7 @@ export default function App() {
                 onOpenPricingModal={() => setIsPricingOpen(true)}
                 isGuest={isGuest}
                 userId={user?.id || getOrCreateGuestSessionId()}
+                activeTab={activeTab}
               />
             )}
 
