@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import { 
   BookOpen, 
   Printer, 
-  Download, 
   Folder, 
   ChevronRight, 
   Award, 
@@ -320,8 +319,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
   const activeSubjectGroup = subjectGroups.find(g => g.subject === activeNotebookSubject) || null;
 
-  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
-
   const [examData, setExamData] = useState<ExamType[]>(
     EXAM_META.map(meta => ({ ...meta, subjects: [] }))
   );
@@ -346,62 +343,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
   const handlePrint = () => {
     window.print();
-  };
-
-  const handleDownloadNotebook = (subjectFilter?: string) => {
-    const groupsToInclude = subjectFilter
-      ? subjectGroups.filter(g => g.subject === subjectFilter)
-      : subjectGroups;
-
-    let content = `========================================================\n`;
-    content += `          FUNLYLEARN SMART STUDY NOTEBOOK             \n`;
-    content += `========================================================\n\n`;
-    content += `Student Name: ${profile.name}\n`;
-    content += `Class Level: ${profile.classLevel}\n`;
-    content += `Curriculum: Official Nigerian NERDC\n`;
-    content += `Date Compiled: ${new Date().toLocaleDateString()}\n\n`;
-
-    groupsToInclude.forEach((group) => {
-      content += `========================================================\n`;
-      content += `${group.subject.toUpperCase()}\n`;
-      content += `========================================================\n\n`;
-
-      group.sessions.forEach((session, idx) => {
-        const firstExchange = session.exchanges[0];
-        content += `--------------------------------------------------------\n`;
-        content += `${idx + 1}. ${firstExchange.topic}\n`;
-        content += `Date: ${new Date(session.latestDate).toLocaleDateString()}\n`;
-        content += `Result: ${session.resolved ? 'Answered correctly' : 'Still practicing'}\n\n`;
-
-        session.exchanges.forEach((exchange, exIdx) => {
-          const label =
-            exIdx === session.exchanges.length - 1 && session.resolved
-              ? 'Final answer'
-              : `Attempt ${exIdx + 1}`;
-          content += `  [${label}]\n`;
-          content += `  ${profile.name} asked: ${exchange.topic}\n`;
-          if (exchange.mamaReply) {
-            content += `  Mama Titi explained: ${exchange.mamaReply}\n`;
-          }
-          content += `\n`;
-        });
-      });
-      content += `\n`;
-    });
-
-    content += `Generated via FunlyLearn AI Companion (NERDC Aligned)\n`;
-
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = subjectFilter
-      ? `${profile.name}_${subjectFilter}_Study_Notes.txt`
-      : `${profile.name}_Smart_Study_Notebook.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setShowDownloadMenu(false);
   };
 
   const handleSelectExam = (exam: ExamType) => {
@@ -779,46 +720,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                     <p className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-slate-500">
                       Correct Answers
                     </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={isPremium ? handlePrint : onOpenPricingModal}
-                    className="px-3.5 py-2 rounded-2xl bg-[#064E3B] hover:bg-[#022C22] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
-                  >
-                    <Printer className="w-4 h-4" />
-                    <span>Print</span>
-                  </button>
-
-                  <div className="relative">
-                    <button
-                      onClick={isPremium ? () => setShowDownloadMenu(prev => !prev) : onOpenPricingModal}
-                      className="px-3.5 py-2 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-xs flex items-center space-x-1.5 transition-all"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Download</span>
-                    </button>
-
-                    {showDownloadMenu && (
-                      <div className="absolute left-0 top-full mt-1.5 w-56 bg-white rounded-2xl border border-slate-200 shadow-xl z-20 py-1.5 overflow-hidden">
-                        <button
-                          onClick={() => handleDownloadNotebook()}
-                          className="w-full text-left px-4 py-2.5 text-xs font-jakarta font-bold text-slate-800 hover:bg-slate-50"
-                        >
-                          All Subjects
-                        </button>
-                        {subjectGroups.map(group => (
-                          <button
-                            key={group.subject}
-                            onClick={() => handleDownloadNotebook(group.subject)}
-                            className="w-full text-left px-4 py-2.5 text-xs font-jakarta font-medium text-slate-700 hover:bg-slate-50"
-                          >
-                            {group.subject} only
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
 
