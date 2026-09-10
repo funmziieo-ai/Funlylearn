@@ -25,6 +25,7 @@ import { LandingPage } from './pages/LandingPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { ChatPage } from './pages/ChatPage';
 import { HomePage } from './pages/HomePage';
+import { SearchPage } from './pages/SearchPage';
 import { NaijaLingoPage } from './pages/NaijaLingoPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { SmartNotebookPage } from './pages/SmartNotebookPage';
@@ -310,6 +311,15 @@ export default function App() {
                 profile={profile}
                 userId={user?.id || getOrCreateGuestSessionId()}
                 onNavigate={setActiveTab}
+                onProfileUpdate={handleProfileUpdate}
+              />
+            )}
+
+            {activeTab === 'search' && (
+              <SearchPage
+                profile={profile}
+                userId={user?.id || getOrCreateGuestSessionId()}
+                onNavigateToExamPrep={() => setActiveTab('notebook')}
               />
             )}
 
