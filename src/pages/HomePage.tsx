@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, GraduationCap, Languages, Trophy, Sparkles, Flame, ChevronRight, MessageCircle } from 'lucide-react';
+import React from 'react';
+import { Camera, GraduationCap, Languages, Trophy, Sparkles, Flame } from 'lucide-react';
 import { UserProfile } from '../types';
-import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
-import { fetchHomeworkRecords, HomeworkRecord } from '../services/supabaseService';
 
 interface HomePageProps {
   profile: UserProfile;
@@ -16,23 +14,8 @@ interface HomePageProps {
 // into each major feature -- never a feature itself. Previously "Home"
 // and "Snap Homework" both just dropped the child into the identical
 // chat screen with nothing distinguishing them.
-export const HomePage: React.FC<HomePageProps> = ({ profile, userId, onNavigate }) => {
+export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate }) => {
   const isYoruba = profile.language === 'yo';
-  const [recentRecord, setRecentRecord] = useState<HomeworkRecord | null>(null);
-  const [isLoadingRecent, setIsLoadingRecent] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchHomeworkRecords(userId, 1).then((records) => {
-      if (!cancelled) {
-        setRecentRecord(records.length > 0 ? records[records.length - 1] : null);
-        setIsLoadingRecent(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
 
   const hour = new Date().getHours();
   const greeting = isYoruba
@@ -92,14 +75,11 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, userId, onNavigate 
       {/* Greeting header */}
       <div className="bg-[#064E3B] text-white p-5 sm:p-6 rounded-3xl border-2 border-amber-400/40 shadow-xl relative overflow-hidden">
         <div className="absolute -right-8 -bottom-8 w-40 h-40 rounded-full bg-emerald-800/40 blur-2xl pointer-events-none" />
-        <div className="flex items-center space-x-3.5 relative z-10">
-          <MamaTitiAvatar size="md" showOnlineStatus={false} />
-          <div>
-            <p className="text-xs text-emerald-200 font-sans">{greeting},</p>
-            <h1 className="font-serif text-2xl font-bold text-white">
-              {profile.name}!
-            </h1>
-          </div>
+        <div className="relative z-10">
+          <p className="text-xs text-emerald-200 font-sans">{greeting},</p>
+          <h1 className="font-serif text-2xl font-bold text-white">
+            {profile.name}!
+          </h1>
         </div>
 
         {/* Stats row */}
@@ -133,29 +113,6 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, userId, onNavigate 
           </div>
         </div>
       </div>
-
-      {/* Continue where you left off -- only shows once real history exists */}
-      {!isLoadingRecent && recentRecord && (
-        <button
-          onClick={() => onNavigate('chat')}
-          className="w-full bg-white p-4 rounded-3xl border-2 border-slate-200 hover:border-emerald-300 shadow-soft text-left transition-all flex items-center justify-between group"
-        >
-          <div className="flex items-center space-x-3 min-w-0">
-            <div className="p-2.5 rounded-2xl bg-emerald-100 text-emerald-800 shrink-0">
-              <MessageCircle className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-slate-400">
-                {isYoruba ? 'Tẹ̀síwájú Ìkẹ́kọ̀ọ́' : 'Continue Learning'}
-              </p>
-              <p className="font-jakarta font-bold text-sm text-slate-900 truncate">
-                {recentRecord.topic}
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all shrink-0" />
-        </button>
-      )}
 
       {/* Feature cards -- the actual "Home" content: clear entry points
           into each major feature, not a feature itself */}
