@@ -1,11 +1,12 @@
 import React from 'react';
-import { Camera, GraduationCap, Languages, Trophy, Sparkles, Flame } from 'lucide-react';
+import { Camera, GraduationCap, Languages, Trophy, Sparkles, Flame, Smartphone, Heart } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface HomePageProps {
   profile: UserProfile;
   userId: string;
   onNavigate: (tab: string) => void;
+  onProfileUpdate: (updated: UserProfile) => void;
 }
 
 // A real dashboard, not another route to the chat screen. Matches how
@@ -14,7 +15,7 @@ interface HomePageProps {
 // into each major feature -- never a feature itself. Previously "Home"
 // and "Snap Homework" both just dropped the child into the identical
 // chat screen with nothing distinguishing them.
-export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate }) => {
+export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfileUpdate }) => {
   const isYoruba = profile.language === 'yo';
 
   const hour = new Date().getHours();
@@ -66,6 +67,26 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate }) => {
       icon: Trophy,
       bg: 'from-orange-500 via-orange-400 to-orange-600',
       iconBg: 'bg-slate-950 text-orange-200'
+    },
+    {
+      id: 'parent',
+      title: isYoruba ? 'Àwọn Òbí' : 'Parents',
+      subtitle: isYoruba
+        ? 'Àkíyèsí àti ìtọ́sọ́nà fún àwọn òbí'
+        : 'Updates and guidance for parents',
+      icon: Smartphone,
+      bg: 'from-sky-500 via-sky-400 to-sky-600',
+      iconBg: 'bg-slate-950 text-sky-200'
+    },
+    {
+      id: 'catchup',
+      title: isYoruba ? 'Kò Sí Ní Ilé-Ìwé Lọ́wọ́lọ́wọ́' : 'Not in School Right Now',
+      subtitle: isYoruba
+        ? 'Ẹ̀kọ́ tí a ṣe pàtàkì fún kíkó padà'
+        : 'A structured catch-up path just for you',
+      icon: Heart,
+      bg: 'from-rose-500 via-rose-400 to-rose-600',
+      iconBg: 'bg-slate-950 text-rose-200'
     }
   ];
 
@@ -119,10 +140,22 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {featureCards.map((card) => {
           const Icon = card.icon;
+          const handleSelect = () => {
+            if (card.id === 'catchup') {
+              // Same flag the Landing Page's "Start Catching Up" CTA
+              // sets during onboarding -- reusing it here so a child
+              // who selects this later gets the same tailored framing,
+              // then goes straight into chat with Mama Titi.
+              onProfileUpdate({ ...profile, isOutOfSchool: true });
+              onNavigate('chat');
+            } else {
+              onNavigate(card.id);
+            }
+          };
           return (
             <button
               key={card.id}
-              onClick={() => onNavigate(card.id)}
+              onClick={handleSelect}
               className={`bg-gradient-to-br ${card.bg} p-4 rounded-3xl shadow-md text-left transition-all hover:scale-[1.02] active:scale-[0.98] relative overflow-hidden group`}
             >
               <div className={`w-11 h-11 rounded-2xl ${card.iconBg} flex items-center justify-center mb-3 group-hover:scale-105 transition-transform`}>
