@@ -558,3 +558,79 @@ export async function fetchLeaderboard(
     return [];
   }
 }
+
+export interface SearchResultTopic {
+  examId: string;
+  subjectId: string;
+  subjectName: string;
+  subjectIcon: string;
+  topicId: string;
+  topicName: string;
+}
+
+export interface SearchResults {
+  topics: SearchResultTopic[];
+  homework: HomeworkRecord[];
+}
+
+// Powers the app-wide Search tab -- searches across both real Exam
+// Prep content (subject/topic names) and the child's own past
+// homework history (their actual questions asked), so "everything"
+// genuinely means both halves of the app's real content, not just one.
+export async function searchAppContent(userId: string, query: string): Promise<SearchResults> {
+  if (!supabase || !query.trim()) return { topics: [], homework: [] };
+  const term = `%${query.trim()}%`;
+
+  try {
+    const [topicsResult, homeworkResult] = await Promise.all([
+      supabase
+        .from('exam_revision_questions')
+        .select('exam_id, subject_id, subject_name, subject_icon, topic_id, topic_name')
+        .or(`topic_name.ilike.${term},subject_name.ilike.${term}`)
+        .limit(100),
+      supabase
+        .from('homework_records')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('topic', term)
+        .order('created_at', { ascending: false })
+        .limit(30)
+    ]);
+
+    // Exam Prep rows come back one-per-question, so many rows share the
+    // same subject+topic -- de-duplicated down to unique topics here,
+    // since search results should show "Simple Equations" once, not
+    // 71 times (once per question in that topic).
+    const seenTopics = new Set<string>();
+    const topics: SearchResultTopic[] = [];
+    (topicsResult.data || []).forEach((r: any) => {
+      const key = `${r.exam_id}-${r.topic_id}`;
+      if (!seenTopics.has(key)) {
+        seenTopics.add(key);
+        topics.push({
+          examId: r.exam_id,
+          subjectId: r.subject_id,
+          subjectName: r.subject_name,
+          subjectIcon: r.subject_icon,
+          topicId: r.topic_id,
+          topicName: r.topic_name
+        });
+      }
+    });
+
+    const homework: HomeworkRecord[] = (homeworkResult.data || []).map((r: any) => ({
+      id: r.id,
+      subject: r.subject,
+      topic: r.topic,
+      mamaReply: r.mama_reply,
+      wasCorrect: r.was_correct,
+      sessionId: r.session_id,
+      createdAt: r.created_at
+    }));
+
+    return { topics, homework };
+  } catch (e) {
+    console.warn('Error searching app content:', e);
+    return { topics: [], homework: [] };
+  }
+}
