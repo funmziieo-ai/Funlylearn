@@ -943,7 +943,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
       )}
 
-      <header className="bg-[#005029] text-white p-3.5 sm:p-4 shadow-lg border-b-4 border-amber-400 shrink-0">
+      <header className="bg-[#005029] text-white p-3 sm:p-3.5 shadow-lg border-b-4 border-amber-400 shrink-0">
         <div className="max-w-xl mx-auto flex items-center justify-between">
           
           <div className="flex items-center space-x-2">
@@ -994,30 +994,14 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
 
         </div>
 
-        <div className="max-w-xl mx-auto mt-2.5 flex items-center gap-2 border-t border-emerald-800/80 pt-2">
-          <div className="flex items-center space-x-1">
-            <button
-              className="px-3 py-1 rounded-full font-bold text-xs bg-[#005029] text-emerald-100 border-2 border-emerald-400 shadow-md scale-105"
-            >
-              🟢 Yoruba
-            </button>
-            <button
-              disabled
-              title="Igbo is coming soon"
-              className="px-3 py-1 rounded-full font-bold text-xs bg-[#023319]/50 text-emerald-200/40 border border-emerald-800/50 cursor-not-allowed flex items-center space-x-1"
-            >
-              <span>🟣 Igbo</span>
-              <span className="text-[9px] bg-amber-400/80 text-slate-900 px-1.5 rounded-full">Soon</span>
-            </button>
-            <button
-              disabled
-              title="Hausa is coming soon"
-              className="px-3 py-1 rounded-full font-bold text-xs bg-[#023319]/50 text-emerald-200/40 border border-emerald-800/50 cursor-not-allowed flex items-center space-x-1"
-            >
-              <span>🟡 Hausa</span>
-              <span className="text-[9px] bg-amber-400/80 text-slate-900 px-1.5 rounded-full">Soon</span>
-            </button>
+        <div className="max-w-xl mx-auto mt-2 flex items-center justify-between gap-2 border-t border-emerald-800/80 pt-1.5">
+          <div className="flex items-center space-x-1.5 bg-[#023319] px-3 py-1 rounded-full border border-emerald-400/40">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="text-xs font-bold text-emerald-100">Yoruba</span>
           </div>
+          <span className="text-[10px] text-emerald-400/70 italic">
+            Igbo &amp; Hausa coming soon
+          </span>
         </div>
       </header>
 
