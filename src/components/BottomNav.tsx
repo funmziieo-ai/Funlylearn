@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home, Camera, GraduationCap, Languages, Trophy, Smartphone, MoreHorizontal, User, Crown, X } from 'lucide-react';
+import { Home, Search, GraduationCap, Languages, Trophy, Smartphone, MoreHorizontal, User, Crown, X } from 'lucide-react';
 
 interface BottomNavProps {
   activeTab: string;
@@ -8,22 +8,12 @@ interface BottomNavProps {
   onOpenProfileModal?: () => void;
 }
 
-// Consolidated from 6 visible tabs down to 4, per direct parent
-// feedback that the nav felt cluttered. The core learning loop (Home,
-// Snap Homework, Exam Prep) stays front and center. Everything else --
-// Lingo, Board, Parents, and now also Subscription/Profile (merged in
-// from the header's removed three-dot menu) -- lives in one single
-// "More" popover instead of two separate menus a parent had to check.
-const PRIMARY_ITEMS = [
-  { id: 'home', label: 'Home', icon: Home },
-  { id: 'chat', label: 'Snap Homework', icon: Camera },
-  // Fixed a real routing bug here: this was previously id: 'me', which
-  // App.tsx actually routes to the Profile page, not Exam Prep -- so
-  // tapping "Exam Prep" silently opened Profile instead. 'notebook' is
-  // the id App.tsx actually uses for SmartNotebookPage (Exam Prep).
-  { id: 'notebook', label: 'Exam Prep', icon: GraduationCap }
-];
-
+// Primary tabs reworked per direct feedback: Snap Homework and Exam
+// Prep moved out of here -- they're now prominent feature cards on the
+// new Home dashboard instead, so nothing is harder to reach, just
+// relocated. Subscription and Search take their two slots here, since
+// those are the things worth one-tap access to at all times, while
+// homework/exam access now naturally starts from Home.
 export const BottomNav: React.FC<BottomNavProps> = ({
   activeTab,
   onTabChange,
@@ -33,10 +23,28 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const [showMore, setShowMore] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
 
-  // Each item either switches to a real tab (isTabItem: true) or fires
-  // a modal-opening callback (Subscription, Profile) -- merged from
-  // the old Navbar three-dot menu so both live in this one popover.
+  // Each primary item either switches to a real tab (isTabItem: true)
+  // or fires a modal-opening callback (Subscription) -- Subscription
+  // has no matching activeTab since it opens a modal over whatever
+  // screen is already showing, rather than navigating away from it.
+  const primaryItems = [
+    { id: 'home', label: 'Home', icon: Home, onSelect: () => onTabChange('home'), isTabItem: true },
+    {
+      id: 'subscription',
+      label: 'Subscription',
+      icon: Crown,
+      onSelect: () => onOpenPricingModal && onOpenPricingModal(),
+      isTabItem: false
+    },
+    { id: 'search', label: 'Search', icon: Search, onSelect: () => onTabChange('search'), isTabItem: true }
+  ];
+
+  // Everything else lives in one "More" popover -- merged in from the
+  // old Navbar three-dot menu, plus Exam Prep now that it's moved out
+  // of the primary row (still one tap away, just not permanently
+  // visible, since Home's own Exam Prep card covers the common case).
   const moreItems = [
+    { id: 'notebook', label: 'Exam Prep', icon: GraduationCap, onSelect: () => onTabChange('notebook'), isTabItem: true },
     { id: 'lingo', label: 'Naija Lingo', icon: Languages, onSelect: () => onTabChange('lingo'), isTabItem: true },
     { id: 'board', label: 'Leaderboard', icon: Trophy, onSelect: () => onTabChange('board'), isTabItem: true },
     { id: 'parent', label: 'Parents', icon: Smartphone, onSelect: () => onTabChange('parent'), isTabItem: true },
@@ -46,20 +54,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       icon: User,
       onSelect: () => (onOpenProfileModal ? onOpenProfileModal() : onTabChange('me')),
       isTabItem: false
-    },
-    {
-      id: 'subscription',
-      label: 'Subscription & Billing',
-      icon: Crown,
-      onSelect: () => onOpenPricingModal && onOpenPricingModal(),
-      isTabItem: false
     }
   ];
 
-  // "More" is active (highlighted) whenever the currently active TAB is
-  // one of the tab-based items tucked inside it -- modal items
-  // (Profile, Subscription) don't have a matching activeTab, so they
-  // are excluded from this check.
   const isMoreItemActive = moreItems.some((item) => item.isTabItem && item.id === activeTab);
 
   useEffect(() => {
@@ -122,13 +119,13 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-lg py-1.5 px-2">
         <div className="max-w-md mx-auto flex items-center justify-around">
-          {PRIMARY_ITEMS.map((item) => {
+          {primaryItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = item.isTabItem && activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => onTabChange(item.id)}
+                onClick={item.onSelect}
                 className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all duration-200 ${
                   isActive
                     ? 'bg-[#FFE8DE] text-[#FF6B35] font-bold scale-105'
