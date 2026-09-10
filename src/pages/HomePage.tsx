@@ -12,9 +12,7 @@ interface HomePageProps {
 // A real dashboard, not another route to the chat screen. Matches how
 // every major kids-learning app (Duolingo, Khan Academy Kids, uLesson)
 // structures Home: a greeting, progress at a glance, and clear cards
-// into each major feature -- never a feature itself. Previously "Home"
-// and "Snap Homework" both just dropped the child into the identical
-// chat screen with nothing distinguishing them.
+// into each major feature -- never a feature itself.
 export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfileUpdate }) => {
   const isYoruba = profile.language === 'yo';
 
@@ -27,6 +25,13 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
     ? 'Good afternoon'
     : 'Good evening';
 
+  // Restyled per a colourful-card reference (flat solid background,
+  // bold dark title, white stat pill showing a REAL number rather than
+  // a decorative one) -- this is the code-only layer of that look.
+  // The "bg" field is now a single flat Tailwind class, not a
+  // gradient, and each card's pill is only shown when there's a
+  // genuine stat to report for that feature; cards without one (like
+  // Parents) simply omit the pill rather than showing a fake number.
   const featureCards = [
     {
       id: 'chat',
@@ -35,8 +40,10 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Ya aworan tabi kọ ibeere kan fun Mama Titi'
         : 'Photo a question or ask Mama Titi anything',
       icon: Camera,
-      bg: 'from-amber-400 via-amber-300 to-amber-500',
-      iconBg: 'bg-slate-950 text-amber-300'
+      bg: 'bg-amber-400',
+      pillValue: profile.coins || 0,
+      pillLabel: isYoruba ? 'owó' : 'coins',
+      pillColor: 'text-amber-600'
     },
     {
       id: 'notebook',
@@ -45,8 +52,10 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Ṣe àdánwò gidi fún BECE, WAEC àti FSLC'
         : 'Real practice for BECE, WAEC & FSLC',
       icon: GraduationCap,
-      bg: 'from-emerald-600 via-emerald-500 to-emerald-700',
-      iconBg: 'bg-slate-950 text-emerald-300'
+      bg: 'bg-emerald-500',
+      pillValue: profile.totalCorrect || 0,
+      pillLabel: isYoruba ? 'tọ̀nà' : 'correct',
+      pillColor: 'text-emerald-600'
     },
     {
       id: 'lingo',
@@ -55,8 +64,10 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Kọ Yoruba nipasẹ ere igbadun'
         : 'Learn Yoruba through fun games',
       icon: Languages,
-      bg: 'from-purple-500 via-purple-400 to-purple-600',
-      iconBg: 'bg-slate-950 text-purple-200'
+      bg: 'bg-purple-500',
+      pillValue: profile.lingoLevel || 1,
+      pillLabel: isYoruba ? 'ipele' : 'level',
+      pillColor: 'text-purple-600'
     },
     {
       id: 'board',
@@ -65,8 +76,10 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Wo bí o ṣe wà láàrin àwọn akẹ́kọ̀ọ́ mìíràn'
         : 'See how you rank among other scholars',
       icon: Trophy,
-      bg: 'from-orange-500 via-orange-400 to-orange-600',
-      iconBg: 'bg-slate-950 text-orange-200'
+      bg: 'bg-orange-500',
+      pillValue: profile.stars,
+      pillLabel: isYoruba ? 'ìràwọ̀' : 'stars',
+      pillColor: 'text-orange-600'
     },
     {
       id: 'parent',
@@ -75,8 +88,10 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Àkíyèsí àti ìtọ́sọ́nà fún àwọn òbí'
         : 'Updates and guidance for parents',
       icon: Smartphone,
-      bg: 'from-sky-500 via-sky-400 to-sky-600',
-      iconBg: 'bg-slate-950 text-sky-200'
+      bg: 'bg-sky-500',
+      pillValue: null,
+      pillLabel: '',
+      pillColor: 'text-sky-600'
     },
     {
       id: 'catchup',
@@ -85,8 +100,10 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Ẹ̀kọ́ tí a ṣe pàtàkì fún kíkó padà'
         : 'A structured catch-up path just for you',
       icon: Heart,
-      bg: 'from-rose-500 via-rose-400 to-rose-600',
-      iconBg: 'bg-slate-950 text-rose-200'
+      bg: 'bg-rose-500',
+      pillValue: null,
+      pillLabel: '',
+      pillColor: 'text-rose-600'
     }
   ];
 
@@ -135,8 +152,11 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         </div>
       </div>
 
-      {/* Feature cards -- the actual "Home" content: clear entry points
-          into each major feature, not a feature itself */}
+      {/* Feature cards -- flat colour + bold dark title + real stat
+          pill, matching the reference's structure. The large faint
+          icon in the corner sits exactly where a real 3D illustration
+          will drop in later, so no further layout change is needed
+          once those assets exist -- just swap the icon for an <img>. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {featureCards.map((card) => {
           const Icon = card.icon;
@@ -156,17 +176,30 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
             <button
               key={card.id}
               onClick={handleSelect}
-              className={`bg-gradient-to-br ${card.bg} p-4 rounded-3xl shadow-md text-left transition-all hover:scale-[1.02] active:scale-[0.98] relative overflow-hidden group`}
+              className={`${card.bg} p-4 pb-3.5 rounded-3xl shadow-md text-left transition-all hover:scale-[1.02] active:scale-[0.98] relative overflow-hidden group min-h-[148px] flex flex-col justify-between`}
             >
-              <div className={`w-11 h-11 rounded-2xl ${card.iconBg} flex items-center justify-center mb-3 group-hover:scale-105 transition-transform`}>
-                <Icon className="w-5 h-5" />
+              {/* Placeholder illustration slot -- large faint icon
+                  bleeding toward the corner, reserved for a real 3D
+                  character/object once those assets are ready. */}
+              <Icon className="absolute -right-3 -bottom-3 w-24 h-24 text-white/25 rotate-[-8deg] pointer-events-none" />
+
+              <div className="relative z-10">
+                <h3 className="font-serif font-extrabold text-lg text-slate-900 leading-tight">
+                  {card.title}
+                </h3>
+                <p className="text-xs text-slate-900/70 font-sans mt-1 leading-snug pr-8">
+                  {card.subtitle}
+                </p>
               </div>
-              <h3 className="font-serif font-bold text-base text-slate-950">
-                {card.title}
-              </h3>
-              <p className="text-xs text-slate-900/70 font-sans mt-0.5 leading-snug">
-                {card.subtitle}
-              </p>
+
+              {card.pillValue !== null && (
+                <div className="relative z-10 inline-flex items-center bg-white rounded-2xl px-3 py-1.5 shadow-sm w-fit mt-3">
+                  <span className={`font-black text-lg ${card.pillColor}`}>{card.pillValue}</span>
+                  <span className="text-[11px] font-jakarta font-bold text-slate-500 ml-1.5">
+                    {card.pillLabel}
+                  </span>
+                </div>
+              )}
             </button>
           );
         })}
