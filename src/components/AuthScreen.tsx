@@ -1,11 +1,34 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, UserRound } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { supabase, resetPasswordForEmail } from '../services/supabaseService';
 
 interface AuthScreenProps {
   onAuthSuccess: (user: any) => void;
   onContinueAsGuest: () => void;
 }
+
+// Fallback smiley -- an inline SVG reproducing the same real reference
+// artwork (eyes + one continuous mouth stroke), used only if the real
+// PNG at /images/happy-smiley.png is ever missing or fails to load.
+// This guarantees the sign-in screen never shows a broken image icon,
+// even if that asset hasn't been added to the repo yet.
+const FallbackSmiley: React.FC = () => (
+  <svg width="140" height="112" viewBox="0 0 392 315" aria-hidden="true">
+    <ellipse cx="118" cy="52" rx="33" ry="52" fill="#0f172a" />
+    <ellipse cx="279" cy="52" rx="33" ry="52" fill="#0f172a" />
+    <circle cx="108" cy="34" r="9" fill="#fff" />
+    <circle cx="269" cy="34" r="9" fill="#fff" />
+    <path
+      d="M76 106 Q68 118 82 124 Q140 170 196 124 Q212 118 204 106"
+      stroke="#0f172a"
+      strokeWidth="9"
+      fill="none"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      transform="translate(0, 90) scale(1, 0.9)"
+    />
+  </svg>
+);
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinueAsGuest }) => {
   const [showPassword, setShowPassword] = useState(false);
@@ -16,6 +39,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
   const [error, setError] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
+  const [smileyFailed, setSmileyFailed] = useState(false);
 
   const handleEmailAuth = async () => {
     if (!supabase) {
@@ -45,7 +69,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
         if (error) throw error;
 
         if (data.user && !data.session) {
-          // Email confirmation required — no session yet
           setInfoMsg('Check your email to confirm your account before signing in.');
         } else if (data.user) {
           onAuthSuccess(data.user);
@@ -58,10 +81,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
     }
   };
 
-  // Previously this was just static text with no click handler at all —
-  // tapping it could never have done anything. Now it actually calls the
-  // real password reset function, using whatever email is already typed
-  // into the field above (asking them to type it there first if empty).
   const handleForgotPassword = async () => {
     setError(null);
     setInfoMsg(null);
@@ -90,103 +109,108 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
     <div className="min-h-screen bg-[#064E3B] flex flex-col items-center justify-center px-5 py-10">
       <div className="w-full max-w-sm">
 
-        {/* Small header — enough to orient the screen without repeating
-            the full mascot + "Welcome to FunlyLearn!" splash the child
-            already saw on the previous page. */}
-        <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-[#0A5A45] border border-amber-400/30 flex items-center justify-center mx-auto mb-3">
-            <UserRound className="w-6 h-6 text-amber-300" />
-          </div>
-          <h1 className="text-white text-xl font-bold">
-            {mode === 'signin' ? 'Sign in to continue' : 'Create your account'}
-          </h1>
-          <p className="text-emerald-200 text-xs mt-1">
-            Save your stars and progress across devices
-          </p>
-        </div>
+        <div className="bg-[#064E3B] rounded-3xl overflow-hidden shadow-2xl">
 
-        {/* Sign-in form shows immediately — no longer hidden behind a
-            "Parent? Sign in with email" toggle, per direct feedback
-            that the extra tap felt unnecessary once the duplicate
-            welcome splash was already removed. */}
-        <div className="space-y-3 bg-[#0A5A45] rounded-2xl p-4">
-          <div className="flex bg-[#022C22] rounded-xl overflow-hidden mb-2">
-            <button
-              onClick={() => { setMode('signin'); setError(null); setInfoMsg(null); }}
-              className={`flex-1 py-2 text-sm font-bold ${mode === 'signin' ? 'bg-[#FFC107] text-emerald-900' : 'text-emerald-200'}`}
-            >Sign In</button>
-            <button
-              onClick={() => { setMode('signup'); setError(null); setInfoMsg(null); }}
-              className={`flex-1 py-2 text-sm font-bold ${mode === 'signup' ? 'bg-[#FFC107] text-emerald-900' : 'text-emerald-200'}`}
-            >Create Account</button>
-          </div>
-
-          <div className="flex items-center gap-2 bg-[#022C22] rounded-xl px-3 py-3">
-            <Mail className="w-4 h-4 text-emerald-300" />
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              className="bg-transparent flex-1 text-white placeholder-emerald-400 text-sm outline-none"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 bg-[#022C22] rounded-xl px-3 py-3">
-            <Lock className="w-4 h-4 text-emerald-300" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              className="bg-transparent flex-1 text-white placeholder-emerald-400 text-sm outline-none"
-            />
-            <button onClick={() => setShowPassword(!showPassword)}>
-              {showPassword ? <EyeOff className="w-4 h-4 text-emerald-300" /> : <Eye className="w-4 h-4 text-emerald-300" />}
-            </button>
-          </div>
-
-          {infoMsg && (
-            <p className="text-center text-emerald-200 text-xs px-2">{infoMsg}</p>
-          )}
-          {error && (
-            <p className="text-center text-red-300 text-xs px-2">{error}</p>
-          )}
-
-          <button
-            onClick={handleEmailAuth}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-[#FF6B35] rounded-xl py-3 font-bold text-white disabled:opacity-60"
-          >
-            {loading ? 'Please wait...' : (
-              <>
-                {mode === 'signin' ? 'Sign In' : 'Create Account'} <ArrowRight className="w-4 h-4" />
-              </>
+          {/* Yellow banner with the real happy-smiley artwork. Falls
+              back to an inline SVG reproduction automatically if the
+              PNG asset hasn't been added to the repo yet, so this
+              screen never shows a broken-image icon. */}
+          <div className="bg-[#FFC107] flex items-center justify-center py-8">
+            {!smileyFailed ? (
+              <img
+                src="/images/happy-smiley.png"
+                alt="Happy face"
+                onError={() => setSmileyFailed(true)}
+                className="w-36 h-auto"
+              />
+            ) : (
+              <FallbackSmiley />
             )}
-          </button>
+          </div>
 
-          {mode === 'signin' && (
-            <button
-              onClick={handleForgotPassword}
-              disabled={resetLoading}
-              className="w-full text-center text-emerald-300 text-xs underline disabled:opacity-60"
-            >
-              {resetLoading ? 'Sending reset link...' : 'Forgot password? Reset here'}
-            </button>
-          )}
+          <div className="px-5 pt-6 pb-2">
+            <h2 className="text-center text-white text-lg font-bold mb-4">
+              {mode === 'signin' ? 'Welcome back, Scholar!' : 'Ready to Learn?'}
+            </h2>
+
+            <div className="space-y-3">
+              <div className="flex bg-white/10 rounded-xl overflow-hidden mb-1">
+                <button
+                  onClick={() => { setMode('signin'); setError(null); setInfoMsg(null); }}
+                  className={`flex-1 py-2.5 text-sm font-bold transition-all ${mode === 'signin' ? 'bg-[#FF6B35] text-white' : 'text-emerald-100'}`}
+                >Sign In</button>
+                <button
+                  onClick={() => { setMode('signup'); setError(null); setInfoMsg(null); }}
+                  className={`flex-1 py-2.5 text-sm font-bold transition-all ${mode === 'signup' ? 'bg-[#FF6B35] text-white' : 'text-emerald-100'}`}
+                >Create Account</button>
+              </div>
+
+              <div className="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-3">
+                <Mail className="w-4 h-4 text-emerald-200" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  className="bg-transparent flex-1 text-white placeholder-emerald-200/60 text-sm outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-3">
+                <Lock className="w-4 h-4 text-emerald-200" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="bg-transparent flex-1 text-white placeholder-emerald-200/60 text-sm outline-none"
+                />
+                <button onClick={() => setShowPassword(!showPassword)}>
+                  {showPassword ? <EyeOff className="w-4 h-4 text-emerald-200" /> : <Eye className="w-4 h-4 text-emerald-200" />}
+                </button>
+              </div>
+
+              {infoMsg && (
+                <p className="text-center text-emerald-200 text-xs px-2">{infoMsg}</p>
+              )}
+              {error && (
+                <p className="text-center text-red-300 text-xs px-2">{error}</p>
+              )}
+
+              <button
+                onClick={handleEmailAuth}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 bg-[#FF6B35] hover:bg-[#E85523] rounded-xl py-3 font-bold text-white disabled:opacity-60 transition-all"
+              >
+                {loading ? 'Please wait...' : (
+                  <>
+                    {mode === 'signin' ? 'Sign In' : 'Create Account'} <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              {mode === 'signin' && (
+                <button
+                  onClick={handleForgotPassword}
+                  disabled={resetLoading}
+                  className="w-full text-center text-emerald-200/70 text-xs underline disabled:opacity-60 pb-4"
+                >
+                  {resetLoading ? 'Sending reset link...' : 'Forgot password? Reset here'}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Guest path — kept, since 5 free daily messages without an
-            account is a real, intentional part of the product, but now
-            a lighter-weight secondary action rather than a competing
-            prominent CTA sitting above the sign-in form. */}
+            account is a real, intentional part of the product. */}
         <button
           onClick={onContinueAsGuest}
-          className="w-full text-center text-emerald-300 text-sm font-semibold underline mt-5"
+          className="w-full text-center text-amber-300 text-sm font-bold underline mt-5"
         >
           Skip for now — Continue as Guest
         </button>
-        <p className="text-center text-emerald-400/70 text-[11px] mt-1.5 px-4">
+        <p className="text-center text-emerald-200/70 text-[11px] mt-1.5 px-4">
           5 free messages a day as a guest. Sign in anytime to save your stars.
         </p>
       </div>
