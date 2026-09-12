@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, X, Sparkles, MessageCircle, ShieldCheck, Zap, Star, ArrowRight, Loader2 } from 'lucide-react';
+import { Check, X, Sparkles, MessageCircle, ArrowRight, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile, UserSubscription, SubscriptionPlan } from '../types';
 import { openPaystackCheckout } from '../services/paystackService';
@@ -70,12 +70,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
       classLevel: profile.classLevel,
       currency,
       onSuccess: async (ref) => {
-        // IMPORTANT: reaching here means the Paystack popup reported
-        // success — it does NOT mean the family has real access yet.
-        // The only thing that actually grants access is the real
-        // subscription row created by the server-side webhook, once
-        // Paystack independently confirms the payment. We wait for
-        // that here instead of trusting the popup alone.
         setIsLoadingPlan(null);
         setIsConfirmingPayment(true);
         await waitForRealConfirmation(plan, ref);
@@ -92,10 +86,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
     });
   };
 
-  // Polls for the real, webhook-created subscription row rather than
-  // trusting the frontend popup alone. Checks every 2 seconds for up
-  // to 20 seconds — webhooks are usually near-instant, but this gives
-  // real room for normal network delay before giving up.
   const waitForRealConfirmation = async (plan: SubscriptionPlan, reference: string) => {
     const maxAttempts = 10;
     const delayMs = 2000;
@@ -113,10 +103,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
       }
     }
 
-    // Genuinely uncertain outcome after real waiting — tell the truth
-    // rather than claim success or failure we can't actually confirm.
-    // The payment may still be processing on Paystack's side; never
-    // silently grant access here, and never falsely say it failed.
     setIsConfirmingPayment(false);
     setPendingConfirmation(true);
   };
@@ -131,7 +117,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto font-sans">
       
-      <div className="relative w-full max-w-4xl bg-white rounded-3xl border-2 border-amber-400/50 shadow-2xl overflow-hidden my-6 my-auto animate-fadeIn">
+      <div className="relative w-full max-w-4xl bg-white rounded-3xl border-2 border-amber-400/50 shadow-2xl overflow-hidden my-auto animate-fadeIn">
         
         <button
           onClick={onClose}
@@ -141,7 +127,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
         </button>
 
         {isConfirmingPayment ? (
-          <div className="bg-[#064E3B] text-white p-8 sm:p-12 text-center space-y-6">
+          <div className="bg-[#0E8256] text-white p-8 sm:p-12 text-center space-y-6">
             <div className="w-20 h-20 rounded-full bg-amber-400/20 border-2 border-amber-400 flex items-center justify-center mx-auto">
               <Loader2 className="w-10 h-10 text-amber-300 animate-spin" />
             </div>
@@ -155,7 +141,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
             </div>
           </div>
         ) : pendingConfirmation ? (
-          <div className="bg-[#064E3B] text-white p-8 sm:p-12 text-center space-y-6">
+          <div className="bg-[#0E8256] text-white p-8 sm:p-12 text-center space-y-6">
             <div className="space-y-2 max-w-md mx-auto">
               <h2 className="font-serif text-2xl font-bold text-amber-300">
                 Still confirming...
@@ -182,7 +168,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
             </button>
           </div>
         ) : successPlan ? (
-          <div className="bg-[#064E3B] text-white p-8 sm:p-12 text-center space-y-6 animate-scaleUp">
+          <div className="bg-[#0E8256] text-white p-8 sm:p-12 text-center space-y-6 animate-scaleUp">
             <div className="w-20 h-20 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center mx-auto shadow-xl">
               <Sparkles className="w-10 h-10 text-slate-950 animate-bounce" />
             </div>
@@ -212,7 +198,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
           </div>
         ) : (
           <div>
-            <div className="bg-[#064E3B] text-white p-6 sm:p-8 text-center space-y-3 relative overflow-hidden">
+            <div className="bg-[#0E8256] text-white p-6 sm:p-8 text-center space-y-3 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
               
               <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/40 text-xs font-jakarta font-bold uppercase">
@@ -226,37 +212,46 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 Choose the right plan for your child. Unlock unlimited homework explanations with Mama Titi!
               </p>
 
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
-                
-                <div className="bg-[#022C22] p-1 rounded-2xl border border-amber-400/30 flex items-center text-xs font-jakarta font-bold">
-                  <button
-                    onClick={() => setBillingInterval('monthly')}
-                    className={`px-3.5 py-1.5 rounded-xl transition-all ${
-                      billingInterval === 'monthly'
-                        ? 'bg-amber-400 text-slate-950 shadow-xs'
-                        : 'text-emerald-200 hover:text-white'
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    onClick={() => setBillingInterval('yearly')}
-                    className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center space-x-1 ${
-                      billingInterval === 'yearly'
-                        ? 'bg-amber-400 text-slate-950 shadow-xs'
-                        : 'text-emerald-200 hover:text-white'
-                    }`}
-                  >
-                    <span>Yearly</span>
-                    <span className="bg-[#FF6B35] text-white text-[9px] px-1.5 py-0.2 rounded-full">
-                      Save 40%
-                    </span>
-                  </button>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-center gap-4 sm:gap-5 pt-3">
+
+                <div className="flex flex-col items-center gap-1.5">
+                  <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-emerald-200/80">
+                    Billing
+                  </span>
+                  <div className="bg-[#085C40] p-1 rounded-2xl border border-amber-400/30 flex items-center text-xs font-jakarta font-bold">
+                    <button
+                      onClick={() => setBillingInterval('monthly')}
+                      className={`px-3.5 py-1.5 rounded-xl transition-all ${
+                        billingInterval === 'monthly'
+                          ? 'bg-amber-400 text-slate-950 shadow-xs'
+                          : 'text-emerald-200 hover:text-white'
+                      }`}
+                    >
+                      Monthly
+                    </button>
+                    <button
+                      onClick={() => setBillingInterval('yearly')}
+                      className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center space-x-1 ${
+                        billingInterval === 'yearly'
+                          ? 'bg-amber-400 text-slate-950 shadow-xs'
+                          : 'text-emerald-200 hover:text-white'
+                      }`}
+                    >
+                      <span>Yearly</span>
+                      <span className="bg-[#FF6B35] text-white text-[9px] px-1.5 py-0.5 rounded-full">
+                        Save 40%
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="bg-[#022C22] p-1 rounded-2xl border border-amber-400/30 flex items-center text-xs font-jakarta font-bold">
-                  <button
-                    onClick={() => setCurrency('NGN')}
+                <div className="flex flex-col items-center gap-1.5">
+                  <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-amber-300/80">
+                    Currency
+                  </span>
+                  <div className="bg-[#022C22] p-1 rounded-2xl border-2 border-emerald-400/40 flex items-center text-xs font-jakarta font-bold">
+                    <button
+                      onClick={() => setCurrency('NGN')}
                     className={`px-3.5 py-1.5 rounded-xl transition-all ${
                       currency === 'NGN'
                         ? 'bg-emerald-700 text-white shadow-xs'
@@ -285,6 +280,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                   >
                     🇺🇸 $ Diaspora
                   </button>
+                  </div>
                 </div>
 
               </div>
@@ -331,7 +327,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Public leaderboard</span>
+                      <span>Leaderboard and star system</span>
                     </div>
 
                     <div className="flex items-center space-x-2 text-slate-400">
@@ -364,8 +360,8 @@ export const PricingModal: React.FC<PricingModalProps> = ({
 
                 <div className="space-y-3">
                   <div>
-                    <h3 className="font-serif text-xl font-bold text-[#064E3B]">Basic</h3>
-                    <div className="text-2xl font-bold text-slate-900 mt-1 font-serif flex items-baseline flex-wrap">
+                    <h3 className="font-serif text-xl font-bold text-[#0E8256]">Basic</h3>
+                    <div className="text-2xl font-bold text-slate-900 mt-1 font-serif flex items-baseline flex-wrap gap-1.5">
                       {currency === 'NGN' ? (
                         billingInterval === 'monthly' ? (
                           <>
@@ -376,6 +372,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                           <>
                             <span>₦3,600</span>
                             <span className="text-xs text-slate-500 font-normal ml-1"> / mo, billed yearly</span>
+                            <span className="text-sm text-slate-400 font-normal line-through">₦6,000</span>
                           </>
                         )
                       ) : (
@@ -388,6 +385,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                           <>
                             <span>{currencySymbol}6</span>
                             <span className="text-xs text-slate-500 font-normal ml-1"> / mo, billed yearly</span>
+                            <span className="text-sm text-slate-400 font-normal line-through">{currencySymbol}10</span>
                           </>
                         )
                       )}
@@ -439,7 +437,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 <button
                   onClick={() => handleSubscribe('basic')}
                   disabled={isLoadingPlan !== null}
-                  className="w-full py-3.5 rounded-2xl bg-[#064E3B] hover:bg-[#022C22] disabled:opacity-60 text-white font-jakarta font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2"
+                  className="w-full py-3.5 rounded-2xl bg-[#0E8256] hover:bg-[#085C40] disabled:opacity-60 text-white font-jakarta font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2"
                 >
                   {isLoadingPlan === 'basic' ? (
                     <>
@@ -452,7 +450,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 </button>
               </div>
 
-              <div className="bg-[#022C22] text-white rounded-3xl border-2 border-emerald-400 p-5 space-y-4 flex flex-col justify-between shadow-xl">
+              <div className="bg-[#085C40] text-white rounded-3xl border-2 border-emerald-400 p-5 space-y-4 flex flex-col justify-between shadow-xl">
                 <div className="space-y-3">
                   <div>
                     <h3 className="font-serif text-xl font-bold text-amber-300">Family</h3>
@@ -467,6 +465,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                           <>
                             <span>₦7,200</span>
                             <span className="text-xs text-emerald-200 font-normal ml-1"> / mo, billed yearly</span>
+                            <span className="text-sm text-emerald-400/70 font-normal line-through">₦12,000</span>
                           </>
                         )
                       ) : (
@@ -479,6 +478,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                           <>
                             <span>{currencySymbol}12</span>
                             <span className="text-xs text-emerald-200 font-normal ml-1"> / mo, billed yearly</span>
+                            <span className="text-sm text-emerald-400/70 font-normal line-through">{currencySymbol}20</span>
                           </>
                         )
                       )}
