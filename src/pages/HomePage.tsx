@@ -1,6 +1,16 @@
-import React from 'react';
-import { Camera, GraduationCap, Languages, Trophy, Sparkles, Flame, Smartphone, Heart } from 'lucide-react';
+import React, { useState } from 'react';
+import { Camera, GraduationCap, Languages, Trophy, Smartphone, Heart } from 'lucide-react';
 import { UserProfile } from '../types';
+
+// Real 3D illustrations (CC0-licensed, from 3dicons.co) load from the
+// public/ folder as plain paths rather than bundler imports -- this is
+// deliberate: an ES import of a missing file fails the ENTIRE build
+// (exactly what happened when HomePage.tsx itself was briefly in the
+// wrong folder), whereas a public/ path that doesn't exist yet just
+// 404s quietly at runtime for that one image, caught below and
+// swapped back to the plain Lucide icon automatically. Drop each PNG
+// at public/illustrations/<name>.png whenever it's ready -- no code
+// change needed, and nothing breaks in the meantime.
 
 interface HomePageProps {
   profile: UserProfile;
@@ -15,6 +25,7 @@ interface HomePageProps {
 // into each major feature -- never a feature itself.
 export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfileUpdate }) => {
   const isYoruba = profile.language === 'yo';
+  const [failedIllustrations, setFailedIllustrations] = useState<Record<string, boolean>>({});
 
   const hour = new Date().getHours();
   const greeting = isYoruba
@@ -40,6 +51,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Ya aworan tabi kọ ibeere kan fun Mama Titi'
         : 'Photo a question or ask Mama Titi anything',
       icon: Camera,
+      illustrationPath: '/illustrations/snap-homework.png',
       bg: 'bg-amber-400',
       pillValue: profile.coins || 0,
       pillLabel: isYoruba ? 'owó' : 'coins',
@@ -52,6 +64,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Ṣe àdánwò gidi fún BECE, WAEC àti FSLC'
         : 'Real practice for BECE, WAEC & FSLC',
       icon: GraduationCap,
+      illustrationPath: '/illustrations/exam-prep.png',
       bg: 'bg-emerald-500',
       pillValue: profile.totalCorrect || 0,
       pillLabel: isYoruba ? 'tọ̀nà' : 'correct',
@@ -64,6 +77,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Kọ Yoruba nipasẹ ere igbadun'
         : 'Learn Yoruba through fun games',
       icon: Languages,
+      illustrationPath: '/illustrations/naija-lingo.png',
       bg: 'bg-purple-500',
       pillValue: profile.lingoLevel || 1,
       pillLabel: isYoruba ? 'ipele' : 'level',
@@ -76,6 +90,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Wo bí o ṣe wà láàrin àwọn akẹ́kọ̀ọ́ mìíràn'
         : 'See how you rank among other scholars',
       icon: Trophy,
+      illustrationPath: '/illustrations/leaderboard.png',
       bg: 'bg-orange-500',
       pillValue: profile.stars,
       pillLabel: isYoruba ? 'ìràwọ̀' : 'stars',
@@ -88,6 +103,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Àkíyèsí àti ìtọ́sọ́nà fún àwọn òbí'
         : 'Updates and guidance for parents',
       icon: Smartphone,
+      illustrationPath: '/illustrations/parents.png',
       bg: 'bg-sky-500',
       pillValue: null,
       pillLabel: '',
@@ -100,6 +116,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Ẹ̀kọ́ tí a ṣe pàtàkì fún kíkó padà'
         : 'A structured catch-up path just for you',
       icon: Heart,
+      illustrationPath: '/illustrations/catchup.png',
       bg: 'bg-rose-500',
       pillValue: null,
       pillLabel: '',
@@ -110,45 +127,19 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-5 pb-28 font-sans">
 
-      {/* Greeting header */}
-      <div className="bg-[#064E3B] text-white p-5 sm:p-6 rounded-3xl border-2 border-amber-400/40 shadow-xl relative overflow-hidden">
-        <div className="absolute -right-8 -bottom-8 w-40 h-40 rounded-full bg-emerald-800/40 blur-2xl pointer-events-none" />
+      {/* Simple greeting card -- previously this also repeated
+          Stars/Coins/Streak in a stats row, but each of those now
+          already shows on its own feature card below (coins on Snap
+          Homework, correct count on Exam Prep, level on Naija Lingo,
+          stars on Leaderboard), so showing them again here was pure
+          duplication. This card's only job now is the warm greeting. */}
+      <div className="bg-[#0E8256] text-white p-5 sm:p-6 rounded-3xl shadow-xl relative overflow-hidden">
+        <div className="absolute -right-8 -bottom-8 w-40 h-40 rounded-full bg-emerald-800/30 blur-2xl pointer-events-none" />
         <div className="relative z-10">
-          <p className="text-xs text-emerald-200 font-sans">{greeting},</p>
+          <p className="text-xs text-emerald-100 font-sans">{greeting},</p>
           <h1 className="font-serif text-2xl font-bold text-white">
             {profile.name}!
           </h1>
-        </div>
-
-        {/* Stats row */}
-        <div className="flex items-center gap-3 mt-4 relative z-10">
-          <div className="flex-1 bg-[#022C22]/60 rounded-2xl p-3 border border-amber-400/20 text-center">
-            <div className="flex items-center justify-center space-x-1 text-amber-300 font-bold text-lg">
-              <Sparkles className="w-4 h-4 fill-amber-400" />
-              <span>{profile.stars}</span>
-            </div>
-            <p className="text-[10px] text-emerald-200 font-jakarta font-bold uppercase tracking-wide mt-0.5">
-              {isYoruba ? 'Awọn Irawọ' : 'Stars'}
-            </p>
-          </div>
-          <div className="flex-1 bg-[#022C22]/60 rounded-2xl p-3 border border-amber-400/20 text-center">
-            <div className="flex items-center justify-center space-x-1 text-amber-300 font-bold text-lg">
-              <span>🪙</span>
-              <span>{profile.coins || 0}</span>
-            </div>
-            <p className="text-[10px] text-emerald-200 font-jakarta font-bold uppercase tracking-wide mt-0.5">
-              {isYoruba ? 'Owó' : 'Coins'}
-            </p>
-          </div>
-          <div className="flex-1 bg-[#022C22]/60 rounded-2xl p-3 border border-amber-400/20 text-center">
-            <div className="flex items-center justify-center space-x-1 text-amber-300 font-bold text-lg">
-              <Flame className="w-4 h-4" />
-              <span>{profile.correctStreak || 0}</span>
-            </div>
-            <p className="text-[10px] text-emerald-200 font-jakarta font-bold uppercase tracking-wide mt-0.5">
-              {isYoruba ? 'Ọjọ́ Tí Ó Tẹ̀lé' : 'Streak'}
-            </p>
-          </div>
         </div>
       </div>
 
@@ -160,6 +151,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {featureCards.map((card) => {
           const Icon = card.icon;
+          const imgFailed = failedIllustrations[card.id];
           const handleSelect = () => {
             if (card.id === 'catchup') {
               // Same flag the Landing Page's "Start Catching Up" CTA
@@ -178,10 +170,23 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
               onClick={handleSelect}
               className={`${card.bg} p-4 pb-3.5 rounded-3xl shadow-md text-left transition-all hover:scale-[1.02] active:scale-[0.98] relative overflow-hidden group min-h-[148px] flex flex-col justify-between`}
             >
-              {/* Placeholder illustration slot -- large faint icon
-                  bleeding toward the corner, reserved for a real 3D
-                  character/object once those assets are ready. */}
-              <Icon className="absolute -right-3 -bottom-3 w-24 h-24 text-white/25 rotate-[-8deg] pointer-events-none" />
+              {/* Real 3D illustration once its file exists at
+                  public/illustrations/<name>.png -- falls back to the
+                  plain Lucide icon automatically if that file is
+                  missing or fails to load, so nothing ever breaks or
+                  shows a broken-image icon to a user. */}
+              {!imgFailed ? (
+                <img
+                  src={card.illustrationPath}
+                  alt=""
+                  onError={() =>
+                    setFailedIllustrations((prev) => ({ ...prev, [card.id]: true }))
+                  }
+                  className="absolute -right-2 -bottom-2 w-28 h-28 object-contain pointer-events-none"
+                />
+              ) : (
+                <Icon className="absolute -right-3 -bottom-3 w-24 h-24 text-white/25 rotate-[-8deg] pointer-events-none" />
+              )}
 
               <div className="relative z-10">
                 <h3 className="font-serif font-extrabold text-lg text-slate-900 leading-tight">
