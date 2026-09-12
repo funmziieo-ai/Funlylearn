@@ -48,7 +48,7 @@ export interface LetterCandyItem {
 const getLetterItemsForLanguage = (lang: Language): LetterCandyItem[] => {
   const colorStyles = [
     { color: 'bg-gradient-to-br from-rose-500 via-pink-600 to-rose-700 text-white shadow-rose-950/40', border: 'border-rose-200' },
-    { color: 'bg-gradient-to-br from-[#005029] via-emerald-600 to-teal-700 text-white shadow-emerald-950/40', border: 'border-emerald-200' },
+    { color: 'bg-gradient-to-br from-[#0E8256] via-emerald-600 to-teal-700 text-white shadow-emerald-950/40', border: 'border-emerald-200' },
     { color: 'bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 text-white shadow-amber-950/40', border: 'border-amber-200' },
     { color: 'bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 text-white shadow-indigo-950/40', border: 'border-blue-200' },
     { color: 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-purple-800 text-white shadow-purple-950/40', border: 'border-purple-200' },
@@ -117,7 +117,7 @@ const getLetterItemsForLanguage = (lang: Language): LetterCandyItem[] => {
 const getLetterItemsForWord = (targetWord: CrushWord | null, lang: Language): LetterCandyItem[] => {
   const colorStyles = [
     { color: 'bg-gradient-to-br from-rose-500 via-pink-600 to-rose-700 text-white shadow-rose-950/40', border: 'border-rose-200' },
-    { color: 'bg-gradient-to-br from-[#005029] via-emerald-600 to-teal-700 text-white shadow-emerald-950/40', border: 'border-emerald-200' },
+    { color: 'bg-gradient-to-br from-[#0E8256] via-emerald-600 to-teal-700 text-white shadow-emerald-950/40', border: 'border-emerald-200' },
     { color: 'bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 text-white shadow-amber-950/40', border: 'border-amber-200' },
     { color: 'bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 text-white shadow-indigo-950/40', border: 'border-blue-200' },
     { color: 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-purple-800 text-white shadow-purple-950/40', border: 'border-purple-200' },
@@ -943,20 +943,20 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
       )}
 
-      <header className="bg-[#005029] text-white p-3 sm:p-3.5 shadow-lg border-b-4 border-amber-400 shrink-0">
+      <header className="bg-[#0E8256] text-white p-3 sm:p-3.5 shadow-lg border-b-4 border-amber-400 shrink-0">
         <div className="max-w-xl mx-auto flex items-center justify-between">
           
           <div className="flex items-center space-x-2">
             {onBackToApp && (
               <button
                 onClick={onBackToApp}
-                className="p-1.5 rounded-full bg-[#023319] hover:bg-emerald-900 text-amber-300 transition-all"
+                className="p-1.5 rounded-full bg-[#085C40] hover:bg-emerald-900 text-amber-300 transition-all"
                 title="Back to Naija Lingo"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}
-            <div className="flex items-center space-x-1 bg-[#023319] px-2.5 py-1 rounded-full border border-amber-400/30">
+            <div className="flex items-center space-x-1 bg-[#085C40] px-2.5 py-1 rounded-full border border-amber-400/30">
               {[...Array(3)].map((_, i) => (
                 <Heart
                   key={i}
@@ -987,7 +987,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center space-x-1 bg-[#023319] px-3 py-1 rounded-full border border-amber-400/40 text-amber-300 font-extrabold text-xs">
+          <div className="flex items-center space-x-1 bg-[#085C40] px-3 py-1 rounded-full border border-amber-400/40 text-amber-300 font-extrabold text-xs">
             <Sparkles className="w-3.5 h-3.5 fill-amber-400" />
             <span>⭐ {score}</span>
           </div>
@@ -995,7 +995,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         </div>
 
         <div className="max-w-xl mx-auto mt-2 flex items-center justify-between gap-2 border-t border-emerald-800/80 pt-1.5">
-          <div className="flex items-center space-x-1.5 bg-[#023319] px-3 py-1 rounded-full border border-emerald-400/40">
+          <div className="flex items-center space-x-1.5 bg-[#085C40] px-3 py-1 rounded-full border border-emerald-400/40">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             <span className="text-xs font-bold text-emerald-100">Yoruba</span>
           </div>
@@ -1011,7 +1011,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
             onClick={() => setMode('fruit_match')}
             className={`py-2 rounded-xl transition-all ${
               mode === 'fruit_match'
-                ? 'bg-[#005029] text-amber-300 shadow-md font-extrabold'
+                ? 'bg-[#0E8256] text-amber-300 shadow-md font-extrabold'
                 : 'text-slate-700 hover:bg-amber-200/60'
             }`}
           >
@@ -1021,7 +1021,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
             onClick={() => setMode('lego_builder')}
             className={`py-2 rounded-xl transition-all ${
               mode === 'lego_builder'
-                ? 'bg-[#005029] text-amber-300 shadow-md font-extrabold'
+                ? 'bg-[#0E8256] text-amber-300 shadow-md font-extrabold'
                 : 'text-slate-700 hover:bg-amber-200/60'
             }`}
           >
@@ -1031,7 +1031,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
             onClick={() => setMode('speed_crush')}
             className={`py-2 rounded-xl transition-all ${
               mode === 'speed_crush'
-                ? 'bg-[#005029] text-amber-300 shadow-md font-extrabold'
+                ? 'bg-[#0E8256] text-amber-300 shadow-md font-extrabold'
                 : 'text-slate-700 hover:bg-amber-200/60'
             }`}
           >
@@ -1056,7 +1056,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
         
         {mode === 'fruit_match' && (
           <div className="space-y-3 animate-fadeIn">
-            <div className="bg-gradient-to-r from-[#005029] via-[#026837] to-[#005029] p-3 sm:p-4 rounded-3xl border-2 border-amber-300 shadow-xl text-white text-center space-y-1 relative overflow-hidden">
+            <div className="bg-gradient-to-r from-[#0E8256] via-[#12A669] to-[#0E8256] p-3 sm:p-4 rounded-3xl border-2 border-amber-300 shadow-xl text-white text-center space-y-1 relative overflow-hidden">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-widest bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-400/40">
                   {language} Alphabet Crush 🍬
@@ -1146,7 +1146,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
                   onClick={() => setBuilderDifficulty(d)}
                   className={`px-3 py-1 rounded-full uppercase text-[10px] font-extrabold ${
                     builderDifficulty === d
-                      ? 'bg-[#005029] text-amber-300'
+                      ? 'bg-[#0E8256] text-amber-300'
                       : 'bg-slate-200 text-slate-600'
                   }`}
                 >
@@ -1219,7 +1219,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
                   className="absolute transform -translate-x-1/2 p-2 px-3.5 rounded-2xl bg-white/95 border-2 border-amber-400 shadow-xl flex items-center space-x-1.5 font-bold text-xs text-slate-900 active:scale-125 transition-transform animate-pulse"
                 >
                   <span className="text-2xl">{item.word.itemEmoji}</span>
-                  <span className="font-serif font-extrabold text-[#005029]">{item.word.word}</span>
+                  <span className="font-serif font-extrabold text-[#0E8256]">{item.word.word}</span>
                 </button>
               ))}
             </div>
@@ -1231,7 +1231,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
       </main>
 
       <footer className="max-w-xl mx-auto w-full px-3 mt-4">
-        <div className="bg-[#005029] text-white p-3 rounded-2xl shadow-md border border-amber-400/40 flex items-center justify-between">
+        <div className="bg-[#0E8256] text-white p-3 rounded-2xl shadow-md border border-amber-400/40 flex items-center justify-between">
           
           <div className="flex items-center space-x-2.5">
             <div className="w-10 h-10 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-xl shadow-xs border-2 border-white">
@@ -1260,7 +1260,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
               🎉
             </div>
             <div>
-              <h2 className="font-serif font-extrabold text-2xl text-[#005029]">
+              <h2 className="font-serif font-extrabold text-2xl text-[#0E8256]">
                 Level {level - 1} Complete!
               </h2>
               <p className="text-xs text-slate-600 mt-1">
@@ -1279,7 +1279,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
                 if (mode === 'lego_builder') initLegoBuilder();
                 if (mode === 'speed_crush') initSpeedCrush();
               }}
-              className="w-full py-3 rounded-2xl bg-[#005029] hover:bg-[#023319] text-amber-300 font-extrabold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
+              className="w-full py-3 rounded-2xl bg-[#0E8256] hover:bg-[#085C40] text-amber-300 font-extrabold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
             >
               <span>Continue to Level {level}</span>
               <ArrowRight className="w-4 h-4" />
@@ -1304,7 +1304,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
             </div>
 
             <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs font-bold text-slate-800">
-              Total Score Earned: <span className="text-[#005029] font-extrabold text-base">⭐ {score}</span>
+              Total Score Earned: <span className="text-[#0E8256] font-extrabold text-base">⭐ {score}</span>
             </div>
 
             <div className="space-y-2">
