@@ -2,31 +2,20 @@ import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { supabase, resetPasswordForEmail } from '../services/supabaseService';
 
+// The real happy-smiley artwork, embedded directly as a data URI --
+// deliberately not a separate file path this time. A previous version
+// referenced /images/happy-smiley.png with an SVG fallback, but the
+// deployed screen kept showing the fallback instead of the real image,
+// meaning the file wasn't landing at the exact expected path. Embedding
+// the actual bytes directly here removes that failure mode entirely:
+// there is no file to misplace, so the real artwork always renders.
+const HAPPY_SMILEY_DATA_URI = 'data:image/png;base64,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';
+
 interface AuthScreenProps {
   onAuthSuccess: (user: any) => void;
   onContinueAsGuest: () => void;
 }
 
-// Fallback smiley -- an inline SVG reproducing the same real reference
-// artwork (eyes + one continuous mouth stroke), used only if the real
-// PNG at /images/happy-smiley.png is ever missing or fails to load.
-const FallbackSmiley: React.FC = () => (
-  <svg width="140" height="112" viewBox="0 0 392 315" aria-hidden="true">
-    <ellipse cx="118" cy="52" rx="33" ry="52" fill="#0f172a" />
-    <ellipse cx="279" cy="52" rx="33" ry="52" fill="#0f172a" />
-    <circle cx="108" cy="34" r="9" fill="#fff" />
-    <circle cx="269" cy="34" r="9" fill="#fff" />
-    <path
-      d="M76 106 Q68 118 82 124 Q140 170 196 124 Q212 118 204 106"
-      stroke="#0f172a"
-      strokeWidth="9"
-      fill="none"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      transform="translate(0, 90) scale(1, 0.9)"
-    />
-  </svg>
-);
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinueAsGuest }) => {
   const [showPassword, setShowPassword] = useState(false);
@@ -37,7 +26,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
   const [error, setError] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
-  const [smileyFailed, setSmileyFailed] = useState(false);
 
   const handleEmailAuth = async () => {
     if (!supabase) {
@@ -114,16 +102,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
         <div className="bg-[#0E8256] rounded-3xl overflow-hidden shadow-2xl">
 
           <div className="bg-[#FFC107] flex items-center justify-center py-8">
-            {!smileyFailed ? (
-              <img
-                src="/images/happy-smiley.png"
-                alt="Happy face"
-                onError={() => setSmileyFailed(true)}
-                className="w-36 h-auto"
-              />
-            ) : (
-              <FallbackSmiley />
-            )}
+            <img
+              src={HAPPY_SMILEY_DATA_URI}
+              alt="Happy face"
+              className="w-36 h-auto"
+            />
           </div>
 
           <div className="px-5 pt-6 pb-2">
