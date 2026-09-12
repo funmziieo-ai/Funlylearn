@@ -14,24 +14,19 @@ interface NaijaLingoPageProps {
   onOpenWordCrushPreview?: () => void;
 }
 
-// Connects each level to the word/quiz categories it unlocks.
-// Level 1 (Beginner, free) gets a small curated starter set rather than
-// the full Greetings list, so Level 2 still feels like real progress.
 const LEVEL_STARTER_WORD_IDS = ['l1', 'l4', 'l5', 'l8'];
 
 const LEVEL_CATEGORY_MAP: Record<number, string[]> = {
-  1: [], // handled via LEVEL_STARTER_WORD_IDS instead of a category
+  1: [],
   2: ['Greetings'],
   3: ['Food'],
   4: ['Family'],
   5: ['School'],
-  6: [], // Animals — no vocabulary written yet, handled as an empty state
+  6: [],
   7: ['Numbers'],
   8: ['Wisdom'],
 };
 
-// Word Crush isn't in LINGO_LEVELS since it's a different game format,
-// but it should still be a real gate, not a permanently-open preview.
 const WORD_CRUSH_UNLOCK_COINS = 50;
 
 function getWordsForLevel(levelId: number) {
@@ -90,8 +85,6 @@ const YorubaListenButton: React.FC<{ text: string; label?: string; className?: s
         return;
       }
     } catch (_err) {
-      // Real voice failed — no browser voice fallback, fail honestly
-      // instead, matching the same standard everywhere else in the app.
     }
     setLoading(false);
     setPlaying(false);
@@ -119,13 +112,13 @@ const YorubaListenButton: React.FC<{ text: string; label?: string; className?: s
         'inline-flex items-center space-x-1.5 rounded-full font-jakarta font-bold transition-all hover:scale-105 active:scale-95 ' +
         (playing
           ? 'bg-[#FF6B35] text-white px-3 py-1 text-xs animate-pulse'
-          : 'bg-emerald-100 hover:bg-emerald-200 text-[#064E3B] px-2.5 py-1 text-xs border border-emerald-300') +
+          : 'bg-emerald-100 hover:bg-emerald-200 text-[#0E8256] px-2.5 py-1 text-xs border border-emerald-300') +
         ' ' + className
       }
     >
       {loading ? (
         <>
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#064E3B]" />
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0E8256]" />
           <span className="text-[11px]">Loading...</span>
         </>
       ) : playing ? (
@@ -135,7 +128,7 @@ const YorubaListenButton: React.FC<{ text: string; label?: string; className?: s
         </>
       ) : (
         <>
-          <Volume2 className="w-3.5 h-3.5 text-[#064E3B]" />
+          <Volume2 className="w-3.5 h-3.5 text-[#0E8256]" />
           <span>{label} 🔊</span>
         </>
       )}
@@ -247,7 +240,6 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
           </div>
         </div>
 
-        {/* Coins Display */}
         <div className="bg-purple-950/60 p-3.5 rounded-2xl border border-purple-400/20 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-amber-400 flex items-center justify-center text-xl shadow-md">
@@ -270,7 +262,6 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
           </div>
         </div>
 
-        {/* Mama Titi Quote */}
         <div className="bg-purple-950/60 p-3.5 rounded-2xl border border-purple-400/20 flex items-start space-x-3">
           <MamaTitiAvatar size="sm" showOnlineStatus={false} />
           <p className="text-xs text-purple-100 italic leading-relaxed font-sans">
@@ -279,7 +270,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
         </div>
       </div>
 
-      {/* Naija Word Crush — now a real gate, not a permanent preview */}
+      {/* Naija Word Crush */}
       <div
         className={
           'p-4 rounded-3xl border-2 shadow-lg flex items-center justify-between gap-3 ' +
@@ -293,7 +284,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
             className={
               'w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-sm shrink-0 border-2 ' +
               (isWordCrushUnlocked
-                ? 'bg-[#005029] text-amber-300 border-amber-200'
+                ? 'bg-[#0E8256] text-amber-300 border-amber-200'
                 : 'bg-slate-100 text-slate-400 border-slate-200')
             }
           >
@@ -323,7 +314,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
         {isWordCrushUnlocked ? (
           <button
             onClick={onOpenWordCrushPreview}
-            className="px-4 py-2.5 rounded-2xl bg-[#005029] hover:bg-[#023319] text-amber-300 font-jakarta font-extrabold text-xs shadow-md transition-all shrink-0 flex items-center space-x-1"
+            className="px-4 py-2.5 rounded-2xl bg-[#0E8256] hover:bg-[#085C40] text-amber-300 font-jakarta font-extrabold text-xs shadow-md transition-all shrink-0 flex items-center space-x-1"
           >
             <span>Play</span>
             <Play className="w-3.5 h-3.5 fill-amber-300" />
@@ -375,7 +366,6 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
         </button>
       </div>
 
-      {/* Current level indicator — shown on Words and Game tabs so it's always clear what's being studied */}
       {activeTab !== 'levels' && (
         <button
           onClick={() => setActiveTab('levels')}
@@ -393,7 +383,6 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
         </button>
       )}
 
-      {/* TAB 1: Levels */}
       {activeTab === 'levels' && (
         <div className="space-y-4">
           <div className="text-center space-y-1">
@@ -493,7 +482,6 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
             })}
           </div>
 
-          {/* How to earn coins box */}
           <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 space-y-2">
             <h3 className="font-jakarta font-bold text-sm text-emerald-800">
               How to earn coins 🪙
@@ -520,7 +508,6 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
         </div>
       )}
 
-      {/* TAB 2: Word Cards — now filtered to the selected level's words only */}
       {activeTab === 'words' && (
         <div className="space-y-6">
           {levelWords.length === 0 ? (
@@ -547,7 +534,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between gap-2">
-                    <h2 className="font-serif text-3xl font-bold text-[#064E3B]">
+                    <h2 className="font-serif text-3xl font-bold text-[#0E8256]">
                       {wordOfTheDay.word}
                     </h2>
                     <YorubaListenButton text={wordOfTheDay.word} label="Listen Word" />
@@ -618,7 +605,6 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
         </div>
       )}
 
-      {/* TAB 3: Quiz Game — now filtered to the selected level's quizzes only */}
       {activeTab === 'game' && (
         <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-soft space-y-6">
           {levelQuizzes.length === 0 || !quiz ? (
@@ -633,7 +619,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
             </div>
           ) : (
             <>
-              <div className="bg-gradient-to-r from-emerald-600 to-[#064E3B] text-white p-3.5 px-4 rounded-2xl flex items-center justify-between shadow-xs">
+              <div className="bg-gradient-to-r from-emerald-600 to-[#0E8256] text-white p-3.5 px-4 rounded-2xl flex items-center justify-between shadow-xs">
                 <div className="flex items-center space-x-2.5">
                   <div className="p-2 rounded-xl bg-emerald-500/30 text-amber-300">
                     <MessageCircle className="w-5 h-5" />
@@ -674,7 +660,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                 <span className="text-xs font-jakarta font-bold text-purple-700 uppercase tracking-wide">
                   What is the meaning of:
                 </span>
-                <h2 className="font-serif text-3xl sm:text-4xl font-bold text-[#064E3B]">
+                <h2 className="font-serif text-3xl sm:text-4xl font-bold text-[#0E8256]">
                   "{quiz.word}"
                 </h2>
                 <YorubaListenButton text={quiz.word} label="Listen Pronunciation" />
