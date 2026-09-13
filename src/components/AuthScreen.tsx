@@ -92,8 +92,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
   };
 
   return (
-    <div className="min-h-screen bg-[#064E3B] flex flex-col items-center justify-center px-5 py-10">
-      <div className="w-full max-w-sm">
+    <div
+      className="min-h-screen flex flex-col items-center justify-center px-5 py-10 relative overflow-hidden"
+      style={{ background: 'linear-gradient(145deg, #7ED9A8 0%, #2FAE73 30%, #0E8256 60%, #064E3B 100%)' }}
+    >
+      <div className="w-full max-w-sm relative z-10">
 
         {/* Card now uses a distinctly brighter green (#0E8256) than the
             page behind it (#064E3B) -- previously both were the same
