@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home, Search, GraduationCap, Languages, Trophy, Smartphone, MoreHorizontal, User, Crown, X } from 'lucide-react';
+import { Home, Search, MoreHorizontal, User, Crown, X } from 'lucide-react';
 
 interface BottomNavProps {
   activeTab: string;
@@ -39,15 +39,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     { id: 'search', label: 'Search', icon: Search, onSelect: () => onTabChange('search'), isTabItem: true }
   ];
 
-  // Everything else lives in one "More" popover -- merged in from the
-  // old Navbar three-dot menu, plus Exam Prep now that it's moved out
-  // of the primary row (still one tap away, just not permanently
-  // visible, since Home's own Exam Prep card covers the common case).
+  // Trimmed down to just Profile -- Exam Prep, Naija Lingo, Leaderboard,
+  // and Parents are all already one tap away from Home's own feature
+  // cards, so keeping them duplicated here too was redundant. My
+  // Scholar Profile has no other home in the app, so it's the one
+  // thing that genuinely needs this menu.
   const moreItems = [
-    { id: 'notebook', label: 'Exam Prep', icon: GraduationCap, onSelect: () => onTabChange('notebook'), isTabItem: true },
-    { id: 'lingo', label: 'Naija Lingo', icon: Languages, onSelect: () => onTabChange('lingo'), isTabItem: true },
-    { id: 'board', label: 'Leaderboard', icon: Trophy, onSelect: () => onTabChange('board'), isTabItem: true },
-    { id: 'parent', label: 'Parents', icon: Smartphone, onSelect: () => onTabChange('parent'), isTabItem: true },
     {
       id: 'profile',
       label: 'My Scholar Profile',
