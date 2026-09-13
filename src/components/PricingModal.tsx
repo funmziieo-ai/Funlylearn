@@ -25,7 +25,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
   userId = 'guest-id'
 }) => {
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
-  const [currency, setCurrency] = useState<'NGN' | 'GBP' | 'USD'>('NGN');
   const [isLoadingPlan, setIsLoadingPlan] = useState<string | null>(null);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [successPlan, setSuccessPlan] = useState<SubscriptionPlan | null>(null);
@@ -34,32 +33,17 @@ export const PricingModal: React.FC<PricingModalProps> = ({
 
   if (!isOpen) return null;
 
-  const currencySymbol = currency === 'NGN' ? '₦' : currency === 'GBP' ? '£' : '$';
-
+  // Naira only for now -- GBP/UK and USD/Diaspora removed until real,
+  // currency-adjusted pricing is worked out, rather than shipping the
+  // placeholder same-nominal-number pricing that was there before.
   const handleSubscribe = async (plan: 'basic' | 'family') => {
     setIsLoadingPlan(plan);
     setPaymentError(null);
 
-    let amount: number;
-    if (currency === 'NGN') {
-      if (plan === 'basic') {
-        amount = billingInterval === 'monthly' ? 600000 : 4320000;
-      } else {
-        amount = billingInterval === 'monthly' ? 1200000 : 8640000;
-      }
-    } else if (currency === 'GBP') {
-      if (plan === 'basic') {
-        amount = billingInterval === 'monthly' ? 1000 : 7200;
-      } else {
-        amount = billingInterval === 'monthly' ? 2000 : 14400;
-      }
-    } else {
-      if (plan === 'basic') {
-        amount = billingInterval === 'monthly' ? 1000 : 7200;
-      } else {
-        amount = billingInterval === 'monthly' ? 2000 : 14400;
-      }
-    }
+    const amount =
+      plan === 'basic'
+        ? billingInterval === 'monthly' ? 600000 : 4320000
+        : billingInterval === 'monthly' ? 1200000 : 8640000;
 
     openPaystackCheckout({
       email: userEmail,
@@ -68,7 +52,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
       userId,
       childName: profile.name,
       classLevel: profile.classLevel,
-      currency,
+      currency: 'NGN',
       onSuccess: async (ref) => {
         setIsLoadingPlan(null);
         setIsConfirmingPayment(true);
@@ -212,78 +196,37 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 Choose the right plan for your child. Unlock unlimited homework explanations with Mama Titi!
               </p>
 
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-center gap-4 sm:gap-5 pt-3">
-
-                <div className="flex flex-col items-center gap-1.5">
-                  <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-emerald-200/80">
-                    Billing
-                  </span>
-                  <div className="bg-[#085C40] p-1 rounded-2xl border border-amber-400/30 flex items-center text-xs font-jakarta font-bold">
-                    <button
-                      onClick={() => setBillingInterval('monthly')}
-                      className={`px-3.5 py-1.5 rounded-xl transition-all ${
-                        billingInterval === 'monthly'
-                          ? 'bg-amber-400 text-slate-950 shadow-xs'
-                          : 'text-emerald-200 hover:text-white'
-                      }`}
-                    >
-                      Monthly
-                    </button>
-                    <button
-                      onClick={() => setBillingInterval('yearly')}
-                      className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center space-x-1 ${
-                        billingInterval === 'yearly'
-                          ? 'bg-amber-400 text-slate-950 shadow-xs'
-                          : 'text-emerald-200 hover:text-white'
-                      }`}
-                    >
-                      <span>Yearly</span>
-                      <span className="bg-[#FF6B35] text-white text-[9px] px-1.5 py-0.5 rounded-full">
-                        Save 40%
-                      </span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-center gap-1.5">
-                  <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-amber-300/80">
-                    Currency
-                  </span>
-                  <div className="bg-[#022C22] p-1 rounded-2xl border-2 border-emerald-400/40 flex items-center text-xs font-jakarta font-bold">
-                    <button
-                      onClick={() => setCurrency('NGN')}
+              <div className="flex items-center justify-center gap-1.5 pt-3">
+                <div className="bg-[#085C40] p-1 rounded-2xl border border-amber-400/30 flex items-center text-xs font-jakarta font-bold">
+                  <button
+                    onClick={() => setBillingInterval('monthly')}
                     className={`px-3.5 py-1.5 rounded-xl transition-all ${
-                      currency === 'NGN'
-                        ? 'bg-emerald-700 text-white shadow-xs'
+                      billingInterval === 'monthly'
+                        ? 'bg-amber-400 text-slate-950 shadow-xs'
                         : 'text-emerald-200 hover:text-white'
                     }`}
                   >
-                    🇳🇬 ₦ Nigeria
+                    Monthly
                   </button>
                   <button
-                    onClick={() => setCurrency('GBP')}
-                    className={`px-3.5 py-1.5 rounded-xl transition-all ${
-                      currency === 'GBP'
-                        ? 'bg-emerald-700 text-white shadow-xs'
+                    onClick={() => setBillingInterval('yearly')}
+                    className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center space-x-1 ${
+                      billingInterval === 'yearly'
+                        ? 'bg-amber-400 text-slate-950 shadow-xs'
                         : 'text-emerald-200 hover:text-white'
                     }`}
                   >
-                    🇬🇧 £ UK
+                    <span>Yearly</span>
+                    <span className="bg-[#FF6B35] text-white text-[9px] px-1.5 py-0.5 rounded-full">
+                      Save 40%
+                    </span>
                   </button>
-                  <button
-                    onClick={() => setCurrency('USD')}
-                    className={`px-3.5 py-1.5 rounded-xl transition-all ${
-                      currency === 'USD'
-                        ? 'bg-emerald-700 text-white shadow-xs'
-                        : 'text-emerald-200 hover:text-white'
-                    }`}
-                  >
-                    🇺🇸 $ Diaspora
-                  </button>
-                  </div>
                 </div>
-
               </div>
+
+              <p className="text-[11px] text-emerald-200/70 font-medium">
+                🇳🇬 Priced in Nigerian Naira · Cancel anytime
+              </p>
             </div>
 
             {paymentError && (
@@ -299,7 +242,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                   <div>
                     <h3 className="font-serif text-xl font-bold text-slate-800">Free</h3>
                     <div className="text-2xl font-bold text-slate-900 mt-1 font-serif">
-                      {currencySymbol}0
+                      ₦0
                       <span className="text-xs text-slate-500 font-normal"> / month</span>
                     </div>
                   </div>
@@ -362,38 +305,21 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                   <div>
                     <h3 className="font-serif text-xl font-bold text-[#0E8256]">Basic</h3>
                     <div className="text-2xl font-bold text-slate-900 mt-1 font-serif flex items-baseline flex-wrap gap-1.5">
-                      {currency === 'NGN' ? (
-                        billingInterval === 'monthly' ? (
-                          <>
-                            <span>₦6,000</span>
-                            <span className="text-xs text-slate-500 font-normal ml-1"> / month</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>₦3,600</span>
-                            <span className="text-xs text-slate-500 font-normal ml-1"> / mo, billed yearly</span>
-                            <span className="text-sm text-slate-400 font-normal line-through">₦6,000</span>
-                          </>
-                        )
+                      {billingInterval === 'monthly' ? (
+                        <>
+                          <span>₦6,000</span>
+                          <span className="text-xs text-slate-500 font-normal ml-1"> / month</span>
+                        </>
                       ) : (
-                        billingInterval === 'monthly' ? (
-                          <>
-                            <span>{currencySymbol}10</span>
-                            <span className="text-xs text-slate-500 font-normal ml-1"> / month</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>{currencySymbol}6</span>
-                            <span className="text-xs text-slate-500 font-normal ml-1"> / mo, billed yearly</span>
-                            <span className="text-sm text-slate-400 font-normal line-through">{currencySymbol}10</span>
-                          </>
-                        )
+                        <>
+                          <span>₦3,600</span>
+                          <span className="text-xs text-slate-500 font-normal ml-1"> / mo, billed yearly</span>
+                          <span className="text-sm text-slate-400 font-normal line-through">₦6,000</span>
+                        </>
                       )}
                     </div>
                     <p className="text-[11px] text-amber-800 font-medium mt-1">
-                      {currency === 'NGN'
-                        ? (billingInterval === 'yearly' ? '₦43,200 / year (save 40%)' : 'Flexible monthly billing')
-                        : (billingInterval === 'yearly' ? `${currencySymbol}72 / year (save 40%)` : 'Diaspora instant access')}
+                      {billingInterval === 'yearly' ? '₦43,200 / year (save 40%)' : 'Flexible monthly billing'}
                     </p>
                   </div>
 
@@ -454,39 +380,22 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 <div className="space-y-3">
                   <div>
                     <h3 className="font-serif text-xl font-bold text-amber-300">Family</h3>
-                    <div className="text-2xl font-bold text-white mt-1 font-serif flex items-baseline flex-wrap">
-                      {currency === 'NGN' ? (
-                        billingInterval === 'monthly' ? (
-                          <>
-                            <span>₦12,000</span>
-                            <span className="text-xs text-emerald-200 font-normal ml-1"> / month</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>₦7,200</span>
-                            <span className="text-xs text-emerald-200 font-normal ml-1"> / mo, billed yearly</span>
-                            <span className="text-sm text-emerald-400/70 font-normal line-through">₦12,000</span>
-                          </>
-                        )
+                    <div className="text-2xl font-bold text-white mt-1 font-serif flex items-baseline flex-wrap gap-1.5">
+                      {billingInterval === 'monthly' ? (
+                        <>
+                          <span>₦12,000</span>
+                          <span className="text-xs text-emerald-200 font-normal ml-1"> / month</span>
+                        </>
                       ) : (
-                        billingInterval === 'monthly' ? (
-                          <>
-                            <span>{currencySymbol}20</span>
-                            <span className="text-xs text-emerald-200 font-normal ml-1"> / month</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>{currencySymbol}12</span>
-                            <span className="text-xs text-emerald-200 font-normal ml-1"> / mo, billed yearly</span>
-                            <span className="text-sm text-emerald-400/70 font-normal line-through">{currencySymbol}20</span>
-                          </>
-                        )
+                        <>
+                          <span>₦7,200</span>
+                          <span className="text-xs text-emerald-200 font-normal ml-1"> / mo, billed yearly</span>
+                          <span className="text-sm text-emerald-400/70 font-normal line-through">₦12,000</span>
+                        </>
                       )}
                     </div>
                     <p className="text-[11px] text-amber-200 font-medium mt-1">
-                      {currency === 'NGN'
-                        ? (billingInterval === 'yearly' ? '₦86,400 / year (save 40%)' : 'Up to 3 children access')
-                        : (billingInterval === 'yearly' ? `${currencySymbol}144 / year (save 40%)` : 'Diaspora family bundle')}
+                      {billingInterval === 'yearly' ? '₦86,400 / year (save 40%)' : 'Up to 3 children access'}
                     </p>
                   </div>
 
