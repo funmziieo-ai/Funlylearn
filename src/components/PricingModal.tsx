@@ -182,21 +182,14 @@ export const PricingModal: React.FC<PricingModalProps> = ({
           </div>
         ) : (
           <div>
-            <div className="bg-[#0E8256] text-white p-6 sm:p-8 text-center space-y-3 relative overflow-hidden">
+            <div className="bg-[#0E8256] text-white p-6 sm:p-7 text-center space-y-4 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
-              
-              <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/40 text-xs font-jakarta font-bold uppercase">
-                Official Nigerian NERDC Companion
-              </span>
 
-              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-amber-300">
-                Upgrade FunlyLearn
+              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-white">
+                Choose your plan
               </h2>
-              <p className="text-xs sm:text-sm text-emerald-100 max-w-lg mx-auto">
-                Choose the right plan for your child. Unlock unlimited homework explanations with Mama Titi!
-              </p>
 
-              <div className="flex items-center justify-center gap-1.5 pt-3">
+              <div className="flex items-center justify-center gap-1.5">
                 <div className="bg-[#085C40] p-1 rounded-2xl border border-amber-400/30 flex items-center text-xs font-jakarta font-bold">
                   <button
                     onClick={() => setBillingInterval('monthly')}
@@ -223,10 +216,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                   </button>
                 </div>
               </div>
-
-              <p className="text-[11px] text-emerald-200/70 font-medium">
-                🇳🇬 Priced in Nigerian Naira · Cancel anytime
-              </p>
             </div>
 
             {paymentError && (
