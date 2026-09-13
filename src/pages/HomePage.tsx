@@ -9,7 +9,7 @@ import { UserProfile } from '../types';
 // wrong folder), whereas a public/ path that doesn't exist yet just
 // 404s quietly at runtime for that one image, caught below and
 // swapped back to the plain Lucide icon automatically. Drop each PNG
-// at public/illustrations/<name>.png whenever it's ready -- no code
+// at public/assets/images/<name>.png whenever it's ready -- no code
 // change needed, and nothing breaks in the meantime.
 
 interface HomePageProps {
@@ -51,7 +51,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Ya aworan tabi kọ ibeere kan fun Mama Titi'
         : 'Photo a question or ask Mama Titi anything',
       icon: Camera,
-      illustrationPath: '/illustrations/snap-homework.png',
+      illustrationPath: '/assets/images/snap-homework.png',
       bg: 'bg-amber-400',
       pillValue: profile.coins || 0,
       pillLabel: isYoruba ? 'owó' : 'coins',
@@ -64,7 +64,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Ṣe àdánwò gidi fún BECE, WAEC àti FSLC'
         : 'Real practice for BECE, WAEC & FSLC',
       icon: GraduationCap,
-      illustrationPath: '/illustrations/exam-prep.png',
+      illustrationPath: '/assets/images/exam-prep.png',
       bg: 'bg-emerald-500',
       pillValue: profile.totalCorrect || 0,
       pillLabel: isYoruba ? 'tọ̀nà' : 'correct',
@@ -77,7 +77,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Kọ Yoruba nipasẹ ere igbadun'
         : 'Learn Yoruba through fun games',
       icon: Languages,
-      illustrationPath: '/illustrations/naija-lingo.png',
+      illustrationPath: '/assets/images/naija-lingo.png',
       bg: 'bg-purple-500',
       pillValue: profile.lingoLevel || 1,
       pillLabel: isYoruba ? 'ipele' : 'level',
@@ -90,7 +90,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Wo bí o ṣe wà láàrin àwọn akẹ́kọ̀ọ́ mìíràn'
         : 'See how you rank among other scholars',
       icon: Trophy,
-      illustrationPath: '/illustrations/leaderboard.png',
+      illustrationPath: '/assets/images/leaderboard.png',
       bg: 'bg-orange-500',
       pillValue: profile.stars,
       pillLabel: isYoruba ? 'ìràwọ̀' : 'stars',
@@ -103,7 +103,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Àkíyèsí àti ìtọ́sọ́nà fún àwọn òbí'
         : 'Updates and guidance for parents',
       icon: Smartphone,
-      illustrationPath: '/illustrations/parents.png',
+      illustrationPath: '/assets/images/parents.png',
       bg: 'bg-sky-500',
       pillValue: null,
       pillLabel: '',
@@ -116,7 +116,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Ẹ̀kọ́ tí a ṣe pàtàkì fún kíkó padà'
         : 'A structured catch-up path just for you',
       icon: Heart,
-      illustrationPath: '/illustrations/catchup.png',
+      illustrationPath: '/assets/images/catchup.png',
       bg: 'bg-rose-500',
       pillValue: null,
       pillLabel: '',
@@ -126,6 +126,20 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-5 pb-28 font-sans">
+      {/* Scoped keyframes for the feature-card icon float -- defined
+          inline here rather than in a shared CSS file, since this is
+          the only place it's used and it keeps the effect self-
+          contained to this component. */}
+      <style>{`
+        @keyframes funly-gentle-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+        @keyframes funly-gentle-float-rotated {
+          0%, 100% { transform: translateY(0) rotate(-8deg); }
+          50% { transform: translateY(-6px) rotate(-8deg); }
+        }
+      `}</style>
 
       {/* Simple greeting card -- previously this also repeated
           Stars/Coins/Streak in a stats row, but each of those now
@@ -149,7 +163,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
           will drop in later, so no further layout change is needed
           once those assets exist -- just swap the icon for an <img>. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-        {featureCards.map((card) => {
+        {featureCards.map((card, idx) => {
           const Icon = card.icon;
           const imgFailed = failedIllustrations[card.id];
           const handleSelect = () => {
@@ -164,6 +178,16 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
               onNavigate(card.id);
             }
           };
+          // Each card's icon/illustration floats gently with a
+          // slightly different delay per card, so they don't all
+          // bob in perfect unison -- gives the grid a livelier,
+          // more organic feel rather than a mechanical, synced motion.
+          const floatStyle = {
+            animation: `funly-gentle-float 3.2s ease-in-out ${idx * 0.25}s infinite`
+          };
+          const floatStyleRotated = {
+            animation: `funly-gentle-float-rotated 3.2s ease-in-out ${idx * 0.25}s infinite`
+          };
           return (
             <button
               key={card.id}
@@ -171,10 +195,12 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
               className={`${card.bg} p-4 pb-3.5 rounded-3xl shadow-md text-left transition-all hover:scale-[1.02] active:scale-[0.98] relative overflow-hidden group min-h-[148px] flex flex-col justify-between`}
             >
               {/* Real 3D illustration once its file exists at
-                  public/illustrations/<name>.png -- falls back to the
+                  public/assets/images/<name>.png -- falls back to the
                   plain Lucide icon automatically if that file is
                   missing or fails to load, so nothing ever breaks or
-                  shows a broken-image icon to a user. */}
+                  shows a broken-image icon to a user. Both versions
+                  get the same gentle floating animation, so swapping
+                  in real illustrations later needs no further change. */}
               {!imgFailed ? (
                 <img
                   src={card.illustrationPath}
@@ -182,10 +208,14 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
                   onError={() =>
                     setFailedIllustrations((prev) => ({ ...prev, [card.id]: true }))
                   }
+                  style={floatStyle}
                   className="absolute -right-2 -bottom-2 w-28 h-28 object-contain pointer-events-none"
                 />
               ) : (
-                <Icon className="absolute -right-3 -bottom-3 w-24 h-24 text-white/25 rotate-[-8deg] pointer-events-none" />
+                <Icon
+                  style={floatStyleRotated}
+                  className="absolute -right-3 -bottom-3 w-24 h-24 text-white/25 pointer-events-none"
+                />
               )}
 
               <div className="relative z-10">
