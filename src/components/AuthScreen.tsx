@@ -94,7 +94,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-5 py-10 relative overflow-hidden"
-      style={{ background: 'linear-gradient(145deg, #7ED9A8 0%, #2FAE73 30%, #0E8256 60%, #064E3B 100%)' }}
+      style={{ background: 'linear-gradient(to bottom, #7ED9A8 0%, #2FAE73 30%, #0E8256 60%, #064E3B 100%)' }}
     >
       <div className="w-full max-w-sm relative z-10">
 
