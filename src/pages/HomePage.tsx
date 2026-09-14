@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, GraduationCap, Languages, Trophy, Smartphone, Heart } from 'lucide-react';
+import { Camera, GraduationCap, Languages, Trophy, Smartphone } from 'lucide-react';
 import { UserProfile } from '../types';
 
 // Real 3D illustrations (CC0-licensed, from 3dicons.co) load from the
@@ -108,19 +108,6 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
       pillValue: null,
       pillLabel: '',
       pillColor: 'text-sky-600'
-    },
-    {
-      id: 'catchup',
-      title: isYoruba ? 'Kò Sí Ní Ilé-Ìwé Lọ́wọ́lọ́wọ́' : 'Not in School Right Now',
-      subtitle: isYoruba
-        ? 'Ẹ̀kọ́ tí a ṣe pàtàkì fún kíkó padà'
-        : 'A structured catch-up path just for you',
-      icon: Heart,
-      illustrationPath: '/assets/images/catchup.png',
-      bg: 'bg-rose-500',
-      pillValue: null,
-      pillLabel: '',
-      pillColor: 'text-rose-600'
     }
   ];
 
@@ -166,18 +153,7 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         {featureCards.map((card, idx) => {
           const Icon = card.icon;
           const imgFailed = failedIllustrations[card.id];
-          const handleSelect = () => {
-            if (card.id === 'catchup') {
-              // Same flag the Landing Page's "Start Catching Up" CTA
-              // sets during onboarding -- reusing it here so a child
-              // who selects this later gets the same tailored framing,
-              // then goes straight into chat with Mama Titi.
-              onProfileUpdate({ ...profile, isOutOfSchool: true });
-              onNavigate('chat');
-            } else {
-              onNavigate(card.id);
-            }
-          };
+          const handleSelect = () => onNavigate(card.id);
           // Each card's icon/illustration floats gently with a
           // slightly different delay per card, so they don't all
           // bob in perfect unison -- gives the grid a livelier,
