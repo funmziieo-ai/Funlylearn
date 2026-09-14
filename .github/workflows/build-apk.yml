@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK + AAB
 
 # This entire build runs on GitHub's servers, not your Chromebook.
 # Trigger it manually from the "Actions" tab in your repo, or it will
@@ -21,11 +21,24 @@ jobs:
         with:
           node-version: '22'
 
+      # Your live site is built with Bun (bun.lockb in the repo, and the
+      # actual Vercel build command is "bun run build"), not npm. Using
+      # npm here instead would let npm freely resolve its own dependency
+      # versions from package.json, which could differ from the exact
+      # versions Bun resolved and that your production site actually
+      # runs on -- a real source of "works on Vercel, breaks in the APK"
+      # bugs. Bun is used here for exactly the core app dependencies to
+      # avoid that; the Capacitor tooling steps below are unrelated new
+      # packages, not part of the existing lockfile, so npm/npx is fine
+      # for those specifically.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Install web app dependencies
-        run: npm install
+        run: bun install
 
       - name: Build the web app
-        run: npm run build
+        run: bun run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
@@ -37,9 +50,6 @@ jobs:
           npm install @capacitor/android
           npm install @capacitor/browser
 
-      # Creates the Capacitor config file directly, instead of running
-      # the interactive "npx cap init" command (which can't run
-      # unattended in an automated cloud build).
       - name: Create Capacitor config
         run: |
           cat > capacitor.config.json << 'EOF'
@@ -58,14 +68,6 @@ jobs:
             npx cap sync android
           fi
 
-      # The android/ folder is regenerated fresh every single build (it's
-      # never committed to the repo), so any manual permission edit would
-      # just get overwritten next time. This patches the camera permission
-      # into the freshly-generated manifest, every time, right after it's
-      # created — CameraUploadModal.tsx uses plain browser getUserMedia()
-      # directly rather than a native Capacitor plugin, so without this,
-      # the WebView has no native permission to grant, causing "could not
-      # access camera" even though the same code works fine in a browser.
       - name: Add camera permission to the freshly-generated manifest
         run: |
           sed -i 's/<manifest /<manifest xmlns:tools="http:\/\/schemas.android.com\/tools" /' android/app/src/main/AndroidManifest.xml
@@ -74,11 +76,6 @@ jobs:
           echo "Manifest after patching:"
           cat android/app/src/main/AndroidManifest.xml
 
-      # Uses the existing Mama Titi photo as a real placeholder app icon,
-      # instead of shipping Capacitor's generic default icon. This isn't
-      # a polished, professionally-designed icon (that's a later task,
-      # likely for whoever handles final Play Store polish) — it just
-      # gives testers something recognizable instead of a blank default.
       - name: Set up app icon from existing Mama Titi photo (placeholder)
         run: |
           mkdir -p assets
@@ -92,16 +89,10 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      # Decodes the keystore secret back into a real file the build can
-      # sign with. Requires these GitHub Secrets to already be set:
-      # KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
       - name: Decode signing keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
 
-      # Verifies the decoded file is genuinely a valid keystore BEFORE
-      # attempting to build with it - gives a clear, direct answer
-      # instead of Gradle's confusing wrapped error message.
       - name: Verify the decoded keystore is valid
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -113,7 +104,7 @@ jobs:
           echo "Attempting to list the keystore contents:"
           keytool -list -keystore android/app/release.keystore -storepass "$KEYSTORE_PASSWORD"
 
-      - name: Build the signed release APK
+      - name: Build the signed release APK (for Loveworld / direct install)
         working-directory: ./android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -127,15 +118,38 @@ jobs:
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
+      # New: builds the Android App Bundle format Google Play actually
+      # requires for production submission -- a plain APK alone is not
+      # accepted for new app releases. Uses the exact same keystore and
+      # signing secrets as the APK build above, just a different Gradle
+      # task and output format.
+      - name: Build the signed release AAB (for Google Play)
+        working-directory: ./android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
       - name: Rename APK to FunlyLearn.apk
         run: mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/FunlyLearn.apk
 
-      # Makes the finished, signed APK downloadable from the "Actions"
-      # tab, under this workflow run, once it finishes. This is the file
-      # you upload to Loveworld Appstore (or any third-party Android
-      # store that accepts a plain signed APK).
-      - name: Upload signed APK
+      - name: Rename AAB to FunlyLearn.aab
+        run: mv android/app/build/outputs/bundle/release/app-release.aab android/app/build/outputs/bundle/release/FunlyLearn.aab
+
+      - name: Upload signed APK (Loveworld / direct install)
         uses: actions/upload-artifact@v4
         with:
           name: FunlyLearn-release-apk
           path: android/app/build/outputs/apk/release/FunlyLearn.apk
+
+      - name: Upload signed AAB (Google Play submission)
+        uses: actions/upload-artifact@v4
+        with:
+          name: FunlyLearn-release-aab
+          path: android/app/build/outputs/bundle/release/FunlyLearn.aab
