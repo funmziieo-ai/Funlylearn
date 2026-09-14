@@ -11,6 +11,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A normal run of this whole workflow takes 5-15 minutes. If any
+    # single step hangs (a stuck interactive prompt, a stalled
+    # download), this forces the whole job to fail after 30 minutes
+    # instead of silently running for hours with no clear signal that
+    # something is actually wrong.
+    timeout-minutes: 30
 
     steps:
       - name: Check out the repo
@@ -63,9 +69,9 @@ jobs:
       - name: Add Android platform (only if not already present)
         run: |
           if [ ! -d "android" ]; then
-            npx cap add android
+            npx cap add android < /dev/null
           else
-            npx cap sync android
+            npx cap sync android < /dev/null
           fi
 
       - name: Add camera permission to the freshly-generated manifest
@@ -76,10 +82,10 @@ jobs:
           echo "Manifest after patching:"
           cat android/app/src/main/AndroidManifest.xml
 
-      - name: Set up app icon from existing Mama Titi photo (placeholder)
+      - name: Set up app icon
         run: |
           mkdir -p assets
-          cp src/assets/images/mama_titi_official_1784860280943.jpg assets/icon.png
+          cp src/assets/images/icon.png assets/icon.png
           npm install @capacitor/assets --save-dev
           npx capacitor-assets generate --android
 
