@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile, UserSubscription } from '../types';
-import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow, getNotebookDailyViewCount, incrementNotebookDailyViewCount, getExamPrepDailyAttemptCount, incrementExamPrepDailyAttemptCount } from '../services/supabaseService';
+import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow, getNotebookDailyViewCount, incrementNotebookDailyViewCount, getExamPrepDailyAttemptCount, incrementExamPrepDailyAttemptCount, getWeeklyRevisionQuiz, WeeklyRevisionQuestion } from '../services/supabaseService';
 
 export interface ExamQuestion {
   id: string;
@@ -244,6 +244,20 @@ function groupSessionsBySubject(sessions: StudySession[]): SubjectGroup[] {
   );
 }
 
+// Powers the "This Week's Revision" view -- everything the child has
+// actually asked Mama Titi or snapped as homework in the last 7 days,
+// grouped by subject, so a parent or the child can see the week's real
+// coverage at a glance rather than scrolling the full all-time notebook.
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getThisWeeksSubjectGroups(allSessions: StudySession[]): SubjectGroup[] {
+  const cutoff = Date.now() - SEVEN_DAYS_MS;
+  const recentSessions = allSessions.filter(
+    (session) => new Date(session.latestDate).getTime() >= cutoff
+  );
+  return groupSessionsBySubject(recentSessions);
+}
+
 export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisionProps> = ({
   profile,
   onProfileUpdate,
@@ -303,20 +317,77 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   const studySessions = useMemo(() => groupIntoSessions(compiledNotes), [compiledNotes]);
 
   const subjectGroups = useMemo(() => groupSessionsBySubject(studySessions), [studySessions]);
+  const weeklySubjectGroups = useMemo(() => getThisWeeksSubjectGroups(studySessions), [studySessions]);
+
+  // Which slice of the notebook is showing -- the full all-time record,
+  // or just the last 7 days for quick weekly revision.
+  const [notebookMode, setNotebookMode] = useState<'all' | 'week'>('all');
+  const visibleSubjectGroups = notebookMode === 'week' ? weeklySubjectGroups : subjectGroups;
 
   const [activeNotebookSubject, setActiveNotebookSubject] = useState<string | null>(null);
   React.useEffect(() => {
-    if (subjectGroups.length === 0) {
+    if (visibleSubjectGroups.length === 0) {
       setActiveNotebookSubject(null);
       return;
     }
-    if (!activeNotebookSubject || !subjectGroups.some(g => g.subject === activeNotebookSubject)) {
-      setActiveNotebookSubject(subjectGroups[0].subject);
+    if (!activeNotebookSubject || !visibleSubjectGroups.some(g => g.subject === activeNotebookSubject)) {
+      setActiveNotebookSubject(visibleSubjectGroups[0].subject);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subjectGroups]);
+  }, [visibleSubjectGroups]);
 
-  const activeSubjectGroup = subjectGroups.find(g => g.subject === activeNotebookSubject) || null;
+  const activeSubjectGroup = visibleSubjectGroups.find(g => g.subject === activeNotebookSubject) || null;
+
+  // Weekly AI-generated revision quiz -- fetched (or generated, on the
+  // first visit each week) only when the child actually switches to
+  // "This Week's Revision" and there's real material to quiz on.
+  // Kept as separate state from the regular Exam Prep quiz flow since
+  // it's a distinct set of questions built from this child's own real
+  // topics, not the shared curriculum bank.
+  const [weeklyQuiz, setWeeklyQuiz] = useState<WeeklyRevisionQuestion[] | null>(null);
+  const [isLoadingWeeklyQuiz, setIsLoadingWeeklyQuiz] = useState(false);
+  const [weeklyQuizError, setWeeklyQuizError] = useState<string | null>(null);
+  const [weeklyQuizAnswers, setWeeklyQuizAnswers] = useState<Record<string, number>>({});
+  const [weeklyQuizSubmitted, setWeeklyQuizSubmitted] = useState(false);
+  const [showWeeklyQuiz, setShowWeeklyQuiz] = useState(false);
+
+  const handleStartWeeklyQuiz = async () => {
+    if (weeklySubjectGroups.length === 0) return;
+    setShowWeeklyQuiz(true);
+    setWeeklyQuizAnswers({});
+    setWeeklyQuizSubmitted(false);
+
+    // Already have this week's quiz loaded -- no need to re-fetch.
+    if (weeklyQuiz) return;
+
+    setIsLoadingWeeklyQuiz(true);
+    setWeeklyQuizError(null);
+
+    const weeklyTopics = weeklySubjectGroups.flatMap((group) =>
+      group.sessions.map((session) => ({
+        subject: group.subject,
+        topic: session.exchanges[0]?.topic || ''
+      }))
+    );
+
+    const result = await getWeeklyRevisionQuiz(userId, profile.classLevel, profile.language, weeklyTopics);
+
+    if (result && result.questions.length > 0) {
+      setWeeklyQuiz(result.questions);
+    } else {
+      setWeeklyQuizError("Couldn't build this week's quiz right now. Please try again in a moment.");
+    }
+    setIsLoadingWeeklyQuiz(false);
+  };
+
+  const handleSelectWeeklyAnswer = (questionId: string, optionIndex: number) => {
+    if (weeklyQuizSubmitted) return;
+    setWeeklyQuizAnswers((prev) => ({ ...prev, [questionId]: optionIndex }));
+  };
+
+  const weeklyQuizScore = weeklyQuiz
+    ? weeklyQuiz.filter((q) => weeklyQuizAnswers[q.id] === q.correctOptionIndex).length
+    : 0;
 
   const [examData, setExamData] = useState<ExamType[]>(
     EXAM_META.map(meta => ({ ...meta, subjects: [] }))
@@ -650,9 +721,49 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
         {activeView === 'notebook' && (
           <div className="rounded-3xl border-2 border-amber-300/80 shadow-xl overflow-hidden animate-fadeIn bg-amber-100">
 
-            {subjectGroups.length > 1 && (
-              <div className="flex items-end space-x-1 px-4 sm:px-6 pt-4 overflow-x-auto no-scrollbar">
-                {subjectGroups.map((group) => (
+            {/* All Notes / This Week's Revision toggle -- the weekly
+                view is just the last 7 days of the same real sessions,
+                filtered and re-grouped, so a parent or child can see
+                what's actually been covered this week without scrolling
+                the full all-time notebook. */}
+            <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-4">
+              <button
+                onClick={() => setNotebookMode('all')}
+                className={`px-4 py-2 rounded-full text-xs font-jakarta font-bold transition-all ${
+                  notebookMode === 'all'
+                    ? 'bg-[#064E3B] text-white'
+                    : 'bg-white/60 text-slate-600 hover:bg-white'
+                }`}
+              >
+                All Notes
+              </button>
+              <button
+                onClick={() => setNotebookMode('week')}
+                className={`px-4 py-2 rounded-full text-xs font-jakarta font-bold transition-all ${
+                  notebookMode === 'week'
+                    ? 'bg-[#064E3B] text-white'
+                    : 'bg-white/60 text-slate-600 hover:bg-white'
+                }`}
+              >
+                This Week's Revision
+              </button>
+            </div>
+
+            {notebookMode === 'week' && weeklySubjectGroups.length > 0 && (
+              <div className="px-4 sm:px-6 pt-3">
+                <button
+                  onClick={handleStartWeeklyQuiz}
+                  className="w-full py-3 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white font-jakarta font-bold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
+                >
+                  <span>🎯</span>
+                  <span>Take This Week's Quiz</span>
+                </button>
+              </div>
+            )}
+
+            {visibleSubjectGroups.length > 1 && (
+              <div className="flex items-end space-x-1 px-4 sm:px-6 pt-3 overflow-x-auto no-scrollbar">
+                {visibleSubjectGroups.map((group) => (
                   <button
                     key={group.subject}
                     onClick={() => setActiveNotebookSubject(group.subject)}
@@ -737,12 +848,16 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                       Upgrade for Unlimited Access
                     </button>
                   </div>
-                ) : subjectGroups.length === 0 ? (
+                ) : visibleSubjectGroups.length === 0 ? (
                   <div className="p-6 rounded-2xl bg-white/70 border border-slate-200 text-center space-y-1">
                     <span className="text-3xl block">📚</span>
-                    <p className="text-sm font-medium text-slate-600">No homework sessions yet</p>
+                    <p className="text-sm font-medium text-slate-600">
+                      {notebookMode === 'week' ? 'Nothing covered this week yet' : 'No homework sessions yet'}
+                    </p>
                     <p className="text-xs text-slate-400">
-                      Chat with Mama Titi about your homework to start building your notebook!
+                      {notebookMode === 'week'
+                        ? `Chat with Mama Titi this week to build ${profile.name}'s weekly revision!`
+                        : 'Chat with Mama Titi about your homework to start building your notebook!'}
                     </p>
                   </div>
                 ) : !activeSubjectGroup ? null : (
@@ -754,10 +869,48 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                       return (
                         <div key={session.sessionId} className="relative space-y-3 pb-8 border-b-2 border-dashed border-slate-300 last:border-b-0">
 
-                          <div className="flex items-start justify-between gap-3">
-                            <span className="text-xs text-slate-500 font-mono">
-                              {new Date(session.latestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </span>
+                          {/* Class-notebook style heading -- Name, Date,
+                              Subject, and Time laid out like the
+                              fill-in-the-blank header on a real school
+                              exercise book page, instead of just a bare
+                              date. Time is pulled from the same
+                              timestamp already used for the date. */}
+                          <div className="grid grid-cols-2 gap-x-5 gap-y-2 pb-1">
+                            <div className="flex items-baseline gap-1.5 min-w-0">
+                              <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
+                                Name:
+                              </span>
+                              <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1">
+                                {profile.name}
+                              </span>
+                            </div>
+                            <div className="flex items-baseline gap-1.5 min-w-0">
+                              <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
+                                Date:
+                              </span>
+                              <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1">
+                                {new Date(session.latestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                            </div>
+                            <div className="flex items-baseline gap-1.5 min-w-0">
+                              <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
+                                Subject:
+                              </span>
+                              <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1">
+                                {activeSubjectGroup.subject}
+                              </span>
+                            </div>
+                            <div className="flex items-baseline gap-1.5 min-w-0">
+                              <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
+                                Time:
+                              </span>
+                              <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1">
+                                {new Date(session.latestDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end">
                             <span
                               className={`shrink-0 -rotate-6 border-2 rounded-md px-3 py-1 text-[11px] font-jakarta font-extrabold tracking-wide uppercase bg-white/70 ${
                                 session.resolved
@@ -1274,6 +1427,110 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
         )}
 
       </div>
+
+      {/* Weekly Revision Quiz -- fresh AI-generated questions built
+          from this child's own real topics from the past 7 days,
+          cached per week so this doesn't regenerate on every open. */}
+      {showWeeklyQuiz && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border-2 border-orange-300 shadow-2xl max-w-lg w-full my-8 p-5 sm:p-6 space-y-5">
+
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-lg sm:text-xl font-bold text-[#064E3B]">
+                🎯 {profile.name}'s Weekly Quiz
+              </h3>
+              <button
+                onClick={() => setShowWeeklyQuiz(false)}
+                className="p-1.5 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            {isLoadingWeeklyQuiz ? (
+              <div className="py-10 text-center space-y-2">
+                <span className="text-3xl block animate-bounce">🧠</span>
+                <p className="text-sm text-slate-600">Building a quiz from this week's topics...</p>
+              </div>
+            ) : weeklyQuizError ? (
+              <div className="py-8 text-center space-y-3">
+                <p className="text-sm text-rose-600">{weeklyQuizError}</p>
+                <button
+                  onClick={handleStartWeeklyQuiz}
+                  className="px-5 py-2.5 rounded-2xl bg-[#064E3B] text-white text-xs font-jakarta font-bold"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : weeklyQuiz && weeklyQuizSubmitted ? (
+              <div className="space-y-4">
+                <div className="text-center p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-emerald-50 border-2 border-amber-300">
+                  <p className="font-serif text-3xl font-bold text-[#064E3B]">
+                    {weeklyQuizScore} / {weeklyQuiz.length}
+                  </p>
+                  <p className="text-xs text-slate-600 mt-1">
+                    {weeklyQuizScore === weeklyQuiz.length
+                      ? `Perfect score, ${profile.name}! 🎉`
+                      : "Great effort -- review the ones you missed below."}
+                  </p>
+                </div>
+                {weeklyQuiz.map((q, idx) => {
+                  const userAnswer = weeklyQuizAnswers[q.id];
+                  const isCorrect = userAnswer === q.correctOptionIndex;
+                  return (
+                    <div key={q.id} className={`p-4 rounded-2xl border-2 ${isCorrect ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'}`}>
+                      <p className="text-sm font-bold text-slate-900">{idx + 1}. {q.question}</p>
+                      <p className="text-xs text-slate-600 mt-1">
+                        Correct answer: <strong>{q.options[q.correctOptionIndex]}</strong>
+                      </p>
+                      {q.explanation && (
+                        <p className="text-xs text-slate-500 italic mt-1">{q.explanation}</p>
+                      )}
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={() => setShowWeeklyQuiz(false)}
+                  className="w-full py-3 rounded-2xl bg-[#064E3B] text-white font-jakarta font-bold text-sm"
+                >
+                  Done
+                </button>
+              </div>
+            ) : weeklyQuiz ? (
+              <div className="space-y-5">
+                {weeklyQuiz.map((q, idx) => (
+                  <div key={q.id} className="space-y-2.5">
+                    <p className="text-sm font-bold text-slate-900">{idx + 1}. {q.question}</p>
+                    <div className="grid grid-cols-1 gap-2">
+                      {q.options.map((opt, oIdx) => (
+                        <button
+                          key={oIdx}
+                          onClick={() => handleSelectWeeklyAnswer(q.id, oIdx)}
+                          className={`text-left px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
+                            weeklyQuizAnswers[q.id] === oIdx
+                              ? 'border-[#064E3B] bg-emerald-50 text-[#064E3B] font-bold'
+                              : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setWeeklyQuizSubmitted(true)}
+                  disabled={Object.keys(weeklyQuizAnswers).length < weeklyQuiz.length}
+                  className="w-full py-3 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] disabled:opacity-40 disabled:cursor-not-allowed text-white font-jakarta font-bold text-sm"
+                >
+                  Submit Answers
+                </button>
+              </div>
+            ) : null}
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
