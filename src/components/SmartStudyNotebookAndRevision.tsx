@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile, UserSubscription } from '../types';
-import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow, getNotebookDailyViewCount, incrementNotebookDailyViewCount, getExamPrepDailyAttemptCount, incrementExamPrepDailyAttemptCount, getWeeklyRevisionQuiz, WeeklyRevisionQuestion } from '../services/supabaseService';
+import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow, getNotebookDailyViewCount, incrementNotebookDailyViewCount, getExamPrepDailyAttemptCount, incrementExamPrepDailyAttemptCount, getWeeklyRevisionQuiz, WeeklyRevisionQuestion, getClassNotesForSession, ClassNotesResult } from '../services/supabaseService';
 
 export interface ExamQuestion {
   id: string;
@@ -257,6 +257,111 @@ function getThisWeeksSubjectGroups(allSessions: StudySession[]): SubjectGroup[] 
   );
   return groupSessionsBySubject(recentSessions);
 }
+
+// Renders one homework session as real class-notebook notes -- a
+// topic heading, organized sections, and revision questions -- styled
+// after an actual Nigerian exercise book page (underlined section
+// titles, numbered lists). No Mama Titi name, no "Question"/"Answer"
+// labels, no chat transcript formatting. Fetches (or triggers
+// first-time generation of) the transformed notes itself, on mount,
+// since this is a per-entry async operation independent of the rest
+// of the notebook page.
+const ClassNotesEntry: React.FC<{
+  sessionId: string;
+  topic: string;
+  mamaReply: string;
+  subject: string;
+  classLevel: string;
+  language: string;
+}> = ({ sessionId, topic, mamaReply, subject, classLevel, language }) => {
+  const [notes, setNotes] = useState<ClassNotesResult | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setHasError(false);
+
+    getClassNotesForSession(sessionId, topic, mamaReply, subject, classLevel, language).then((result) => {
+      if (cancelled) return;
+      if (result) {
+        setNotes(result);
+      } else {
+        setHasError(true);
+      }
+      setIsLoading(false);
+    });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  if (isLoading) {
+    return (
+      <div className="py-6 flex items-center space-x-2 text-xs text-slate-400 italic">
+        <span className="w-3 h-3 rounded-full border-2 border-slate-300 border-t-slate-500 animate-spin" />
+        <span>Writing up these notes...</span>
+      </div>
+    );
+  }
+
+  if (hasError || !notes) {
+    // Honest fallback -- shows the real topic that was covered rather
+    // than silently showing nothing, without pretending a full note
+    // was generated when it wasn't.
+    return (
+      <div className="py-2">
+        <p className="font-serif text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
+          {topic}
+        </p>
+        <p className="text-xs text-slate-400 italic mt-2">
+          Notes for this topic couldn't be prepared right now.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 font-serif">
+      <h3 className="text-lg sm:text-xl font-bold text-slate-900 underline decoration-2 underline-offset-4">
+        {notes.noteHeading}
+      </h3>
+
+      {notes.sections.map((section, i) => (
+        <div key={i} className="space-y-1.5">
+          <p className="font-bold text-sm text-slate-900 underline decoration-1 underline-offset-2">
+            {section.title}
+          </p>
+          {section.isList && section.listItems ? (
+            <ol className="list-decimal list-inside space-y-1 text-sm text-slate-800 leading-relaxed">
+              {section.listItems.map((item, j) => (
+                <li key={j}>{item}</li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-slate-800 leading-relaxed">
+              {section.content}
+            </p>
+          )}
+        </div>
+      ))}
+
+      {notes.revisionQuestions.length > 0 && (
+        <div className="space-y-1.5 pt-2">
+          <p className="font-bold text-sm text-slate-900 underline decoration-1 underline-offset-2">
+            Revision Questions
+          </p>
+          <ol className="list-decimal list-inside space-y-1.5 text-sm text-slate-800 leading-relaxed">
+            {notes.revisionQuestions.map((q, i) => (
+              <li key={i}>{q}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisionProps> = ({
   profile,
@@ -864,7 +969,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   <div className="space-y-10 pt-2">
                     {activeSubjectGroup.sessions.map((session, idx) => {
                       const firstExchange = session.exchanges[0];
-                      const laterExchanges = session.exchanges.slice(1);
 
                       return (
                         <div key={session.sessionId} className="relative space-y-3 pb-8 border-b-2 border-dashed border-slate-300 last:border-b-0">
@@ -910,74 +1014,14 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-end">
-                            <span
-                              className={`shrink-0 -rotate-6 border-2 rounded-md px-3 py-1 text-[11px] font-jakarta font-extrabold tracking-wide uppercase bg-white/70 ${
-                                session.resolved
-                                  ? 'border-emerald-600 text-emerald-700'
-                                  : 'border-amber-500 text-amber-700'
-                              }`}
-                            >
-                              {session.resolved ? 'Correct ✅' : 'Practicing 💪'}
-                            </span>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-[#FF6B35]">
-                              Question
-                            </span>
-                            <p className="font-jakarta font-bold text-sm sm:text-base text-slate-900">
-                              {firstExchange.topic}
-                            </p>
-                          </div>
-
-                          {firstExchange.mamaReply && (
-                            <div className="space-y-1.5">
-                              <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-amber-700">
-                                Mama Titi's Guidance
-                              </span>
-                              <p className="text-xs sm:text-[13px] text-slate-700 leading-relaxed italic pl-3 border-l-2 border-amber-300">
-                                {firstExchange.mamaReply}
-                              </p>
-                            </div>
-                          )}
-
-                          {laterExchanges.length > 0 ? (
-                            <div className="space-y-3 pt-1">
-                              {laterExchanges.map((exchange, exIdx) => {
-                                const isLast = exIdx === laterExchanges.length - 1;
-                                return (
-                                  <div key={exchange.id} className="space-y-1">
-                                    <span className={`text-[10px] font-jakarta font-bold uppercase tracking-wider ${
-                                      isLast && session.resolved ? 'text-emerald-700' : 'text-slate-400'
-                                    }`}>
-                                      {isLast ? `${profile.name}'s Final Answer` : `${profile.name}'s Answer (Attempt ${exIdx + 1})`}
-                                    </span>
-                                    <p className={
-                                      isLast
-                                        ? `p-3 rounded-xl border text-sm font-bold ${
-                                            session.resolved
-                                              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                                              : 'bg-white border-slate-200 text-slate-900'
-                                          }`
-                                        : 'text-xs text-slate-400 line-through decoration-slate-300 pl-1'
-                                    }>
-                                      {exchange.topic}
-                                    </p>
-                                    {isLast && exchange.mamaReply && (
-                                      <p className="text-[11px] text-slate-600 italic pl-3 border-l-2 border-slate-200">
-                                        {exchange.mamaReply}
-                                      </p>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p className="text-[11px] text-slate-400 italic pt-1">
-                              Waiting for {profile.name} to answer this one.
-                            </p>
-                          )}
+                          <ClassNotesEntry
+                            sessionId={session.sessionId}
+                            topic={firstExchange.topic}
+                            mamaReply={(session.exchanges[session.exchanges.length - 1]?.mamaReply) || firstExchange.mamaReply || ''}
+                            subject={activeSubjectGroup.subject}
+                            classLevel={profile.classLevel}
+                            language={profile.language}
+                          />
 
                         </div>
                       );
