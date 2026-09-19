@@ -675,3 +675,58 @@ export async function getWeeklyRevisionQuiz(
     return null;
   }
 }
+
+export interface ClassNoteSection {
+  title: string;
+  content?: string;
+  isList?: boolean;
+  listItems?: string[];
+}
+
+export interface ClassNotesResult {
+  noteHeading: string;
+  sections: ClassNoteSection[];
+  revisionQuestions: string[];
+}
+
+// Fetches (or triggers first-time generation of) the real class-notes
+// version of a homework session -- turns the raw chat exchange into
+// proper structured notes with a heading, organized sections, and
+// revision questions, with no mention of Mama Titi or the original
+// question/answer format. Cached per session in the Edge Function, so
+// this only actually calls the AI once per session, ever.
+export async function getClassNotesForSession(
+  sessionId: string,
+  topic: string,
+  mamaReply: string,
+  subject: string,
+  classLevel: string,
+  language: string
+): Promise<ClassNotesResult | null> {
+  if (!supabaseUrl) return null;
+
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/generate-class-notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, topic, mamaReply, subject, classLevel, language })
+    });
+
+    if (!res.ok) {
+      console.warn('Class notes request failed:', res.status);
+      return null;
+    }
+
+    const data = await res.json();
+    if (!data.noteHeading) return null;
+
+    return {
+      noteHeading: data.noteHeading,
+      sections: data.sections || [],
+      revisionQuestions: data.revisionQuestions || []
+    };
+  } catch (e) {
+    console.warn('Error fetching class notes:', e);
+    return null;
+  }
+}
