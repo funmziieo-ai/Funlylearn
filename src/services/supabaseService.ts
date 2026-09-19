@@ -634,3 +634,44 @@ export async function searchAppContent(userId: string, query: string): Promise<S
     return { topics: [], homework: [] };
   }
 }
+
+export interface WeeklyRevisionQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation: string;
+}
+
+// Fetches (or triggers first-time generation of) this week's revision
+// quiz -- built from the child's own real topics covered in the last
+// 7 days. The Edge Function itself handles caching per (user, week),
+// so calling this repeatedly in the same week is cheap and safe; it
+// only actually calls the AI on the very first call each week.
+export async function getWeeklyRevisionQuiz(
+  userId: string,
+  classLevel: string,
+  language: string,
+  weeklyTopics: { subject: string; topic: string }[]
+): Promise<{ questions: WeeklyRevisionQuestion[]; cached: boolean } | null> {
+  if (!supabaseUrl || weeklyTopics.length === 0) return null;
+
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/generate-weekly-revision-quiz`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, classLevel, language, weeklyTopics })
+    });
+
+    if (!res.ok) {
+      console.warn('Weekly revision quiz request failed:', res.status);
+      return null;
+    }
+
+    const data = await res.json();
+    return { questions: data.questions || [], cached: data.cached || false };
+  } catch (e) {
+    console.warn('Error fetching weekly revision quiz:', e);
+    return null;
+  }
+}
