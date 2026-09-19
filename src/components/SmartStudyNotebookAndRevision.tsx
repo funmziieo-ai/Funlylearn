@@ -191,6 +191,22 @@ interface StudySession {
   exchanges: HomeworkRecord[];
   resolved: boolean;
   latestDate: string;
+  firstDate: string;
+}
+
+// Mama Titi's chat classifies the subject freeform at reply time,
+// which has produced inconsistent naming for what's really the same
+// subject (e.g. "English" vs "English Studies" showing up as two
+// separate tabs). Normalized here, at the one place session subjects
+// are set, so every downstream grouping (tabs, day-pages) already
+// sees the canonical name -- no duplicate tabs, no separate pages for
+// what's actually one subject.
+function normalizeSubjectName(subject: string | null): string | null {
+  if (!subject) return subject;
+  const trimmed = subject.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'english studies' || lower === 'english language') return 'English';
+  return trimmed;
 }
 
 function groupIntoSessions(records: HomeworkRecord[]): StudySession[] {
@@ -201,15 +217,19 @@ function groupIntoSessions(records: HomeworkRecord[]): StudySession[] {
     if (!sessionMap.has(key)) {
       sessionMap.set(key, {
         sessionId: key,
-        subject: record.subject,
+        subject: normalizeSubjectName(record.subject),
         exchanges: [],
         resolved: false,
-        latestDate: record.createdAt
+        latestDate: record.createdAt,
+        firstDate: record.createdAt
       });
     }
     const session = sessionMap.get(key)!;
     session.exchanges.push(record);
     session.latestDate = record.createdAt;
+    if (new Date(record.createdAt) < new Date(session.firstDate)) {
+      session.firstDate = record.createdAt;
+    }
     if (record.wasCorrect) session.resolved = true;
   }
 
@@ -241,6 +261,42 @@ function groupSessionsBySubject(sessions: StudySession[]): SubjectGroup[] {
 
   return Array.from(subjectMap.values()).sort(
     (a, b) => new Date(b.latestDate).getTime() - new Date(a.latestDate).getTime()
+  );
+}
+
+interface DayPage {
+  dateKey: string;
+  displayDate: string;
+  sessions: StudySession[];
+}
+
+// Groups a subject's sessions into daily "pages" -- everything asked
+// about that subject on the same calendar day lands on one page
+// together, exactly like a real notebook where a day's lesson(s) all
+// go on the same page, with a new page starting the next day. Grouped
+// by firstDate (the day a topic was first asked), not latestDate, so
+// a topic stays on the day it was originally written even if a child
+// revisits and finally resolves it days later.
+function groupSessionsByDay(sessions: StudySession[]): DayPage[] {
+  const dayMap = new Map<string, DayPage>();
+
+  for (const session of sessions) {
+    const d = new Date(session.firstDate);
+    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (!dayMap.has(dateKey)) {
+      dayMap.set(dateKey, {
+        dateKey,
+        displayDate: d.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+        sessions: []
+      });
+    }
+    dayMap.get(dateKey)!.sessions.push(session);
+  }
+
+  // Most recent day first; sessions within a day stay in their
+  // existing most-recent-first order.
+  return Array.from(dayMap.values()).sort(
+    (a, b) => b.dateKey.localeCompare(a.dateKey)
   );
 }
 
@@ -966,66 +1022,56 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                     </p>
                   </div>
                 ) : !activeSubjectGroup ? null : (
-                  <div className="space-y-10 pt-2">
-                    {activeSubjectGroup.sessions.map((session, idx) => {
-                      const firstExchange = session.exchanges[0];
+                  <div className="space-y-12 pt-2">
+                    {groupSessionsByDay(activeSubjectGroup.sessions).map((dayPage) => (
+                      <div key={dayPage.dateKey} className="space-y-6">
 
-                      return (
-                        <div key={session.sessionId} className="relative space-y-3 pb-8 border-b-2 border-dashed border-slate-300 last:border-b-0">
-
-                          {/* Class-notebook style heading -- Name, Date,
-                              Subject, and Time laid out like the
-                              fill-in-the-blank header on a real school
-                              exercise book page, instead of just a bare
-                              date. Time is pulled from the same
-                              timestamp already used for the date. */}
-                          <div className="grid grid-cols-2 gap-x-5 gap-y-2 pb-1">
-                            <div className="flex items-baseline gap-1.5 min-w-0">
-                              <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
-                                Name:
-                              </span>
-                              <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1">
-                                {profile.name}
-                              </span>
-                            </div>
-                            <div className="flex items-baseline gap-1.5 min-w-0">
-                              <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
-                                Date:
-                              </span>
-                              <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1">
-                                {new Date(session.latestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                              </span>
-                            </div>
-                            <div className="flex items-baseline gap-1.5 min-w-0">
-                              <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
-                                Subject:
-                              </span>
-                              <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1">
-                                {activeSubjectGroup.subject}
-                              </span>
-                            </div>
-                            <div className="flex items-baseline gap-1.5 min-w-0">
-                              <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
-                                Time:
-                              </span>
-                              <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1">
-                                {new Date(session.latestDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                              </span>
-                            </div>
-                          </div>
-
-                          <ClassNotesEntry
-                            sessionId={session.sessionId}
-                            topic={firstExchange.topic}
-                            mamaReply={(session.exchanges[session.exchanges.length - 1]?.mamaReply) || firstExchange.mamaReply || ''}
-                            subject={activeSubjectGroup.subject}
-                            classLevel={profile.classLevel}
-                            language={profile.language}
-                          />
-
+                        {/* Day page header -- one page per day, exactly
+                            like a real notebook: everything asked about
+                            this subject on this day lives together here,
+                            under one date, rather than being scattered
+                            as separate all-time entries. */}
+                        <div className="pb-2 border-b-2 border-slate-800 flex items-baseline justify-between gap-3">
+                          <p className="font-serif text-base sm:text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
+                            {dayPage.displayDate}
+                          </p>
+                          <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
+                            {profile.name}
+                          </span>
                         </div>
-                      );
-                    })}
+
+                        <div className="space-y-8">
+                          {dayPage.sessions.map((session) => {
+                            const firstExchange = session.exchanges[0];
+
+                            return (
+                              <div key={session.sessionId} className="relative space-y-3 pb-6 border-b border-dashed border-slate-300 last:border-b-0">
+
+                                <div className="flex items-baseline gap-1.5 min-w-0">
+                                  <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
+                                    Time:
+                                  </span>
+                                  <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1 max-w-[140px]">
+                                    {new Date(session.firstDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                                  </span>
+                                </div>
+
+                                <ClassNotesEntry
+                                  sessionId={session.sessionId}
+                                  topic={firstExchange.topic}
+                                  mamaReply={(session.exchanges[session.exchanges.length - 1]?.mamaReply) || firstExchange.mamaReply || ''}
+                                  subject={activeSubjectGroup.subject}
+                                  classLevel={profile.classLevel}
+                                  language={profile.language}
+                                />
+
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                      </div>
+                    ))}
                   </div>
                 )}
 
