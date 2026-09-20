@@ -676,25 +676,18 @@ export async function getWeeklyRevisionQuiz(
   }
 }
 
-export interface ClassNoteSection {
-  title: string;
-  content?: string;
-  isList?: boolean;
-  listItems?: string[];
-}
-
 export interface ClassNotesResult {
-  noteHeading: string;
-  sections: ClassNoteSection[];
+  question: string;
+  explanation: string;
   revisionQuestions: string[];
 }
 
 // Fetches (or triggers first-time generation of) the real class-notes
-// version of a homework session -- turns the raw chat exchange into
-// proper structured notes with a heading, organized sections, and
-// revision questions, with no mention of Mama Titi or the original
-// question/answer format. Cached per session in the Edge Function, so
-// this only actually calls the AI once per session, ever.
+// version of a homework session -- the child's actual question,
+// followed by Mama Titi's explanation rewritten into clean readable
+// prose, plus a few revision questions. No mention of Mama Titi by
+// name, no conversational filler. Cached per session in the Edge
+// Function, so this only actually calls the AI once per session, ever.
 export async function getClassNotesForSession(
   sessionId: string,
   topic: string,
@@ -718,11 +711,11 @@ export async function getClassNotesForSession(
     }
 
     const data = await res.json();
-    if (!data.noteHeading) return null;
+    if (!data.explanation) return null;
 
     return {
-      noteHeading: data.noteHeading,
-      sections: data.sections || [],
+      question: data.question || topic,
+      explanation: data.explanation,
       revisionQuestions: data.revisionQuestions || []
     };
   } catch (e) {
