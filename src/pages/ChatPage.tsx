@@ -25,11 +25,19 @@ interface ChatPageProps {
   onGoToLingo?: () => void;
   isGuest?: boolean;
   userId: string;
+  // Which bottom-nav tab is currently selected -- 'home' or 'chat'.
+  // Both render this same component (there is no separate Home
+  // screen), so this is what lets "Snap Homework" actually DO
+  // something different from "Home" when tapped, instead of the two
+  // being functionally identical -- which is exactly what made it
+  // look broken when a child bounced between them expecting a
+  // different screen and saw the exact same one both times.
+  activeTab?: string;
 }
 
-const FREE_DAILY_MESSAGE_LIMIT = 5;
+const FREE_DAILY_MESSAGE_LIMIT = 3;
 
-// Quick multiple-choice app polls — shown one at a time as the child
+// Quick multiple-choice app polls -- shown one at a time as the child
 // uses the app, never all at once and never repeating a question
 // already answered. Once every question here has been answered, no
 // more popups ever appear. Replaces the earlier thumbs up/down
@@ -56,7 +64,7 @@ const POLL_STORAGE_KEY = 'funlylearn_answered_polls';
 
 // A user has full (Basic/Family) access if they have an active paid
 // plan, OR are still inside a valid trial period. Everyone else is
-// on the real Free tier limits — this was previously never checked
+// on the real Free tier limits -- this was previously never checked
 // anywhere, so every user had unrestricted access regardless of plan.
 function isPremiumActive(subscription?: UserSubscription): boolean {
   if (!subscription) return false;
@@ -72,7 +80,9 @@ function isPremiumActive(subscription?: UserSubscription): boolean {
 const FUN_LOADING_MESSAGES_EN = [
   'Mama Titi is cooking up a story for you',
   'Getting a Nigerian story ready',
-  'Mama Titi is thinking of Tunde and Amaka',
+  'Mama Titi is thinking of Chidi and Amina',
+  'Mama Titi is thinking of Bimpe and Musa',
+  'Mama Titi is thinking of Ngozi and Yusuf',
   'Visiting Ojuelegba market for ideas',
   'Stirring the egusi soup of knowledge',
   'Mama Titi is on her way',
@@ -126,7 +136,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   onOpenPricingModal,
   onGoToLingo,
   isGuest = false,
-  userId
+  userId,
+  activeTab
 }) => {
   const isYoruba = profile.language === 'yo';
 
@@ -143,20 +154,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [loadingMessage, setLoadingMessage] = useState('');
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
 
-  // Tracks the current "study session" — a group of exchanges on the
-  // same topic, from first attempt through to the child finally
-  // getting it right. Persists across retries (wrong answers), and
-  // resets to a fresh id once the child answers correctly, so the next
-  // question starts its own new session rather than continuing this
-  // one. Used to group the notebook's "how Mama Titi explained it"
-  // view — currently scoped to Math only, since that's where we have
-  // real, substantial curriculum content.
-  //
-  // Stored in localStorage rather than pure component state — pure
-  // state was lost on any remount (switching tabs, a page refresh),
-  // silently starting a new disconnected session even mid-conversation,
-  // which meant the final correct answer sometimes never joined the
-  // earlier attempts it belonged with.
   const SESSION_ID_KEY = 'funlylearn_current_math_session';
   const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
     try {
@@ -252,8 +249,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
   useEffect(() => {
     if (isLoading) {
-      let idx = 0;
-      setLoadingMessage(loadingMessages[0]);
+      // Randomized starting point -- previously always began at index
+      // 0, so a quick load (common case) could show the exact same
+      // message, and the same mentioned names, every single time.
+      let idx = Math.floor(Math.random() * loadingMessages.length);
+      setLoadingMessage(loadingMessages[idx]);
       loadingIntervalRef.current = setInterval(() => {
         idx = (idx + 1) % loadingMessages.length;
         setLoadingMessage(loadingMessages[idx]);
@@ -270,10 +270,20 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     };
   }, [isLoading]);
 
-  // Picks the next unanswered poll question and shows it — called after
-  // a few real exchanges. Does nothing once every question in the set
-  // has been answered (the "disappears when all questions have been
-  // answered" behavior).
+  // Fires every time the "Snap Homework" tab is selected -- including
+  // when it is re-selected while this same component is already
+  // mounted (Home and Snap Homework never remount each other, they are
+  // literally the same component instance), which is exactly why a
+  // plain useEffect-on-mount would not have worked here. This is what
+  // actually makes "Snap Homework" DO something distinct from "Home"
+  // now: tapping it opens the camera prompt immediately, rather than
+  // landing on an idle chat screen indistinguishable from Home.
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      setIsCameraOpen(true);
+    }
+  }, [activeTab]);
+
   const maybeShowPoll = () => {
     if (activePoll) return;
     const nextUnanswered = APP_POLL_QUESTIONS.find(
@@ -296,8 +306,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   };
 
   const handleDismissPoll = () => {
-    // Dismissing doesn't count as answered — it'll be offered again
-    // after the next few exchanges, rather than being lost entirely.
     setActivePoll(null);
   };
 
@@ -315,14 +323,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     startNewSession();
   };
 
-  // Homework Snap is now open to everyone, including Free tier — this
-  // lets a family experience the feature (increasingly standard across
-  // competitor apps) before deciding to upgrade, rather than hitting a
-  // hard wall immediately. Usage is still naturally capped: a snap goes
-  // through handleSend just like a typed question, so Free users get
-  // up to FREE_DAILY_MESSAGE_LIMIT total interactions/day (snaps and
-  // questions combined), enforced by the existing dailyLimitReached
-  // check in handleSend — no separate quota needed.
   const handleOpenCamera = () => {
     setIsCameraOpen(true);
   };
@@ -339,9 +339,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     const imgToSend = imagePayload || croppedImage;
     if (!textToSend.trim() && !imgToSend) return;
 
-    // Real enforcement of the Free tier's daily message limit — this
-    // was previously never checked, so every user had unlimited
-    // messages regardless of subscription status.
     if (dailyLimitReached) {
       onOpenPricingModal();
       return;
@@ -413,8 +410,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         setTimeout(() => setCoinsEarnedToast(null), 2500);
       }
 
-      // Count this message toward the Free tier's daily limit — was
-      // previously never called, so the limit check above always saw 0.
       if (!isPremium) {
         onIncrementDailyMessages();
       }
@@ -434,52 +429,41 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         ).length
       });
 
-      // Log a real record of what was actually worked on, so the
-      // Parent Dashboard and Notebook can show genuine sessions instead
-      // of mock data. "topic" is the child's own message, "mamaReply"
-      // is Mama Titi's actual explanation — both saved now, so the
-      // notebook can show real study content, not just a bare log.
-      // sessionId groups this with any earlier retries on the same
-      // topic. Currently scoped to Math only (response.subject ===
-      // 'Mathematics') for the full session-grouped notebook view,
-      // since that's where we have real, substantial content — a
-      // deliberate, known scope limit while this feature proves out,
-      // not a bug. Other subjects still log normally, just without
-      // session grouping in the notebook yet.
-      const isMathSession = response.subject === 'Mathematics';
+      // Bug fix: a photo-only submission previously saved the generic
+      // upload phrase ("Mama Titi please analyze this homework photo
+      // for me!") as the notebook topic, since userMsg.text IS that
+      // generic phrase whenever no text was typed alongside the photo.
+      // That generic phrase then broke note generation downstream (no
+      // real question for the AI to write notes about). Now uses the
+      // actual topic detected from the photo itself when available.
+      const notebookTopic = (imgToSend && response.detectedTopic)
+        ? response.detectedTopic
+        : userMsg.text;
+
+      // Bug fix: session tracking was previously restricted to Math
+      // only (isMathSession ? currentSessionId : undefined), which
+      // silently broke multi-attempt tracking for every other subject
+      // -- English, Science, etc. sessions could never accumulate
+      // attempts or show a real "Attempts: 2" count in the notebook.
+      // Session tracking now applies universally.
       saveHomeworkRecord(
         userId,
-        userMsg.text.slice(0, 120),
+        notebookTopic.slice(0, 120),
         isCorrect,
         response.subject || undefined,
-        isMathSession ? currentSessionId : undefined,
+        currentSessionId,
         response.reply
       );
 
-      // Once the child gets it right, this topic is resolved — the
-      // next question should start its own fresh session, not continue
-      // grouping with this one.
       if (isCorrect) {
         startNewSession();
       }
 
-      // Show a quick app poll after a few real exchanges, using the
-      // count of the child's own messages so far in this session.
       const userMessageCount = newHistory.filter(m => m.sender === 'user').length;
       if (userMessageCount >= POLL_TRIGGER_MESSAGE_COUNT) {
         maybeShowPoll();
       }
 
-      // Automatic parent update — opens WhatsApp pre-filled the moment
-      // a parent number is saved, instead of requiring the child to
-      // remember to visit the Parent Dashboard and tap "Tell Parents"
-      // manually. Note: WhatsApp itself requires a human tap to
-      // actually send (no fully silent sending is possible without
-      // WhatsApp's paid Business API) — this removes the "hunt for the
-      // button" step, not the final send tap. Tied to the same every-
-      // 3rd-correct-answer rhythm as the streak bonus, so parents get
-      // real updates at genuine celebration moments rather than being
-      // pinged (and the child interrupted) after every single answer.
       if (isCorrect && currentStreak % 3 === 0 && profile.parentWhatsApp) {
         const parentMessage = encodeURIComponent(
           `🌟 *Mama Titi Learning Update* 🌟\n\nHello! ${profile.name} just answered correctly with Mama Titi! 🎉\n\nTotal Stars: ⭐ ${profile.stars + (isCorrect ? 10 : 0)}\nKeep encouraging ${profile.name}! 🇳🇬`
@@ -566,7 +550,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       className="flex flex-col h-[calc(100vh-64px)] max-w-2xl mx-auto bg-[#FFFBF5] relative overflow-hidden"
     >
 
-      {/* New Chat Confirmation — replaces the jarring native browser confirm() */}
       {showNewChatConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-6">
           <div className="bg-white rounded-3xl p-6 text-center space-y-4 max-w-sm w-full shadow-2xl border-2 border-emerald-200">
@@ -597,9 +580,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
-      {/* Quick App Poll Popup — one question at a time, from a rotating
-          set, never repeating an answered one, never showing once
-          they're all answered. */}
       {activePoll && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-6">
           <div className="bg-white rounded-3xl p-6 text-center space-y-4 max-w-sm w-full shadow-2xl border-2 border-amber-300 relative">
@@ -628,7 +608,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
-      {/* Celebration Splash */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-8 text-center space-y-4 mx-6 shadow-2xl border-4 border-amber-400">
@@ -681,7 +660,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
-      {/* Coins Toast */}
       {coinsEarnedToast && (
         <div className="fixed top-20 right-4 z-40 bg-amber-400 text-slate-900 px-4 py-2 rounded-full shadow-lg font-bold text-sm animate-bounce">
           +{coinsEarnedToast} 🪙 {isYoruba ? 'owó ere!' : 'coins earned!'}
@@ -707,7 +685,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
-      {/* Header — avatar removed here since Navbar already shows Mama Titi's photo app-wide; coins/language also live in Navbar */}
       <div className="bg-[#064E3B] text-white p-3 sm:p-4 shadow-sm flex items-center justify-between shrink-0">
         <div className="flex items-center space-x-3">
           <div>
@@ -718,7 +695,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       </div>
 
-      {/* Snap Homework Bar — tapping the banner itself opens Snap (camera), not Upload. New Chat now lives here too, beside Snap/Upload. Basic/Family feature — gated for Free tier. Small top margin added so it doesn't feel flush against the header above it. */}
       <div
         onClick={handleOpenCamera}
         className="mt-2 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2.5 px-3.5 sm:px-4 shadow-sm flex items-center justify-between shrink-0 rounded-2xl mx-2 cursor-pointer"
@@ -762,7 +738,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       </div>
 
-      {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-44">
         {messages.map((msg, idx) => {
           const isMama = msg.sender === 'mama_titi';
@@ -840,11 +815,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           );
         })}
 
-        {/* Suggested question chips — shown only on a fresh conversation
-            (just the welcome message, nothing typed yet), giving a
-            first-time user something purposeful to tap immediately
-            instead of a large empty screen. Disappears once a real
-            conversation starts. */}
         {messages.length === 1 && !isLoading && (
           <div className="flex flex-wrap gap-2 -mt-2">
             {(isYoruba
@@ -872,7 +842,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           </div>
         )}
 
-        {/* Fun Loading — avatar removed here, only the header avatar remains */}
         {isLoading && (
           <div className="flex items-start space-x-2">
             <div className="bg-white rounded-3xl rounded-tl-xs border-2 border-emerald-600/30 px-4 py-3 shadow-md max-w-[80%]">
@@ -892,7 +861,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Cropped Image Preview */}
       {croppedImage && (
         <div className="fixed bottom-[144px] sm:bottom-[149px] left-0 right-0 max-w-2xl mx-auto px-3 z-30">
           <div className="bg-slate-900/95 backdrop-blur-md text-white p-2.5 px-3.5 rounded-2xl border-2 border-amber-400 shadow-xl flex items-center justify-between gap-3">
@@ -937,7 +905,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
-      {/* Bottom Input Bar */}
       <div className="fixed bottom-[80px] sm:bottom-[84px] left-0 right-0 max-w-2xl mx-auto px-3 pb-1 z-30">
         {dailyLimitReached && (
           <button
@@ -945,8 +912,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             className="w-full mb-2 py-2.5 px-4 rounded-2xl bg-amber-100 border-2 border-amber-300 text-amber-900 text-xs font-bold text-center shadow-md"
           >
             {isYoruba
-              ? `Ẹ ti dé opin ọrọ ọjọ́ (${FREE_DAILY_MESSAGE_LIMIT}). Tẹ láti ṣe igbesoke!`
-              : `You've reached today's ${FREE_DAILY_MESSAGE_LIMIT} free messages. Tap to upgrade!`}
+              ? `Ẹ ti lo ìtàn ọ̀fẹ́ mẹta (${FREE_DAILY_MESSAGE_LIMIT}) fun oni. Ṣe igbesoke!`
+              : `You've used ${FREE_DAILY_MESSAGE_LIMIT} free stories today. Upgrade!`}
           </button>
         )}
         <div className="bg-white/95 backdrop-blur-md rounded-full border-2 border-slate-300 shadow-2xl p-1.5 flex items-center space-x-2">
