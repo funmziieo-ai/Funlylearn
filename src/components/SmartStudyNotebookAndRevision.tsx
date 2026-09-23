@@ -1265,9 +1265,9 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                 )}
 
               </div>
+              </div>
               </>
             )}
-            </div>
           </div>
         )}
 
