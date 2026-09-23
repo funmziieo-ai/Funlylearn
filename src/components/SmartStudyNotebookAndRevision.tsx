@@ -302,49 +302,88 @@ function groupSessionsByDay(sessions: StudySession[]): DayPage[] {
 
 // Powers the "This Week's Revision" view -- everything the child has
 // actually asked Mama Titi or snapped as homework in the last 7 days,
-// grouped by subject, so a parent or the child can see the week's real
-// coverage at a glance rather than scrolling the full all-time notebook.
+// grouped by subject, PLUS any topic that needed 2 or more attempts
+// (a real struggle area) even if it falls just outside that window --
+// these keep surfacing here automatically for continued revision
+// rather than disappearing the moment a week passes.
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function getThisWeeksSubjectGroups(allSessions: StudySession[]): SubjectGroup[] {
   const cutoff = Date.now() - SEVEN_DAYS_MS;
-  const recentSessions = allSessions.filter(
-    (session) => new Date(session.latestDate).getTime() >= cutoff
-  );
+  const recentSessions = allSessions.filter((session) => {
+    const isRecent = new Date(session.latestDate).getTime() >= cutoff;
+    const neededHelp = session.exchanges.length >= 2;
+    return isRecent || neededHelp;
+  });
   return groupSessionsBySubject(recentSessions);
 }
 
-// Renders one homework session as real class-notebook notes -- a
-// topic heading, organized sections, and revision questions -- styled
-// after an actual Nigerian exercise book page (underlined section
-// titles, numbered lists). No Mama Titi name, no "Question"/"Answer"
-// labels, no chat transcript formatting. Fetches (or triggers
-// first-time generation of) the transformed notes itself, on mount,
-// since this is a per-entry async operation independent of the rest
-// of the notebook page.
+// Detects a generic starter prompt like "Help me with Mathematics" (the
+// suggestion chips shown on a fresh chat) rather than a real, specific
+// question. There's no actual topic to write notes about in these
+// cases -- just the bare subject name, no fabricated content.
+function isGenericSubjectPrompt(topic: string): boolean {
+  const normalized = topic.trim().toLowerCase();
+  return /^(help me with|ran mi lọwọ pẹlu)\s+\w+/.test(normalized) && normalized.split(' ').length <= 5;
+}
+
+// Catches non-substantive replies -- "I don't know", empty, or too
+// short to contain any real teaching content. These get skipped
+// entirely rather than being forced into fake "notes."
+function isJunkReply(mamaReply: string): boolean {
+  const normalized = mamaReply.trim().toLowerCase();
+  if (normalized.length < 15) return true;
+  const junkPhrases = [
+    "i don't know", "i dont know", "not sure", "i cannot help",
+    "i can't help", "i'm not able", "no idea", "n ko mo", "mi o mo"
+  ];
+  return junkPhrases.some((phrase) => normalized.includes(phrase));
+}
+
+// Renders one homework session in the WON/NEEDS HELP notebook format:
+// time, auto-detected topic, status + story used, the real guiding
+// question, the child's own answer, and the attempt count. Reports
+// its result up to the day-page via onResult so the day-level summary
+// box (WON/NEEDS HELP counts, stories list) can aggregate across every
+// entry on the page as each one's notes finish loading.
 const ClassNotesEntry: React.FC<{
   sessionId: string;
-  topic: string;
-  mamaReply: string;
+  exchanges: { topic: string; mamaReply: string }[];
   subject: string;
   classLevel: string;
   language: string;
-}> = ({ sessionId, topic, mamaReply, subject, classLevel, language }) => {
+  wasResolved: boolean;
+  time: string;
+  onResult: (sessionId: string, result: ClassNotesResult | 'skipped' | 'error') => void;
+}> = ({ sessionId, exchanges, subject, classLevel, language, wasResolved, time, onResult }) => {
   const [notes, setNotes] = useState<ClassNotesResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
+  const firstTopic = exchanges[0]?.topic || '';
+  const lastReply = exchanges[exchanges.length - 1]?.mamaReply || exchanges[0]?.mamaReply || '';
+  const isGeneric = isGenericSubjectPrompt(firstTopic);
+  const isJunk = isJunkReply(lastReply);
+
   React.useEffect(() => {
+    if (isGeneric || isJunk) {
+      setIsLoading(false);
+      onResult(sessionId, 'skipped');
+      return;
+    }
+
     let cancelled = false;
     setIsLoading(true);
     setHasError(false);
 
-    getClassNotesForSession(sessionId, topic, mamaReply, subject, classLevel, language).then((result) => {
+    getClassNotesForSession(sessionId, exchanges, subject, classLevel, language, wasResolved).then((result) => {
       if (cancelled) return;
       if (result) {
         setNotes(result);
+        onResult(sessionId, result);
       } else {
         setHasError(true);
+        onResult(sessionId, 'error');
       }
       setIsLoading(false);
     });
@@ -352,6 +391,20 @@ const ClassNotesEntry: React.FC<{
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  if (isGeneric) {
+    return (
+      <div className="py-2">
+        <p className="font-serif text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
+          {subject}
+        </p>
+      </div>
+    );
+  }
+
+  if (isJunk) {
+    return null;
+  }
 
   if (isLoading) {
     return (
@@ -363,13 +416,10 @@ const ClassNotesEntry: React.FC<{
   }
 
   if (hasError || !notes) {
-    // Honest fallback -- shows the real topic that was covered rather
-    // than silently showing nothing, without pretending a full note
-    // was generated when it wasn't.
     return (
       <div className="py-2">
-        <p className="font-serif text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
-          {topic}
+        <p className="font-serif text-base font-bold text-slate-900">
+          {firstTopic}
         </p>
         <p className="text-xs text-slate-400 italic mt-2">
           Notes for this topic couldn't be prepared right now.
@@ -378,30 +428,48 @@ const ClassNotesEntry: React.FC<{
     );
   }
 
-  return (
-    <div className="space-y-4 font-serif">
-      <h3 className="text-lg sm:text-xl font-bold text-slate-900 underline decoration-2 underline-offset-4">
-        {notes.noteHeading}
-      </h3>
+  const isWon = notes.status === 'won';
 
-      {notes.sections.map((section, i) => (
-        <div key={i} className="space-y-1.5">
-          <p className="font-bold text-sm text-slate-900 underline decoration-1 underline-offset-2">
-            {section.title}
-          </p>
-          {section.isList && section.listItems ? (
-            <ol className="list-decimal list-inside space-y-1 text-sm text-slate-800 leading-relaxed">
-              {section.listItems.map((item, j) => (
-                <li key={j}>{item}</li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-sm text-slate-800 leading-relaxed">
-              {section.content}
-            </p>
-          )}
-        </div>
-      ))}
+  return (
+    <div className="space-y-2 font-serif">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500">
+          {time}
+        </span>
+        <span
+          className={`text-[10px] font-jakarta font-extrabold uppercase px-2 py-0.5 rounded-full ${
+            isWon ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+          }`}
+        >
+          {isWon ? '✅ WON' : '⚠️ NEEDS HELP'}
+        </span>
+      </div>
+
+      <p className="text-base sm:text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
+        {notes.cleanTopic}
+      </p>
+
+      {notes.storyUsed && (
+        <p className="text-sm text-slate-700">
+          <span className="font-bold">Story:</span> {notes.storyUsed}
+        </p>
+      )}
+
+      {notes.guidingQuestion && (
+        <p className="text-sm text-slate-800 leading-relaxed">
+          <span className="font-bold">Mama Titi asked:</span> "{notes.guidingQuestion}"
+        </p>
+      )}
+
+      {notes.childAnswer && (
+        <p className="text-sm text-slate-800 leading-relaxed">
+          <span className="font-bold">Child answered:</span> "{notes.childAnswer}"
+        </p>
+      )}
+
+      <p className="text-xs text-slate-500 italic">
+        Attempts: {notes.attemptsCount} {notes.attemptsCount === 1 ? 'try' : 'tries'}
+      </p>
 
       {notes.revisionQuestions.length > 0 && (
         <div className="space-y-1.5 pt-2">
@@ -415,6 +483,132 @@ const ClassNotesEntry: React.FC<{
           </ol>
         </div>
       )}
+    </div>
+  );
+};
+
+// One notebook "page" per day. Holds a results map that each child
+// ClassNotesEntry reports into via onResult as its notes finish
+// loading, so the summary box at the top (WON count, NEEDS HELP
+// count, stories used) can aggregate across every entry on the page
+// -- filling in progressively as entries load rather than waiting for
+// all of them before showing anything.
+const DayPageCard: React.FC<{
+  dayPage: DayPage;
+  subject: string;
+  profile: UserProfile;
+}> = ({ dayPage, subject, profile }) => {
+  const [resultsMap, setResultsMap] = useState<Record<string, ClassNotesResult | 'skipped' | 'error'>>({});
+
+  const todayKey = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const isToday = dayPage.dateKey === todayKey;
+
+  const handleResult = React.useCallback((sessionId: string, result: ClassNotesResult | 'skipped' | 'error') => {
+    setResultsMap((prev) => ({ ...prev, [sessionId]: result }));
+  }, []);
+
+  const realResults = Object.values(resultsMap).filter(
+    (r): r is ClassNotesResult => r !== 'skipped' && r !== 'error'
+  );
+  const wonCount = realResults.filter((r) => r.status === 'won').length;
+  const needsHelpCount = realResults.filter((r) => r.status === 'needs_help').length;
+  const storiesUsed = Array.from(
+    new Set(realResults.map((r) => r.storyUsed).filter(Boolean))
+  );
+
+  const handleSendToTeacher = () => {
+    const wonEntries = realResults.filter((r) => r.status === 'won');
+    const needsHelpEntries = realResults.filter((r) => r.status === 'needs_help');
+
+    const lines = [`Today ${profile.name} Learned:`];
+    wonEntries.forEach((r) => {
+      const detail = r.childAnswer ? `${r.storyUsed} - ${r.childAnswer}` : r.storyUsed;
+      lines.push(`✅ WON: ${r.cleanTopic}${detail ? ` (${detail})` : ''}`);
+    });
+    needsHelpEntries.forEach((r) => {
+      lines.push(`⚠️ NEEDS HELP: ${r.cleanTopic} (asked ${r.attemptsCount}x)`);
+    });
+    if (storiesUsed.length > 0) {
+      lines.push(`📖 Stories: ${storiesUsed.join(', ')}`);
+    }
+    lines.push(`View: funlylearn-mama-titi.vercel.app/notebook/${dayPage.dateKey}`);
+
+    const message = encodeURIComponent(lines.join('\n'));
+    window.open(`https://wa.me/?text=${message}`, '_blank');
+  };
+
+  const stillLoading = Object.keys(resultsMap).length < dayPage.sessions.length;
+
+  return (
+    <div className="space-y-6">
+
+      <div className="pb-2 border-b-2 border-slate-800 flex items-baseline justify-between gap-3">
+        <p className="font-serif text-base sm:text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
+          {dayPage.displayDate}
+        </p>
+        <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
+          {profile.name}
+        </span>
+      </div>
+
+      {realResults.length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+            <span className="text-sm font-jakarta font-bold text-slate-800">
+              ✅ WON TODAY: {wonCount} {wonCount === 1 ? 'topic' : 'topics'}
+            </span>
+          </div>
+          {needsHelpCount > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <span className="text-sm font-jakarta font-bold text-slate-800">
+                ⚠️ STILL NEEDS HELP: {needsHelpCount} {needsHelpCount === 1 ? 'topic' : 'topics'}
+              </span>
+            </div>
+          )}
+          {storiesUsed.length > 0 && (
+            <div className="pt-1">
+              <span className="text-xs font-jakarta font-bold text-slate-600">📖 STORIES USED:</span>
+              <p className="text-xs text-slate-600 mt-0.5">{storiesUsed.join(' · ')}</p>
+            </div>
+          )}
+          {stillLoading && (
+            <p className="text-[10px] text-slate-400 italic pt-1">Still adding up today's sessions...</p>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-8">
+        {dayPage.sessions.map((session) => (
+          <div key={session.sessionId} className="relative space-y-3 pb-6 border-b border-dashed border-slate-300 last:border-b-0">
+            <ClassNotesEntry
+              sessionId={session.sessionId}
+              exchanges={session.exchanges.map((ex) => ({ topic: ex.topic, mamaReply: ex.mamaReply || '' }))}
+              subject={subject}
+              classLevel={profile.classLevel}
+              language={profile.language}
+              wasResolved={session.resolved}
+              time={new Date(session.firstDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+              onResult={handleResult}
+            />
+          </div>
+        ))}
+      </div>
+
+      {isToday && realResults.length > 0 && (
+        <button
+          onClick={handleSendToTeacher}
+          className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-jakarta font-bold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
+        >
+          <span>📲</span>
+          <span>Send Today's Learning to Teacher via WhatsApp</span>
+        </button>
+      )}
+
     </div>
   );
 };
@@ -910,6 +1104,42 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </button>
             </div>
 
+            {notebookMode === 'week' && !isPremium ? (
+              <div className="relative m-4 sm:m-6 rounded-2xl overflow-hidden">
+                {/* Blurred preview behind the lock -- gives a real
+                    sense that there's genuine content here without
+                    actually revealing it, rather than just a blank
+                    locked box. */}
+                <div className="pointer-events-none select-none blur-sm opacity-60 p-5 space-y-3 bg-[#FFFBF5]">
+                  <div className="h-4 w-2/3 bg-slate-300 rounded" />
+                  <div className="h-3 w-full bg-slate-200 rounded" />
+                  <div className="h-3 w-5/6 bg-slate-200 rounded" />
+                  <div className="h-3 w-3/4 bg-slate-200 rounded" />
+                  <div className="h-4 w-1/2 bg-slate-300 rounded mt-4" />
+                  <div className="h-3 w-full bg-slate-200 rounded" />
+                  <div className="h-3 w-4/5 bg-slate-200 rounded" />
+                </div>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 p-5">
+                  <div className="bg-white rounded-2xl p-5 text-center space-y-3 max-w-xs shadow-2xl">
+                    <span className="text-3xl block">🔒</span>
+                    <h3 className="font-serif text-base font-bold text-[#064E3B]">
+                      Premium
+                    </h3>
+                    <p className="text-xs text-slate-600">
+                      View Weekly Accumulation + Send to Teacher — ₦2,500/month
+                    </p>
+                    <button
+                      onClick={onOpenPricingModal}
+                      className="w-full py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
+                    >
+                      Upgrade Now
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+
             {notebookMode === 'week' && weeklySubjectGroups.length > 0 && (
               <div className="px-4 sm:px-6 pt-3">
                 <button
@@ -1024,58 +1254,19 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                 ) : !activeSubjectGroup ? null : (
                   <div className="space-y-12 pt-2">
                     {groupSessionsByDay(activeSubjectGroup.sessions).map((dayPage) => (
-                      <div key={dayPage.dateKey} className="space-y-6">
-
-                        {/* Day page header -- one page per day, exactly
-                            like a real notebook: everything asked about
-                            this subject on this day lives together here,
-                            under one date, rather than being scattered
-                            as separate all-time entries. */}
-                        <div className="pb-2 border-b-2 border-slate-800 flex items-baseline justify-between gap-3">
-                          <p className="font-serif text-base sm:text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
-                            {dayPage.displayDate}
-                          </p>
-                          <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
-                            {profile.name}
-                          </span>
-                        </div>
-
-                        <div className="space-y-8">
-                          {dayPage.sessions.map((session) => {
-                            const firstExchange = session.exchanges[0];
-
-                            return (
-                              <div key={session.sessionId} className="relative space-y-3 pb-6 border-b border-dashed border-slate-300 last:border-b-0">
-
-                                <div className="flex items-baseline gap-1.5 min-w-0">
-                                  <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
-                                    Time:
-                                  </span>
-                                  <span className="font-serif text-sm font-bold text-slate-800 border-b border-dotted border-slate-400 truncate flex-1 max-w-[140px]">
-                                    {new Date(session.firstDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                                  </span>
-                                </div>
-
-                                <ClassNotesEntry
-                                  sessionId={session.sessionId}
-                                  topic={firstExchange.topic}
-                                  mamaReply={(session.exchanges[session.exchanges.length - 1]?.mamaReply) || firstExchange.mamaReply || ''}
-                                  subject={activeSubjectGroup.subject}
-                                  classLevel={profile.classLevel}
-                                  language={profile.language}
-                                />
-
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                      </div>
+                      <DayPageCard
+                        key={dayPage.dateKey}
+                        dayPage={dayPage}
+                        subject={activeSubjectGroup.subject}
+                        profile={profile}
+                      />
                     ))}
                   </div>
                 )}
 
               </div>
+              </>
+            )}
             </div>
           </div>
         )}
