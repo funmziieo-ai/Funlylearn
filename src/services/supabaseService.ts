@@ -677,24 +677,28 @@ export async function getWeeklyRevisionQuiz(
 }
 
 export interface ClassNotesResult {
-  question: string;
-  explanation: string;
+  cleanTopic: string;
+  status: 'won' | 'needs_help';
+  storyUsed: string;
+  guidingQuestion: string;
+  childAnswer: string | null;
+  attemptsCount: number;
   revisionQuestions: string[];
 }
 
-// Fetches (or triggers first-time generation of) the real class-notes
-// version of a homework session -- the child's actual question,
-// followed by Mama Titi's explanation rewritten into clean readable
-// prose, plus a few revision questions. No mention of Mama Titi by
-// name, no conversational filler. Cached per session in the Edge
-// Function, so this only actually calls the AI once per session, ever.
+// Fetches (or triggers first-time generation of) the WON/NEEDS HELP
+// notebook format for a full homework session -- the auto-detected
+// topic, whether the child got it, which story was used, the real
+// guiding question, the child's own answer, and how many attempts it
+// took. Cached per session, so this only actually calls the AI once
+// per session, ever.
 export async function getClassNotesForSession(
   sessionId: string,
-  topic: string,
-  mamaReply: string,
+  exchanges: { topic: string; mamaReply: string }[],
   subject: string,
   classLevel: string,
-  language: string
+  language: string,
+  wasResolved: boolean
 ): Promise<ClassNotesResult | null> {
   if (!supabaseUrl) return null;
 
@@ -702,7 +706,7 @@ export async function getClassNotesForSession(
     const res = await fetch(`${supabaseUrl}/functions/v1/generate-class-notes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, topic, mamaReply, subject, classLevel, language })
+      body: JSON.stringify({ sessionId, exchanges, subject, classLevel, language, wasResolved })
     });
 
     if (!res.ok) {
@@ -711,11 +715,15 @@ export async function getClassNotesForSession(
     }
 
     const data = await res.json();
-    if (!data.explanation) return null;
+    if (data.skipped || (!data.storyUsed && !data.guidingQuestion)) return null;
 
     return {
-      question: data.question || topic,
-      explanation: data.explanation,
+      cleanTopic: data.cleanTopic || exchanges[0].topic,
+      status: data.status === 'won' ? 'won' : 'needs_help',
+      storyUsed: data.storyUsed || '',
+      guidingQuestion: data.guidingQuestion || '',
+      childAnswer: data.childAnswer || null,
+      attemptsCount: data.attemptsCount || exchanges.length,
       revisionQuestions: data.revisionQuestions || []
     };
   } catch (e) {
