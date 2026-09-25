@@ -44,7 +44,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isManualRef = useRef(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stoppedRef = useRef(false);
   // Delays showing "Loading Voice..." — cached audio (the common case
   // for repeated text like the welcome message) now resolves in
@@ -90,10 +89,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     // component that resolves after this point knows it's stale and
     // skips applying its result (see the token checks below).
     callTokenRef.current += 1;
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
     if (loadingIndicatorTimeoutRef.current) {
       clearTimeout(loadingIndicatorTimeoutRef.current);
       loadingIndicatorTimeoutRef.current = null;
@@ -163,36 +158,27 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     setIsPlaying(true);
     if (onSpeechStateChange) onSpeechStateChange(true);
 
-    // Start the reading pacer immediately, using an estimated pace based
-    // on word count — this runs regardless of whether real voice ever
-    // loads, so a child always gets the visual reading-along benefit,
-    // even when YarnGPT is down or slow. If real audio does load, it
-    // plays alongside as a bonus rather than being required first.
-    const estimatedIntervalMs = Math.max(180, (words.length * 320) / words.length);
-    let currentIdx = 0;
-    intervalRef.current = setInterval(() => {
-      if (stoppedRef.current) {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        return;
-      }
-      if (currentIdx < words.length) {
-        setActiveWordIndex(currentIdx);
-        currentIdx++;
-      } else {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        setIsPlaying(false);
-        setActiveWordIndex(null);
-        if (onSpeechStateChange) onSpeechStateChange(false);
-      }
-    }, estimatedIntervalMs);
+    // FIX: previously an estimated-pace word highlighter started right
+    // here, immediately, using word count to guess timing — completely
+    // independent of whether real audio had loaded or was playing.
+    // Since autoPlay fires this on every new message, that meant words
+    // visibly highlighted with no voice behind them at all, and if a
+    // child tapped "Listen to Voice" after that silent cycle finished,
+    // a brand new call started highlighting fresh from word zero —
+    // exactly the two problems reported. Highlighting now starts ONLY
+    // once real audio is confirmed playing, driven from the audio's
+    // own timeline below (see the 'loadedmetadata' handler) — no
+    // fallback estimate-based highlighting at all. If real audio never
+    // loads, no highlighting happens, which is the intended behaviour:
+    // the visual should only ever track a voice that is actually
+    // speaking.
 
-    // Real voice fetch happens in parallel — a bonus layer, not a
-    // requirement for the reading pacer above to keep running. The
-    // Loading/Speaking UI states only ever surface once a tap has made
-    // this a "manual" playback — checked LIVE via isManualRef.current
-    // at each point below (not captured once here), specifically so
-    // that tapping mid-flight (the reveal path above) can retroactively
-    // turn on the visible UI for a call that started out silent.
+    // Real voice fetch happens now — Loading/Speaking UI states only
+    // ever surface once a tap has made this a "manual" playback —
+    // checked LIVE via isManualRef.current at each point below (not
+    // captured once here), specifically so that tapping mid-flight
+    // (the reveal path above) can retroactively turn on the visible UI
+    // for a call that started out silent.
     const isCurrentlyManual = () => isManualRef.current;
 
     // Only show the loading spinner if the fetch is still pending after
@@ -237,22 +223,15 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           if (onSpeechStateChange) onSpeechStateChange(false);
         };
 
-        // Once the real audio's actual length is known, stop relying on
-        // the word-count estimate above (which has no idea how long the
-        // real speech actually runs) and instead drive the highlighter
-        // directly from the audio's own playback position. This is what
-        // keeps the highlighted word genuinely in sync with Mama Titi's
-        // voice instead of racing ahead of it.
+        // This is now the ONLY source of word highlighting. Once the
+        // real audio's actual length is known, the highlighter is
+        // driven directly from the audio's own playback position, so
+        // the highlighted word is always genuinely in sync with Mama
+        // Titi's voice — and only ever appears once this fires, i.e.
+        // once real audio actually has something to highlight.
         audio.addEventListener('loadedmetadata', () => {
           if (stoppedRef.current || callTokenRef.current !== myToken) return;
           if (!audio.duration || !isFinite(audio.duration)) return;
-
-          // The estimate-based interval was only ever a placeholder
-          // until we knew the real duration — replace it now.
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
 
           const perWordMs = (audio.duration * 1000) / words.length;
 
@@ -310,26 +289,43 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
             globalActiveAudio = null;
             globalStopActive = null;
           }
-          if (callTokenRef.current === myToken && isCurrentlyManual()) {
-            setIsRealAudioPlaying(false);
+          if (callTokenRef.current === myToken) {
+            if (isCurrentlyManual()) setIsRealAudioPlaying(false);
+            // FIX: previously left isPlaying stuck true forever on a
+            // real-audio failure, since nothing here reset it — after
+            // one failed playback the "Listen to Voice" button would
+            // silently stop responding to further taps (isPlaying
+            // already true meant every next tap only hit the "reveal"
+            // or "stop" branches above, never a fresh attempt). Now
+            // resets fully so the button works again on the next tap.
+            setIsPlaying(false);
+            setActiveWordIndex(null);
+            if (onSpeechStateChange) onSpeechStateChange(false);
           }
-          // Real audio failed mid-way — the reading pacer above is
-          // completely unaffected and keeps running silently.
           audioRef.current = null;
         };
       } else {
-        // No real audio available — the reading pacer above is already
-        // running on its own and needs nothing further here.
+        // No real audio available — per the fix above, there is no
+        // fallback highlighting to fall back to. Reset fully so this
+        // component (and its button) is ready for a fresh attempt
+        // next time, instead of leaving isPlaying stuck true with
+        // nothing actually happening.
         if (isCurrentlyManual()) setIsLoading(false);
+        setIsPlaying(false);
+        if (onSpeechStateChange) onSpeechStateChange(false);
       }
     } catch {
-      // Real voice fetch failed entirely — the reading pacer above is
-      // completely unaffected and keeps running silently.
+      // Real voice fetch failed entirely — same reset as above, so a
+      // failed attempt doesn't leave the button stuck.
       if (loadingIndicatorTimeoutRef.current) {
         clearTimeout(loadingIndicatorTimeoutRef.current);
         loadingIndicatorTimeoutRef.current = null;
       }
-      if (callTokenRef.current === myToken && isCurrentlyManual()) setIsLoading(false);
+      if (callTokenRef.current === myToken) {
+        if (isCurrentlyManual()) setIsLoading(false);
+        setIsPlaying(false);
+        if (onSpeechStateChange) onSpeechStateChange(false);
+      }
     }
   };
 
