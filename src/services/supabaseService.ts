@@ -453,25 +453,32 @@ export async function saveHomeworkRecord(
   }
 }
 
-export async function fetchHomeworkRecords(userId: string, limit: number = 50): Promise<HomeworkRecord[]> {
+// Bug fix: this used to fetch the OLDEST records (ascending + limit),
+// so once a child passed 50 records, new homework stopped appearing in
+// the notebook. Now fetches the NEWEST records, then flips them back
+// to oldest-first so everything that reads this list works as before.
+export async function fetchHomeworkRecords(userId: string, limit: number = 200): Promise<HomeworkRecord[]> {
   if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from('homework_records')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(limit);
     if (error || !data) return [];
-    return data.map((r: any) => ({
-      id: r.id,
-      subject: r.subject,
-      topic: r.topic,
-      mamaReply: r.mama_reply,
-      wasCorrect: r.was_correct,
-      sessionId: r.session_id,
-      createdAt: r.created_at
-    }));
+    return data
+      .slice()
+      .reverse()
+      .map((r: any) => ({
+        id: r.id,
+        subject: r.subject,
+        topic: r.topic,
+        mamaReply: r.mama_reply,
+        wasCorrect: r.was_correct,
+        sessionId: r.session_id,
+        createdAt: r.created_at
+      }));
   } catch (e) {
     return [];
   }
@@ -635,6 +642,16 @@ export async function searchAppContent(userId: string, query: string): Promise<S
   }
 }
 
+// Every Edge Function call needs the publishable key on the apikey
+// header (not Authorization: Bearer). Without it the Supabase gateway
+// can reject the call before the function even runs.
+function edgeFunctionHeaders(): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    apikey: supabaseAnonKey
+  };
+}
+
 export interface WeeklyRevisionQuestion {
   id: string;
   question: string;
@@ -644,22 +661,21 @@ export interface WeeklyRevisionQuestion {
 }
 
 // Fetches (or triggers first-time generation of) this week's revision
-// quiz -- built from the child's own real topics covered in the last
-// 7 days. The Edge Function itself handles caching per (user, week),
-// so calling this repeatedly in the same week is cheap and safe; it
-// only actually calls the AI on the very first call each week.
+// quiz, built from the child's own topics from the last 7 days.
+// needsPractice marks the topics the child is still practising, so the
+// quiz can give them extra questions.
 export async function getWeeklyRevisionQuiz(
   userId: string,
   classLevel: string,
   language: string,
-  weeklyTopics: { subject: string; topic: string }[]
+  weeklyTopics: { subject: string; topic: string; needsPractice?: boolean }[]
 ): Promise<{ questions: WeeklyRevisionQuestion[]; cached: boolean } | null> {
   if (!supabaseUrl || weeklyTopics.length === 0) return null;
 
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/generate-weekly-revision-quiz`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: edgeFunctionHeaders(),
       body: JSON.stringify({ userId, classLevel, language, weeklyTopics })
     });
 
@@ -676,58 +692,195 @@ export async function getWeeklyRevisionQuiz(
   }
 }
 
-export interface ClassNotesResult {
-  cleanTopic: string;
-  status: 'won' | 'needs_help';
-  storyUsed: string;
-  guidingQuestion: string;
-  childAnswer: string | null;
-  attemptsCount: number;
-  revisionQuestions: string[];
+export interface NotebookEvaluationItem {
+  question: string;
+  answer: string;
 }
 
-// Fetches (or triggers first-time generation of) the WON/NEEDS HELP
-// notebook format for a full homework session -- the auto-detected
-// topic, whether the child got it, which story was used, the real
-// guiding question, the child's own answer, and how many attempts it
-// took. Cached per session, so this only actually calls the AI once
-// per session, ever.
-export async function getClassNotesForSession(
+// One notebook page, built from one homework session.
+export interface ClassNotesResult {
+  cleanTopic: string;
+  subject: string | null;
+  status: 'won' | 'needs_help';
+  attemptsCount: number;
+  keyWords: string[];
+  askYourself: string[];
+  meaning: string;
+  steps: string[];
+  workedExample: string;
+  workQuestion: string;
+  childAnswer: string | null;
+  storyUsed: string;
+  evaluation: NotebookEvaluationItem[];
+  inShort: string;
+  parentQuestion: string;
+}
+
+// "skipped" is not a failure: it means the session had nothing to
+// write notes about (a greeting, "Help me with Maths", etc.). The
+// notebook hides those quietly instead of showing an error.
+export type ClassNotesOutcome =
+  | { kind: 'ready'; notes: ClassNotesResult }
+  | { kind: 'skipped' }
+  | { kind: 'error' };
+
+// At most 3 note requests run at once, so opening a notebook full of
+// old sessions doesn't hit the AI provider's rate limit all at once.
+const MAX_PARALLEL_NOTE_REQUESTS = 3;
+let activeNoteRequests = 0;
+const noteRequestQueue: (() => void)[] = [];
+
+async function withNoteSlot<T>(task: () => Promise<T>): Promise<T> {
+  if (activeNoteRequests >= MAX_PARALLEL_NOTE_REQUESTS) {
+    await new Promise<void>((resolve) => noteRequestQueue.push(resolve));
+  }
+  activeNoteRequests++;
+  try {
+    return await task();
+  } finally {
+    activeNoteRequests--;
+    noteRequestQueue.shift()?.();
+  }
+}
+
+// Remembers finished pages for this app visit, so switching subject
+// tabs or opening the weekly sheet doesn't ask the server again.
+// Errors and skips are not remembered, so they get retried.
+const notesMemoryCache = new Map<string, Promise<ClassNotesOutcome>>();
+
+async function requestClassNotes(
   sessionId: string,
-  exchanges: { topic: string; mamaReply: string }[],
-  subject: string,
+  classLevel: string,
+  language: string
+): Promise<ClassNotesOutcome> {
+  if (!supabaseUrl || !sessionId) return { kind: 'error' };
+  return withNoteSlot(async () => {
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/generate-class-notes`, {
+        method: 'POST',
+        headers: edgeFunctionHeaders(),
+        body: JSON.stringify({ sessionId, classLevel, language })
+      });
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        console.warn('Class notes request failed:', res.status, detail);
+        return { kind: 'error' } as ClassNotesOutcome;
+      }
+
+      const data = await res.json();
+      if (data.skipped) return { kind: 'skipped' } as ClassNotesOutcome;
+      if (!data.notes) return { kind: 'error' } as ClassNotesOutcome;
+      return { kind: 'ready', notes: data.notes as ClassNotesResult } as ClassNotesOutcome;
+    } catch (e) {
+      console.warn('Error fetching class notes:', e);
+      return { kind: 'error' } as ClassNotesOutcome;
+    }
+  });
+}
+
+export function getClassNotesForSession(
+  sessionId: string,
   classLevel: string,
   language: string,
-  wasResolved: boolean
-): Promise<ClassNotesResult | null> {
+  options: { force?: boolean } = {}
+): Promise<ClassNotesOutcome> {
+  if (!options.force) {
+    const cached = notesMemoryCache.get(sessionId);
+    if (cached) return cached;
+  }
+
+  const request = requestClassNotes(sessionId, classLevel, language).then((outcome) => {
+    if (outcome.kind !== 'ready') notesMemoryCache.delete(sessionId);
+    return outcome;
+  });
+  notesMemoryCache.set(sessionId, request);
+  return request;
+}
+
+// Called by the chat the moment a homework session ends, so the page
+// is already written by the time anyone opens the notebook. Safe to
+// ignore if it fails: the notebook writes the page itself on open.
+export function prepareNotesForSession(sessionId: string, classLevel: string, language: string): void {
+  getClassNotesForSession(sessionId, classLevel, language, { force: true }).catch(() => {});
+}
+
+// ============================================================
+// WEEKLY TEST (generate-weekly-test Edge Function)
+// ============================================================
+
+export interface WeeklyTestQuestion {
+  id: string;
+  topic: string;
+  subject: string;
+  needsPractice: boolean;
+  question: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation: string;
+}
+
+// How the child did on one topic in the test. "improved" is only ever
+// true for a topic the child was still practising, and means they got
+// at least two thirds of that topic's questions right.
+export interface WeeklyTestTopicResult {
+  topic: string;
+  subject: string;
+  needsPractice: boolean;
+  correct: number;
+  total: number;
+  improved: boolean;
+}
+
+export interface WeeklyTestResult {
+  score: number;
+  total: number;
+  topicResults: WeeklyTestTopicResult[];
+  createdAt: string;
+}
+
+async function callWeeklyTestFunction(body: Record<string, unknown>): Promise<any | null> {
   if (!supabaseUrl) return null;
-
   try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/generate-class-notes`, {
+    const res = await fetch(`${supabaseUrl}/functions/v1/generate-weekly-test`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, exchanges, subject, classLevel, language, wasResolved })
+      headers: edgeFunctionHeaders(),
+      body: JSON.stringify(body)
     });
-
     if (!res.ok) {
-      console.warn('Class notes request failed:', res.status);
+      console.warn('Weekly test request failed:', res.status, await res.text().catch(() => ''));
       return null;
     }
-
-    const data = await res.json();
-    if (data.skipped || (!data.storyUsed && !data.guidingQuestion)) return null;
-
-    return {
-      cleanTopic: data.cleanTopic || exchanges[0].topic,
-      status: data.status === 'won' ? 'won' : 'needs_help',
-      storyUsed: data.storyUsed || '',
-      guidingQuestion: data.guidingQuestion || '',
-      childAnswer: data.childAnswer || null,
-      attemptsCount: data.attemptsCount || exchanges.length,
-      revisionQuestions: data.revisionQuestions || []
-    };
+    return await res.json();
   } catch (e) {
-    console.warn('Error fetching class notes:', e);
+    console.warn('Error calling weekly test function:', e);
     return null;
   }
+}
+
+export async function getWeeklyTest(
+  userId: string,
+  classLevel: string,
+  language: string,
+  topics: { subject: string; topic: string; needsPractice: boolean }[]
+): Promise<WeeklyTestQuestion[] | null> {
+  if (topics.length === 0) return null;
+  const data = await callWeeklyTestFunction({ action: 'generate', userId, classLevel, language, topics });
+  return data?.questions && data.questions.length > 0 ? (data.questions as WeeklyTestQuestion[]) : null;
+}
+
+export async function saveWeeklyTestResult(userId: string, result: WeeklyTestResult): Promise<boolean> {
+  const data = await callWeeklyTestFunction({
+    action: 'save_result',
+    userId,
+    score: result.score,
+    total: result.total,
+    topicResults: result.topicResults
+  });
+  return !!data?.saved;
+}
+
+export async function getLatestWeeklyTestResult(userId: string): Promise<WeeklyTestResult | null> {
+  const data = await callWeeklyTestFunction({ action: 'latest_result', userId });
+  return data?.result || null;
 }
