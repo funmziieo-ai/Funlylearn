@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Camera, X, Upload, Crop, RefreshCw } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { UserProfile, ChatMessage, UserSubscription } from '../types';
 import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
 import { SyncedReadAlong } from '../components/SyncedReadAlong';
@@ -12,7 +13,7 @@ import {
   clearStoredChat,
   getWelcomeMessage
 } from '../services/apiClient';
-import { saveHomeworkRecord, saveAppPollResponse } from '../services/supabaseService';
+import { saveHomeworkRecord, saveAppPollResponse, prepareNotesForSession } from '../services/supabaseService';
 import { getUnlockedLevels } from '../utils/coinsSystem';
 
 interface ChatPageProps {
@@ -26,12 +27,8 @@ interface ChatPageProps {
   isGuest?: boolean;
   userId: string;
   // Which bottom-nav tab is currently selected -- 'home' or 'chat'.
-  // Both render this same component (there is no separate Home
-  // screen), so this is what lets "Snap Homework" actually DO
-  // something different from "Home" when tapped, instead of the two
-  // being functionally identical -- which is exactly what made it
-  // look broken when a child bounced between them expecting a
-  // different screen and saw the exact same one both times.
+  // Kept for the parent component; the chat no longer opens the
+  // upload popup by itself when this changes.
   activeTab?: string;
 }
 
@@ -127,6 +124,35 @@ const CELEBRATION_MESSAGES_YO = [
   'O n lọ si oke!',
 ];
 
+// The same happy four-note chime and confetti splash as the notebook's
+// Weekly Challenge, so a correct answer feels the same everywhere.
+function playCelebrationSound() {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const notes = [523, 659, 784, 1047];
+    notes.forEach((freq, i) => {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.frequency.value = freq;
+      oscillator.type = 'sine';
+      gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + i * 0.15);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i * 0.15 + 0.3);
+      oscillator.start(audioCtx.currentTime + i * 0.15);
+      oscillator.stop(audioCtx.currentTime + i * 0.15 + 0.3);
+    });
+  } catch (_e) {}
+}
+
+function celebrateCorrectAnswer() {
+  playCelebrationSound();
+  const base = { spread: 75, zIndex: 9999, colors: ['#16A34A', '#FFC83D', '#FF6B35', '#38BDF8', '#A855F7'] };
+  confetti({ ...base, particleCount: 140, origin: { y: 0.6 } });
+  setTimeout(() => confetti({ ...base, particleCount: 70, angle: 60, origin: { x: 0, y: 0.7 } }), 250);
+  setTimeout(() => confetti({ ...base, particleCount: 70, angle: 120, origin: { x: 1, y: 0.7 } }), 450);
+}
+
 export const ChatPage: React.FC<ChatPageProps> = ({
   profile,
   subscription,
@@ -177,6 +203,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationCount, setCelebrationCount] = useState(0);
+  const [celebrationCoins, setCelebrationCoins] = useState(10);
   const [coinsEarnedToast, setCoinsEarnedToast] = useState<number | null>(null);
   const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
   const [answeredPollIds, setAnsweredPollIds] = useState<string[]>(() => {
@@ -193,58 +220,26 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const directFileInputRef = useRef<HTMLInputElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const userCoins = profile.coins || 0;
   const isPremium = isPremiumActive(subscription);
+
+  // Loads the fun fonts used by the celebration card (the notebook
+  // uses the same ones, and this only ever adds them once).
+  useEffect(() => {
+    const id = 'funlylearn-fun-fonts';
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap';
+    document.head.appendChild(link);
+  }, []);
   const dailyLimitReached = !isPremium && dailyMessagesCount >= FREE_DAILY_MESSAGE_LIMIT;
   const loadingMessages = isYoruba ? FUN_LOADING_MESSAGES_YO : FUN_LOADING_MESSAGES_EN;
   const celebrationMessages = isYoruba ? CELEBRATION_MESSAGES_YO : CELEBRATION_MESSAGES_EN;
 
-  const playCelebrationSound = () => {
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const notes = [523, 659, 784, 1047];
-      notes.forEach((freq, i) => {
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.frequency.value = freq;
-        oscillator.type = 'sine';
-        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + i * 0.15);
-        gainNode.gain.exponentialRampToValueAtTime(
-          0.001,
-          audioCtx.currentTime + i * 0.15 + 0.3
-        );
-        oscillator.start(audioCtx.currentTime + i * 0.15);
-        oscillator.stop(audioCtx.currentTime + i * 0.15 + 0.3);
-      });
-    } catch (_e) {}
-  };
-
   useEffect(() => {
     saveStoredChat(messages);
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-
-    if (messages.length < 3) return;
-
-    const lastMsg = messages[messages.length - 1];
-    const secondLastMsg = messages[messages.length - 2];
-
-    const childAnswered = secondLastMsg?.sender === 'user';
-    const mamaReplied = lastMsg?.sender === 'mama_titi';
-    const isCorrect =
-      (lastMsg?.text?.toLowerCase().includes('ehhh') ||
-        lastMsg?.text?.toLowerCase().includes('o ti gba a')) &&
-      !lastMsg?.text?.toLowerCase().includes('welcome') &&
-      !lastMsg?.text?.toLowerCase().includes('kaaro') &&
-      messages.length > 2;
-
-    if (childAnswered && mamaReplied && isCorrect) {
-      setShowCelebration(true);
-      setCelebrationCount(c => c + 1);
-      playCelebrationSound();
-      setTimeout(() => setShowCelebration(false), 5000);
-    }
   }, [messages]);
 
   useEffect(() => {
@@ -270,19 +265,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     };
   }, [isLoading]);
 
-  // Fires every time the "Snap Homework" tab is selected -- including
-  // when it is re-selected while this same component is already
-  // mounted (Home and Snap Homework never remount each other, they are
-  // literally the same component instance), which is exactly why a
-  // plain useEffect-on-mount would not have worked here. This is what
-  // actually makes "Snap Homework" DO something distinct from "Home"
-  // now: tapping it opens the camera prompt immediately, rather than
-  // landing on an idle chat screen indistinguishable from Home.
-  useEffect(() => {
-    if (activeTab === 'chat') {
-      setIsCameraOpen(true);
-    }
-  }, [activeTab]);
+  // The chat no longer opens the "Upload Homework Photo" popup by
+  // itself when the chat tab is selected. The popup now only opens
+  // when the child taps the yellow "Snap Your Homework" bar or the
+  // camera button.
 
   const maybeShowPoll = () => {
     if (activePoll) return;
@@ -314,6 +300,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   };
 
   const confirmNewChat = () => {
+    // The old session ends here even if the child never got it right,
+    // so its notebook page (marked "Still practising") is written now.
+    prepareNotesForSession(currentSessionId, profile.classLevel, profile.language);
     clearStoredChat();
     setMessages([getWelcomeMessage(profile.language)]);
     setInputText('');
@@ -405,7 +394,17 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         ? 5
         : 0;
 
-      if (coinsEarned > 0) {
+      // Confetti, chime and the "You got it!" card, only for a correct
+      // answer, fired here so it happens once, right when it's earned.
+      if (isCorrect) {
+        setCelebrationCoins(coinsEarned);
+        setCelebrationCount(c => c + 1);
+        setShowCelebration(true);
+        celebrateCorrectAnswer();
+        setTimeout(() => setShowCelebration(false), 6000);
+      }
+
+      if (coinsEarned > 0 && !isCorrect) {
         setCoinsEarnedToast(coinsEarned);
         setTimeout(() => setCoinsEarnedToast(null), 2500);
       }
@@ -429,31 +428,29 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         ).length
       });
 
-      // Bug fix: a photo-only submission previously saved the generic
-      // upload phrase ("Mama Titi please analyze this homework photo
-      // for me!") as the notebook topic, since userMsg.text IS that
-      // generic phrase whenever no text was typed alongside the photo.
-      // That generic phrase then broke note generation downstream (no
-      // real question for the AI to write notes about). Now uses the
-      // actual topic detected from the photo itself when available.
+      // A photo-only submission uses the topic detected from the photo
+      // itself, not the generic upload phrase, as the notebook topic.
       const notebookTopic = (imgToSend && response.detectedTopic)
         ? response.detectedTopic
         : userMsg.text;
 
-      // Bug fix: session tracking was previously restricted to Math
-      // only (isMathSession ? currentSessionId : undefined), which
-      // silently broke multi-attempt tracking for every other subject
-      // -- English, Science, etc. sessions could never accumulate
-      // attempts or show a real "Attempts: 2" count in the notebook.
-      // Session tracking now applies universally.
+      // When the child gets it right the session is finished, so the
+      // notebook page is written now, right after the record is saved
+      // (it has to be saved first, because the notes are built from
+      // the saved records).
+      const finishedSessionId = currentSessionId;
       saveHomeworkRecord(
         userId,
         notebookTopic.slice(0, 120),
         isCorrect,
         response.subject || undefined,
-        currentSessionId,
+        finishedSessionId,
         response.reply
-      );
+      ).then(() => {
+        if (isCorrect) {
+          prepareNotesForSession(finishedSessionId, profile.classLevel, profile.language);
+        }
+      });
 
       if (isCorrect) {
         startNewSession();
@@ -609,52 +606,47 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       )}
 
       {showCelebration && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-8 text-center space-y-4 mx-6 shadow-2xl border-4 border-amber-400">
-            <div className="text-7xl animate-bounce">🎉</div>
-            <h2 className="font-serif font-bold text-2xl text-[#064E3B]">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-6"
+          onClick={() => setShowCelebration(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="bg-white rounded-[28px] p-6 text-center space-y-3 max-w-sm w-full border-b-8 border-slate-200 font-['Nunito']"
+          >
+            <div className="text-7xl">🏆</div>
+            <h2 className="font-['Fredoka'] font-bold text-3xl text-[#064E3B]">
               {isYoruba ? 'Ehhh! O Ti Gba A!' : 'Ehhh! You Got It!'}
             </h2>
-            <p className="text-slate-600 font-sans text-sm">
+            <p className="text-slate-600 font-semibold">
               {celebrationMessages[celebrationCount % celebrationMessages.length]}
             </p>
-            <div className="flex justify-center space-x-3 text-4xl">
-              <span className="animate-bounce" style={{ animationDelay: '0ms' }}>⭐</span>
-              <span className="animate-bounce" style={{ animationDelay: '150ms' }}>⭐</span>
-              <span className="animate-bounce" style={{ animationDelay: '300ms' }}>⭐</span>
+            <div className="flex justify-center gap-2">
+              <span className="px-4 py-2 rounded-full bg-[#FFC83D] text-[#064E3B] font-extrabold">
+                ⭐ +10
+              </span>
+              <span className="px-4 py-2 rounded-full bg-[#DCFCE7] text-[#064E3B] font-extrabold">
+                🪙 +{celebrationCoins} {isYoruba ? 'owó' : 'coins'}
+              </span>
             </div>
-            <div className="bg-amber-50 rounded-2xl px-4 py-2 border border-amber-200">
-              <p className="text-amber-700 font-bold text-sm">
-                {isYoruba ? '+10 owó ere! 🪙' : '+10 coins earned! 🪙'}
-              </p>
-              <p className="text-amber-600 text-xs">
-                {isYoruba ? 'Apapọ: ' : 'Total: '}{userCoins + 10} {isYoruba ? 'owó' : 'coins'}
-              </p>
-            </div>
-            <div className="flex justify-center space-x-2 text-2xl">
-              <span>🇳🇬</span>
-              <span>🏆</span>
-              <span>🇳🇬</span>
-            </div>
-            <div className="flex flex-col space-y-2">
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                onClick={() => setShowCelebration(false)}
+                className="py-3.5 rounded-2xl bg-[#FFC83D] text-[#064E3B] font-['Fredoka'] text-lg font-bold border-b-[5px] border-[#E0A800] transition-transform active:translate-y-[3px] active:border-b-[1px]"
+              >
+                {isYoruba ? 'Tẹsiwaju! 🎉' : 'Keep going! 🎉'}
+              </button>
               {onGoToLingo && (
                 <button
                   onClick={() => {
                     setShowCelebration(false);
                     onGoToLingo();
                   }}
-                  className="px-6 py-2 rounded-full bg-[#5B21B6] text-white text-sm font-bold flex items-center justify-center space-x-2"
+                  className="py-3 rounded-2xl bg-white text-[#7E22CE] font-['Fredoka'] text-lg font-semibold border-2 border-b-[5px] border-[#A855F7] transition-transform active:translate-y-[3px] active:border-b-[1px]"
                 >
-                  <span>🌍</span>
-                  <span>{isYoruba ? 'Lọ Kọ Yoruba!' : 'Go Learn Yoruba!'}</span>
+                  🌍 {isYoruba ? 'Lọ Kọ Yoruba!' : 'Go Learn Yoruba!'}
                 </button>
               )}
-              <button
-                onClick={() => setShowCelebration(false)}
-                className="px-6 py-2 rounded-full bg-[#064E3B] text-white text-sm font-bold"
-              >
-                {isYoruba ? 'Tẹsiwaju!' : 'Keep Going!'}
-              </button>
             </div>
           </div>
         </div>
