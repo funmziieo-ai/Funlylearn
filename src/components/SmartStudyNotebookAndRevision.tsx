@@ -1,29 +1,38 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  BookOpen, 
-  Printer, 
-  Folder, 
-  ChevronRight, 
-  Award, 
-  CheckCircle2, 
-  XCircle, 
-  Sparkles, 
-  FileText, 
-  ArrowLeft, 
-  Check, 
-  HelpCircle,
-  Clock,
-  Send,
+import {
+  BookOpen,
+  Printer,
+  Folder,
+  ChevronRight,
+  CheckCircle2,
+  XCircle,
+  Sparkles,
+  Check,
   Edit3,
-  ShieldCheck,
-  Zap,
-  Bookmark,
   RefreshCw,
   Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile, UserSubscription } from '../types';
-import { fetchHomeworkRecords, HomeworkRecord, fetchExamRevisionQuestions, ExamQuestionRow, getNotebookDailyViewCount, incrementNotebookDailyViewCount, getExamPrepDailyAttemptCount, incrementExamPrepDailyAttemptCount, getWeeklyRevisionQuiz, WeeklyRevisionQuestion, getClassNotesForSession, ClassNotesResult } from '../services/supabaseService';
+import {
+  fetchHomeworkRecords,
+  HomeworkRecord,
+  fetchExamRevisionQuestions,
+  ExamQuestionRow,
+  getNotebookDailyViewCount,
+  incrementNotebookDailyViewCount,
+  getExamPrepDailyAttemptCount,
+  incrementExamPrepDailyAttemptCount,
+  getWeeklyTest,
+  WeeklyTestQuestion,
+  WeeklyTestResult,
+  WeeklyTestTopicResult,
+  saveWeeklyTestResult,
+  getLatestWeeklyTestResult,
+  getClassNotesForSession,
+  ClassNotesResult,
+  ClassNotesOutcome
+} from '../services/supabaseService';
 
 export interface ExamQuestion {
   id: string;
@@ -164,13 +173,11 @@ const COMING_SOON_SUBJECTS: Record<string, { name: string; icon: string }[]> = {
 const QUESTIONS_PER_ROUND = 8;
 const FREE_DAILY_NOTEBOOK_VIEWS = 5;
 const FREE_DAILY_EXAM_ATTEMPTS = 5;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Derives which JSS grade(s) a topic's questions come from, based on
 // its stored nerdcUnit text — e.g. "JSS1 Chapter 5" -> ['JSS1'],
-// "BECE Chapter — Simple Equations (JSS1-3)" -> all three, since that
-// topic deliberately blends questions from every JSS year. No separate
-// database column needed; the grade info was already being stored,
-// just not shown in the UI after the earlier chapter-label cleanup.
+// "BECE Chapter — Simple Equations (JSS1-3)" -> all three.
 function getTopicGrades(nerdcUnit: string): string[] {
   const grades: string[] = [];
   if (/jss1-3|jss 1-3/i.test(nerdcUnit)) return ['JSS1', 'JSS2', 'JSS3'];
@@ -194,13 +201,9 @@ interface StudySession {
   firstDate: string;
 }
 
-// Mama Titi's chat classifies the subject freeform at reply time,
-// which has produced inconsistent naming for what's really the same
-// subject (e.g. "English" vs "English Studies" showing up as two
-// separate tabs). Normalized here, at the one place session subjects
-// are set, so every downstream grouping (tabs, day-pages) already
-// sees the canonical name -- no duplicate tabs, no separate pages for
-// what's actually one subject.
+// Same subject can arrive under different names ("English" vs
+// "English Studies"); normalized once here so there are no duplicate
+// subject tabs.
 function normalizeSubjectName(subject: string | null): string | null {
   if (!subject) return subject;
   const trimmed = subject.trim();
@@ -227,6 +230,9 @@ function groupIntoSessions(records: HomeworkRecord[]): StudySession[] {
     const session = sessionMap.get(key)!;
     session.exchanges.push(record);
     session.latestDate = record.createdAt;
+    if (!session.subject && record.subject) {
+      session.subject = normalizeSubjectName(record.subject);
+    }
     if (new Date(record.createdAt) < new Date(session.firstDate)) {
       session.firstDate = record.createdAt;
     }
@@ -270,13 +276,9 @@ interface DayPage {
   sessions: StudySession[];
 }
 
-// Groups a subject's sessions into daily "pages" -- everything asked
-// about that subject on the same calendar day lands on one page
-// together, exactly like a real notebook where a day's lesson(s) all
-// go on the same page, with a new page starting the next day. Grouped
-// by firstDate (the day a topic was first asked), not latestDate, so
-// a topic stays on the day it was originally written even if a child
-// revisits and finally resolves it days later.
+// One notebook page per calendar day, grouped by the day a topic was
+// first asked, so a topic stays on its original day even if the child
+// finishes it later.
 function groupSessionsByDay(sessions: StudySession[]): DayPage[] {
   const dayMap = new Map<string, DayPage>();
 
@@ -293,212 +295,360 @@ function groupSessionsByDay(sessions: StudySession[]): DayPage[] {
     dayMap.get(dateKey)!.sessions.push(session);
   }
 
-  // Most recent day first; sessions within a day stay in their
-  // existing most-recent-first order.
-  return Array.from(dayMap.values()).sort(
-    (a, b) => b.dateKey.localeCompare(a.dateKey)
-  );
+  return Array.from(dayMap.values()).sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 }
 
-// Powers the "This Week's Revision" view -- everything the child has
-// actually asked Mama Titi or snapped as homework in the last 7 days,
-// grouped by subject, PLUS any topic that needed 2 or more attempts
-// (a real struggle area) even if it falls just outside that window --
-// these keep surfacing here automatically for continued revision
-// rather than disappearing the moment a week passes.
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
-function getThisWeeksSubjectGroups(allSessions: StudySession[]): SubjectGroup[] {
-  const cutoff = Date.now() - SEVEN_DAYS_MS;
-  const recentSessions = allSessions.filter((session) => {
-    const isRecent = new Date(session.latestDate).getTime() >= cutoff;
-    const neededHelp = session.exchanges.length >= 2;
-    return isRecent || neededHelp;
-  });
-  return groupSessionsBySubject(recentSessions);
-}
-
-// Detects a generic starter prompt like "Help me with Mathematics" (the
-// suggestion chips shown on a fresh chat) rather than a real, specific
-// question. There's no actual topic to write notes about in these
-// cases -- just the bare subject name, no fabricated content.
+// The starter chips on a fresh chat ("Help me with Mathematics"). Used
+// only so the "topics covered" count doesn't include sessions that
+// were just a greeting. Deciding what gets a notebook page now happens
+// on the server.
 function isGenericSubjectPrompt(topic: string): boolean {
   const normalized = topic.trim().toLowerCase();
   return /^(help me with|ran mi lọwọ pẹlu)\s+\w+/.test(normalized) && normalized.split(' ').length <= 5;
 }
 
-// Catches non-substantive replies -- "I don't know", empty, or too
-// short to contain any real teaching content. These get skipped
-// entirely rather than being forced into fake "notes."
-function isJunkReply(mamaReply: string): boolean {
-  const normalized = mamaReply.trim().toLowerCase();
-  if (normalized.length < 15) return true;
-  const junkPhrases = [
-    "i don't know", "i dont know", "not sure", "i cannot help",
-    "i can't help", "i'm not able", "no idea", "n ko mo", "mi o mo"
-  ];
-  return junkPhrases.some((phrase) => normalized.includes(phrase));
+type ReadyOutcome = Extract<ClassNotesOutcome, { kind: 'ready' }>;
+
+function isReady(outcome: ClassNotesOutcome | undefined): outcome is ReadyOutcome {
+  return !!outcome && outcome.kind === 'ready';
 }
 
-// Renders one homework session in the WON/NEEDS HELP notebook format:
-// time, auto-detected topic, status + story used, the real guiding
-// question, the child's own answer, and the attempt count. Reports
-// its result up to the day-page via onResult so the day-level summary
-// box (WON/NEEDS HELP counts, stories list) can aggregate across every
-// entry on the page as each one's notes finish loading.
+function triesLabel(count: number): string {
+  return `${count} ${count === 1 ? 'try' : 'tries'}`;
+}
+
+// Happy chime. small = two quick notes (e.g. revealing an answer);
+// otherwise the four-note chime the chat plays for a correct answer.
+function playChime(small = false) {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const notes = small ? [784, 1047] : [523, 659, 784, 1047];
+    notes.forEach((freq, i) => {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.frequency.value = freq;
+      oscillator.type = 'sine';
+      const start = audioCtx.currentTime + i * (small ? 0.12 : 0.15);
+      gainNode.gain.setValueAtTime(small ? 0.15 : 0.3, start);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
+      oscillator.start(start);
+      oscillator.stop(start + 0.3);
+    });
+  } catch (_e) {}
+}
+
+function celebrate(big: boolean) {
+  playChime(false);
+  const base = { spread: 75, zIndex: 9999, colors: ['#16A34A', '#FFC83D', '#FF6B35', '#38BDF8', '#A855F7'] };
+  confetti({ ...base, particleCount: big ? 140 : 80, origin: { y: 0.6 } });
+  if (big) {
+    setTimeout(() => confetti({ ...base, particleCount: 70, angle: 60, origin: { x: 0, y: 0.7 } }), 250);
+    setTimeout(() => confetti({ ...base, particleCount: 70, angle: 120, origin: { x: 1, y: 0.7 } }), 450);
+  }
+}
+
+// The WhatsApp message sent to a parent or teacher after the challenge.
+function buildTestResultMessage(profile: UserProfile, result: WeeklyTestResult): string {
+  const stars = '⭐'.repeat(starsFor(result.score, result.total));
+  const lines = [`🏆 ${profile.name}'s Weekly Challenge (${profile.classLevel})`, `Score: ${result.score} / ${result.total} ${stars}`, ''];
+  result.topicResults
+    .filter((t) => t.needsPractice)
+    .forEach((t) => {
+      lines.push(
+        t.improved
+          ? `🚀 Improved: ${t.topic} (${t.correct}/${t.total})`
+          : `💪 Still practising: ${t.topic} (${t.correct}/${t.total})`
+      );
+    });
+  const others = result.topicResults.filter((t) => !t.needsPractice);
+  if (others.length > 0) {
+    const correct = others.reduce((sum, t) => sum + t.correct, 0);
+    const total = others.reduce((sum, t) => sum + t.total, 0);
+    lines.push(`⭐ Other topics: ${correct}/${total} correct`);
+  }
+  lines.push('', 'Sent from FunlyLearn (funlylearn.com)');
+  return lines.join('\n');
+}
+
+// ---------- Fun design tokens ----------
+// Fredoka for headings, Nunito for reading -- rounded, friendly fonts
+// in the spirit of Duolingo, sized for children (17-18px body).
+const FUN = "font-['Fredoka']";
+const READ = "font-['Nunito']";
+const DOTS: React.CSSProperties = {
+  backgroundImage: 'radial-gradient(rgba(6,78,59,0.10) 1.5px, transparent 1.5px)',
+  backgroundSize: '22px 22px'
+};
+// Chunky "press down" effect for buttons.
+const PRESS = 'transition-transform active:translate-y-[3px] active:border-b-[1px]';
+const CHIP_COLORS = [
+  'bg-[#E0F4FF] text-[#0284C7]',
+  'bg-[#F3E8FF] text-[#7E22CE]',
+  'bg-[#FFF4D1] text-[#8A5A00]',
+  'bg-[#FFE8DE] text-[#D9480F]',
+  'bg-[#DCFCE7] text-[#064E3B]'
+];
+
+// Loads the two fonts once, so no change to index.html is needed.
+function useFunFonts() {
+  React.useEffect(() => {
+    const id = 'funlylearn-fun-fonts';
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap';
+    document.head.appendChild(link);
+  }, []);
+}
+
+function subjectEmoji(subject: string | null): string {
+  const s = (subject || '').toLowerCase();
+  if (/math/.test(s)) return '🔢';
+  if (/english/.test(s)) return '📖';
+  if (/science|biology|chemistry|physics/.test(s)) return '🔬';
+  if (/social|civic|government|history/.test(s)) return '🌍';
+  if (/yoruba|igbo|hausa/.test(s)) return '🗣️';
+  if (/computer|technology/.test(s)) return '💻';
+  return '📘';
+}
+
+function shortDate(dateKey: string): string {
+  return new Date(`${dateKey}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+}
+
+function starsFor(score: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.max(1, Math.round((score / total) * 5));
+}
+
+const SectionTitle: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <p className={`${FUN} text-lg font-semibold text-slate-700 mb-2 ${className}`}>{children}</p>
+);
+
+// One homework session = one fun notebook lesson card.
 const ClassNotesEntry: React.FC<{
   sessionId: string;
-  exchanges: { topic: string; mamaReply: string }[];
+  fallbackTopic: string;
   subject: string;
-  classLevel: string;
-  language: string;
-  wasResolved: boolean;
+  profile: UserProfile;
   time: string;
-  onResult: (sessionId: string, result: ClassNotesResult | 'skipped' | 'error') => void;
-}> = ({ sessionId, exchanges, subject, classLevel, language, wasResolved, time, onResult }) => {
-  const [notes, setNotes] = useState<ClassNotesResult | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
-
-  const firstTopic = exchanges[0]?.topic || '';
-  const lastReply = exchanges[exchanges.length - 1]?.mamaReply || exchanges[0]?.mamaReply || '';
-  const isGeneric = isGenericSubjectPrompt(firstTopic);
-  const isJunk = isJunkReply(lastReply);
+  onResult: (sessionId: string, outcome: ClassNotesOutcome) => void;
+}> = ({ sessionId, fallbackTopic, subject, profile, time, onResult }) => {
+  const [outcome, setOutcome] = useState<ClassNotesOutcome | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [revealed, setRevealed] = useState<Record<number, boolean>>({});
 
   React.useEffect(() => {
-    if (isGeneric || isJunk) {
-      setIsLoading(false);
-      onResult(sessionId, 'skipped');
-      return;
-    }
-
     let cancelled = false;
-    setIsLoading(true);
-    setHasError(false);
-
-    getClassNotesForSession(sessionId, exchanges, subject, classLevel, language, wasResolved).then((result) => {
-      if (cancelled) return;
-      if (result) {
-        setNotes(result);
+    setOutcome(null);
+    getClassNotesForSession(sessionId, profile.classLevel, profile.language, { force: retryCount > 0 }).then(
+      (result) => {
+        if (cancelled) return;
+        setOutcome(result);
         onResult(sessionId, result);
-      } else {
-        setHasError(true);
-        onResult(sessionId, 'error');
       }
-      setIsLoading(false);
-    });
-
-    return () => { cancelled = true; };
+    );
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, retryCount]);
 
-  if (isGeneric) {
+  if (!outcome) {
     return (
-      <div className="py-2">
-        <p className="font-serif text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
-          {subject}
-        </p>
+      <div className={`py-8 flex items-center justify-center gap-2 text-base text-slate-500 ${READ} print:hidden`}>
+        <span className="text-2xl animate-bounce">✏️</span>
+        <span className="font-semibold">Writing your notes...</span>
       </div>
     );
   }
 
-  if (isJunk) {
-    return null;
-  }
+  // Nothing to write about (a greeting, "Help me with Maths").
+  if (outcome.kind === 'skipped') return null;
 
-  if (isLoading) {
+  if (outcome.kind === 'error') {
     return (
-      <div className="py-6 flex items-center space-x-2 text-xs text-slate-400 italic">
-        <span className="w-3 h-3 rounded-full border-2 border-slate-300 border-t-slate-500 animate-spin" />
-        <span>Writing up these notes...</span>
+      <div className={`rounded-3xl bg-white border-2 border-slate-200 p-5 text-center space-y-2 ${READ} print:hidden`}>
+        <p className="text-3xl">😕</p>
+        <p className={`${FUN} text-lg font-semibold text-slate-800`}>{fallbackTopic}</p>
+        <p className="text-sm text-slate-500">These notes didn't load. Check your internet and try again.</p>
+        <button
+          onClick={() => setRetryCount((c) => c + 1)}
+          className={`${FUN} ${PRESS} px-5 py-2.5 rounded-2xl bg-[#16A34A] text-white font-semibold border-b-4 border-[#064E3B]`}
+        >
+          🔄 Try again
+        </button>
       </div>
     );
   }
 
-  if (hasError || !notes) {
-    return (
-      <div className="py-2">
-        <p className="font-serif text-base font-bold text-slate-900">
-          {firstTopic}
-        </p>
-        <p className="text-xs text-slate-400 italic mt-2">
-          Notes for this topic couldn't be prepared right now.
-        </p>
-      </div>
-    );
-  }
+  const notes = outcome.notes;
+  const won = notes.status === 'won';
+  const theme = won
+    ? { band: 'bg-[#16A34A]', border: 'border-[#16A34A]/30', sub: 'text-emerald-100', step: 'bg-[#16A34A]', answerBg: 'bg-[#DCFCE7]', answerText: 'text-[#064E3B]' }
+    : { band: 'bg-[#FF6B35]', border: 'border-[#FF6B35]/30', sub: 'text-orange-100', step: 'bg-[#FF6B35]', answerBg: 'bg-[#FFE8DE]', answerText: 'text-[#D9480F]' };
 
-  const isWon = notes.status === 'won';
+  const triesNote = won
+    ? notes.attemptsCount <= 1
+      ? 'Got it on the first try! 🎉'
+      : `Got it after ${notes.attemptsCount} tries! 🎉`
+    : notes.attemptsCount === 0
+    ? "Not answered yet. You can do it! 💪"
+    : `${triesLabel(notes.attemptsCount)} so far. Practice makes perfect! 💪`;
+
+  const revealAnswer = (i: number) => {
+    setRevealed((prev) => ({ ...prev, [i]: true }));
+    playChime(true);
+  };
 
   return (
-    <div className="space-y-2 font-serif">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500">
-          {time}
-        </span>
-        <span
-          className={`text-[10px] font-jakarta font-extrabold uppercase px-2 py-0.5 rounded-full ${
-            isWon ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-          }`}
-        >
-          {isWon ? '✅ WON' : '⚠️ NEEDS HELP'}
-        </span>
+    <article className={`rounded-3xl bg-white border-2 ${theme.border} overflow-hidden print:break-inside-avoid print:border-slate-300 ${READ}`}>
+      <div className={`${theme.band} text-white px-5 py-4 flex items-start justify-between gap-3 print:bg-white print:text-slate-900 print:border-b print:border-slate-300`}>
+        <div className="min-w-0">
+          <p className={`${theme.sub} text-sm font-bold print:text-slate-500`}>
+            {time} · {subjectEmoji(notes.subject || subject)} {notes.subject || subject}
+          </p>
+          <h3 className={`${FUN} text-2xl font-bold leading-tight`}>{notes.cleanTopic}</h3>
+        </div>
+        {won ? (
+          <span className={`${FUN} shrink-0 rotate-6 px-3 py-1.5 rounded-xl bg-[#FFC83D] text-[#064E3B] font-bold text-base border-b-4 border-[#E0A800]`}>
+            GOT IT! ⭐
+          </span>
+        ) : (
+          <span className={`${FUN} shrink-0 -rotate-6 px-3 py-1.5 rounded-xl bg-white text-[#D9480F] font-bold text-base border-b-4 border-orange-200 print:border-2 print:border-orange-300`}>
+            KEEP GOING 💪
+          </span>
+        )}
       </div>
 
-      <p className="text-base sm:text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
-        {notes.cleanTopic}
-      </p>
+      <div className="p-4 sm:p-5 space-y-5 text-[17px] text-slate-800">
+        {notes.keyWords.length > 0 && (
+          <div>
+            <SectionTitle>🔑 Key words</SectionTitle>
+            <div className="flex flex-wrap gap-2">
+              {notes.keyWords.map((word, i) => (
+                <span key={word} className={`px-3 py-1.5 rounded-full font-bold ${CHIP_COLORS[i % CHIP_COLORS.length]}`}>
+                  {word}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
-      {notes.storyUsed && (
-        <p className="text-sm text-slate-700">
-          <span className="font-bold">Story:</span> {notes.storyUsed}
-        </p>
-      )}
+        {notes.meaning && (
+          <div className="rounded-2xl bg-[#E0F4FF] p-4 print:border print:border-sky-200">
+            <p className={`${FUN} text-lg font-semibold text-[#0284C7] mb-1`}>💡 What it means</p>
+            <p className="text-lg leading-relaxed">{notes.meaning}</p>
+          </div>
+        )}
 
-      {notes.guidingQuestion && (
-        <p className="text-sm text-slate-800 leading-relaxed">
-          <span className="font-bold">Mama Titi asked:</span> "{notes.guidingQuestion}"
-        </p>
-      )}
+        {notes.steps.length > 0 && (
+          <div>
+            <SectionTitle>🪜 How to do it</SectionTitle>
+            <ol className="space-y-2">
+              {notes.steps.map((step, i) => (
+                <li key={i} className="flex gap-3 items-start">
+                  <span className={`${FUN} ${theme.step} w-8 h-8 rounded-full text-white font-bold flex items-center justify-center shrink-0 print:bg-white print:text-slate-900 print:border print:border-slate-400`}>
+                    {i + 1}
+                  </span>
+                  <span className="pt-0.5">{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
 
-      {notes.childAnswer && (
-        <p className="text-sm text-slate-800 leading-relaxed">
-          <span className="font-bold">Child answered:</span> "{notes.childAnswer}"
-        </p>
-      )}
+        {notes.workedExample && (
+          <div className="rounded-2xl bg-[#FFF4D1] border-2 border-[#FFC83D] p-4">
+            <p className={`${FUN} text-lg font-semibold text-[#8A5A00] mb-1`}>🧺 Story time</p>
+            <p className="text-lg leading-relaxed whitespace-pre-line">{notes.workedExample}</p>
+          </div>
+        )}
 
-      <p className="text-xs text-slate-500 italic">
-        Attempts: {notes.attemptsCount} {notes.attemptsCount === 1 ? 'try' : 'tries'}
-      </p>
+        {(notes.workQuestion || notes.childAnswer) && (
+          <div className="space-y-2">
+            <SectionTitle className="mb-0">✏️ My work</SectionTitle>
+            {notes.workQuestion && (
+              <div className="rounded-2xl rounded-tl-md bg-slate-100 px-4 py-3 max-w-[90%]">
+                <p className="text-sm font-bold text-slate-500">The question</p>
+                <p>{notes.workQuestion}</p>
+              </div>
+            )}
+            <div className={`rounded-2xl rounded-tr-md ${theme.answerBg} px-4 py-3 max-w-[90%] ml-auto print:border print:border-slate-300`}>
+              <p className={`text-sm font-bold ${theme.answerText}`}>{profile.name} said</p>
+              <p className={`${FUN} text-xl font-semibold ${theme.answerText}`}>
+                {notes.childAnswer || '...'} {won ? '✅' : '🤔'}
+              </p>
+            </div>
+            <p className="text-sm text-slate-500 text-center font-semibold">{triesNote}</p>
+          </div>
+        )}
 
-      {notes.revisionQuestions.length > 0 && (
-        <div className="space-y-1.5 pt-2">
-          <p className="font-bold text-sm text-slate-900 underline decoration-1 underline-offset-2">
-            Revision Questions
-          </p>
-          <ol className="list-decimal list-inside space-y-1.5 text-sm text-slate-800 leading-relaxed">
-            {notes.revisionQuestions.map((q, i) => (
-              <li key={i}>{q}</li>
+        {notes.evaluation.length > 0 && (
+          <div className="space-y-2">
+            <SectionTitle className="mb-0">🎯 Try these</SectionTitle>
+            {notes.evaluation.map((item, i) => (
+              <div key={i} className="rounded-2xl border-2 border-slate-200 p-3 flex items-center justify-between gap-3 flex-wrap">
+                <span>
+                  <b className={`${FUN} text-[#064E3B]`}>{i + 1}.</b> {item.question}
+                </span>
+                {revealed[i] ? (
+                  <span className={`${FUN} px-4 py-2 rounded-xl bg-[#DCFCE7] text-[#064E3B] font-semibold`}>✅ {item.answer}</span>
+                ) : (
+                  <button
+                    onClick={() => revealAnswer(i)}
+                    className={`${PRESS} px-4 py-2 rounded-xl bg-white border-2 border-b-4 border-slate-300 font-bold text-sm text-[#064E3B] print:hidden`}
+                  >
+                    👀 Show answer
+                  </button>
+                )}
+              </div>
             ))}
-          </ol>
+            <p className="hidden print:block text-xs text-slate-500">
+              Answers: {notes.evaluation.map((item, i) => `${i + 1}. ${item.answer}`).join('   ')}
+            </p>
+          </div>
+        )}
+
+        {notes.inShort && (
+          <div className="rounded-2xl bg-[#F3E8FF] p-4 flex gap-3 items-start print:border print:border-purple-200">
+            <span className="text-2xl">💬</span>
+            <div>
+              <p className={`${FUN} text-lg font-semibold text-[#7E22CE]`}>Remember this</p>
+              <p className="text-lg">{notes.inShort}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-2xl bg-[#FFFBF2] border-2 border-dashed border-[#FFC83D] p-4 space-y-3">
+          <p className={`${FUN} text-lg font-semibold text-[#8A5A00]`}>👨‍👩‍👧 For grown-ups</p>
+          {notes.parentQuestion && (
+            <div className="rounded-2xl bg-white px-4 py-3 border border-[#FFF4D1]">
+              <p className="text-sm font-bold text-slate-500">Ask {profile.name} at home</p>
+              <p>"{notes.parentQuestion}"</p>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-slate-600">
+            <p>✍️ Parent's signature: ____________</p>
+            <p>🧑‍🏫 Teacher's remark: ____________</p>
+          </div>
         </div>
-      )}
-    </div>
+      </div>
+    </article>
   );
 };
 
-// One notebook "page" per day. Holds a results map that each child
-// ClassNotesEntry reports into via onResult as its notes finish
-// loading, so the summary box at the top (WON count, NEEDS HELP
-// count, stories used) can aggregate across every entry on the page
-// -- filling in progressively as entries load rather than waiting for
-// all of them before showing anything.
+// One day of the notebook.
 const DayPageCard: React.FC<{
   dayPage: DayPage;
   subject: string;
   profile: UserProfile;
-}> = ({ dayPage, subject, profile }) => {
-  const [resultsMap, setResultsMap] = useState<Record<string, ClassNotesResult | 'skipped' | 'error'>>({});
+  breakBefore: boolean;
+}> = ({ dayPage, subject, profile, breakBefore }) => {
+  const [resultsMap, setResultsMap] = useState<Record<string, ClassNotesOutcome>>({});
 
   const todayKey = (() => {
     const d = new Date();
@@ -506,92 +656,58 @@ const DayPageCard: React.FC<{
   })();
   const isToday = dayPage.dateKey === todayKey;
 
-  const handleResult = React.useCallback((sessionId: string, result: ClassNotesResult | 'skipped' | 'error') => {
-    setResultsMap((prev) => ({ ...prev, [sessionId]: result }));
+  const handleResult = React.useCallback((sessionId: string, outcome: ClassNotesOutcome) => {
+    setResultsMap((prev) => ({ ...prev, [sessionId]: outcome }));
   }, []);
 
-  const realResults = Object.values(resultsMap).filter(
-    (r): r is ClassNotesResult => r !== 'skipped' && r !== 'error'
-  );
-  const wonCount = realResults.filter((r) => r.status === 'won').length;
-  const needsHelpCount = realResults.filter((r) => r.status === 'needs_help').length;
-  const storiesUsed = Array.from(
-    new Set(realResults.map((r) => r.storyUsed).filter(Boolean))
-  );
+  const outcomes = Object.values(resultsMap);
+  const readyNotes = outcomes.filter(isReady).map((o) => o.notes);
+  const gotIt = readyNotes.filter((n) => n.status === 'won');
+  const practising = readyNotes.filter((n) => n.status === 'needs_help');
+  const stillLoading = outcomes.length < dayPage.sessions.length;
+  const everythingSkipped = !stillLoading && outcomes.every((o) => o.kind === 'skipped');
+
+  if (everythingSkipped) return null;
 
   const handleSendToTeacher = () => {
-    const wonEntries = realResults.filter((r) => r.status === 'won');
-    const needsHelpEntries = realResults.filter((r) => r.status === 'needs_help');
-
-    const lines = [`Today ${profile.name} Learned:`];
-    wonEntries.forEach((r) => {
-      const detail = r.childAnswer ? `${r.storyUsed} - ${r.childAnswer}` : r.storyUsed;
-      lines.push(`✅ WON: ${r.cleanTopic}${detail ? ` (${detail})` : ''}`);
-    });
-    needsHelpEntries.forEach((r) => {
-      lines.push(`⚠️ NEEDS HELP: ${r.cleanTopic} (asked ${r.attemptsCount}x)`);
-    });
-    if (storiesUsed.length > 0) {
-      lines.push(`📖 Stories: ${storiesUsed.join(', ')}`);
-    }
-    lines.push(`View: funlylearn-mama-titi.vercel.app/notebook/${dayPage.dateKey}`);
-
-    const message = encodeURIComponent(lines.join('\n'));
-    window.open(`https://wa.me/?text=${message}`, '_blank');
+    const lines = [`📒 ${profile.name}'s ${subject} learning, ${dayPage.displayDate}`, ''];
+    gotIt.forEach((n) => lines.push(`⭐ Got it: ${n.cleanTopic}`));
+    practising.forEach((n) => lines.push(`💪 Still practising: ${n.cleanTopic}`));
+    const keyWords = Array.from(new Set(readyNotes.flatMap((n) => n.keyWords))).slice(0, 8);
+    if (keyWords.length > 0) lines.push('', `🔑 Key words: ${keyWords.join(', ')}`);
+    lines.push('', 'Sent from FunlyLearn (funlylearn.com)');
+    window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
   };
 
-  const stillLoading = Object.keys(resultsMap).length < dayPage.sessions.length;
-
   return (
-    <div className="space-y-6">
-
-      <div className="pb-2 border-b-2 border-slate-800 flex items-baseline justify-between gap-3">
-        <p className="font-serif text-base sm:text-lg font-bold text-slate-900 underline decoration-2 underline-offset-4">
-          {dayPage.displayDate}
-        </p>
-        <span className="text-[10px] font-jakarta font-bold uppercase text-slate-500 shrink-0">
-          {profile.name}
+    <div
+      className={`rounded-[28px] bg-white border-2 border-slate-200 p-4 sm:p-6 space-y-6 ${READ} print:border-0 print:p-0 ${breakBefore ? 'print:break-before-page' : ''}`}
+      style={DOTS}
+    >
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <span className={`${FUN} inline-block px-4 py-2 rounded-2xl bg-[#FFC83D] text-[#064E3B] text-lg font-bold -rotate-1 border-b-4 border-[#E0A800]`}>
+          📅 {shortDate(dayPage.dateKey)}
         </span>
+        {readyNotes.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {gotIt.length > 0 && (
+              <span className="px-3 py-1.5 rounded-full bg-[#DCFCE7] text-[#064E3B] font-extrabold text-sm">⭐ {gotIt.length} got it</span>
+            )}
+            {practising.length > 0 && (
+              <span className="px-3 py-1.5 rounded-full bg-[#FFE8DE] text-[#D9480F] font-extrabold text-sm">💪 {practising.length} practising</span>
+            )}
+          </div>
+        )}
       </div>
 
-      {realResults.length > 0 && (
-        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-            <span className="text-sm font-jakarta font-bold text-slate-800">
-              ✅ WON TODAY: {wonCount} {wonCount === 1 ? 'topic' : 'topics'}
-            </span>
-          </div>
-          {needsHelpCount > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-              <span className="text-sm font-jakarta font-bold text-slate-800">
-                ⚠️ STILL NEEDS HELP: {needsHelpCount} {needsHelpCount === 1 ? 'topic' : 'topics'}
-              </span>
-            </div>
-          )}
-          {storiesUsed.length > 0 && (
-            <div className="pt-1">
-              <span className="text-xs font-jakarta font-bold text-slate-600">📖 STORIES USED:</span>
-              <p className="text-xs text-slate-600 mt-0.5">{storiesUsed.join(' · ')}</p>
-            </div>
-          )}
-          {stillLoading && (
-            <p className="text-[10px] text-slate-400 italic pt-1">Still adding up today's sessions...</p>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-8">
+      <div className="space-y-6">
         {dayPage.sessions.map((session) => (
-          <div key={session.sessionId} className="relative space-y-3 pb-6 border-b border-dashed border-slate-300 last:border-b-0">
+          <div key={session.sessionId} id={`entry-${session.sessionId}`} className="scroll-mt-24">
             <ClassNotesEntry
               sessionId={session.sessionId}
-              exchanges={session.exchanges.map((ex) => ({ topic: ex.topic, mamaReply: ex.mamaReply || '' }))}
+              fallbackTopic={session.exchanges[0]?.topic || subject}
               subject={subject}
-              classLevel={profile.classLevel}
-              language={profile.language}
-              wasResolved={session.resolved}
+              profile={profile}
               time={new Date(session.firstDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
               onResult={handleResult}
             />
@@ -599,16 +715,337 @@ const DayPageCard: React.FC<{
         ))}
       </div>
 
-      {isToday && realResults.length > 0 && (
+      {isToday && readyNotes.length > 0 && (
         <button
           onClick={handleSendToTeacher}
-          className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-jakarta font-bold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
+          className={`${FUN} ${PRESS} w-full py-4 rounded-2xl bg-[#16A34A] text-white text-xl font-semibold border-b-[6px] border-[#064E3B] print:hidden`}
         >
-          <span>📲</span>
-          <span>Send Today's Learning to Teacher via WhatsApp</span>
+          📲 Send today's learning to my teacher
         </button>
       )}
+    </div>
+  );
+};
 
+export interface WeeklyQuizTopic {
+  subject: string;
+  topic: string;
+  needsPractice: boolean;
+}
+
+interface DatedNotes {
+  notes: ClassNotesResult;
+  date: number;
+  sessionId: string;
+  groupSubject: string;
+}
+
+type PractiseStatus = 'needs_more' | 'not_tested' | 'improved';
+
+const PRACTISE_STATUS_ORDER: Record<PractiseStatus, number> = { needs_more: 0, not_tested: 1, improved: 2 };
+
+const StepBadge: React.FC<{ n: number }> = ({ n }) => (
+  <span className={`${FUN} w-9 h-9 rounded-full bg-[#064E3B] text-white text-lg font-bold flex items-center justify-center shrink-0`}>
+    {n}
+  </span>
+);
+
+// "My Week": the weekly revision. Step 1 is revising the topics the
+// child is still practising (tap one to open its notebook page), step
+// 2 is the Weekly Challenge (the revision test), and a plain summary
+// for grown-ups sits at the bottom.
+const WeeklyRevisionSheet: React.FC<{
+  sessions: StudySession[];
+  profile: UserProfile;
+  onStartQuiz: (topics: WeeklyQuizTopic[]) => void;
+  onReviseTopic: (subject: string, sessionId: string) => void;
+  latestTest: WeeklyTestResult | null;
+}> = ({ sessions, profile, onStartQuiz, onReviseTopic, latestTest }) => {
+  const { weekSessions, carrySessions, weekStart, weekEnd } = useMemo(() => {
+    const now = Date.now();
+    const age = (s: StudySession) => now - new Date(s.firstDate).getTime();
+    return {
+      weekSessions: sessions.filter((s) => age(s) <= 7 * DAY_MS),
+      carrySessions: sessions.filter((s) => !s.resolved && age(s) > 7 * DAY_MS && age(s) <= 28 * DAY_MS),
+      weekStart: new Date(now - 6 * DAY_MS),
+      weekEnd: new Date(now)
+    };
+  }, [sessions]);
+
+  const allIds = useMemo(
+    () => [...weekSessions, ...carrySessions].map((s) => s.sessionId),
+    [weekSessions, carrySessions]
+  );
+
+  const [outcomes, setOutcomes] = useState<Record<string, ClassNotesOutcome>>({});
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setOutcomes({});
+    allIds.forEach((id) => {
+      getClassNotesForSession(id, profile.classLevel, profile.language).then((outcome) => {
+        if (!cancelled) setOutcomes((prev) => ({ ...prev, [id]: outcome }));
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allIds.join('|')]);
+
+  const isLoading = Object.keys(outcomes).length < allIds.length;
+
+  const toDated = (list: StudySession[]): DatedNotes[] => {
+    const result: DatedNotes[] = [];
+    list.forEach((s) => {
+      const outcome = outcomes[s.sessionId];
+      if (isReady(outcome)) {
+        result.push({
+          notes: outcome.notes,
+          date: new Date(s.firstDate).getTime(),
+          sessionId: s.sessionId,
+          groupSubject: s.subject || 'General'
+        });
+      }
+    });
+    return result;
+  };
+
+  const weekNotes = toDated(weekSessions);
+  const carryNotes = toDated(carrySessions);
+  const gotIt = weekNotes.filter((d) => d.notes.status === 'won');
+  const practisingThisWeek = weekNotes.filter((d) => d.notes.status === 'needs_help');
+
+  const topicKey = (n: ClassNotesResult) => n.cleanTopic.trim().toLowerCase();
+
+  // A struggle drops off once the child gets the same topic right in a
+  // later homework session.
+  const practiseMap = new Map<string, DatedNotes>();
+  [...practisingThisWeek, ...carryNotes].forEach((d) => {
+    const solvedLater = gotIt.some((w) => topicKey(w.notes) === topicKey(d.notes) && w.date > d.date);
+    if (solvedLater) return;
+    const existing = practiseMap.get(topicKey(d.notes));
+    if (!existing || d.notes.attemptsCount > existing.notes.attemptsCount) {
+      practiseMap.set(topicKey(d.notes), d);
+    }
+  });
+
+  const latestTestTime = latestTest ? new Date(latestTest.createdAt).getTime() : 0;
+  const practiseRows = Array.from(practiseMap.values())
+    .map((d) => {
+      const result = latestTest && latestTestTime > d.date
+        ? latestTest.topicResults.find((t) => t.topic.trim().toLowerCase() === topicKey(d.notes))
+        : undefined;
+      const status: PractiseStatus = !result ? 'not_tested' : result.improved ? 'improved' : 'needs_more';
+      return { d, status, result };
+    })
+    .sort((a, b) =>
+      PRACTISE_STATUS_ORDER[a.status] - PRACTISE_STATUS_ORDER[b.status] ||
+      b.d.notes.attemptsCount - a.d.notes.attemptsCount
+    );
+
+  const stillPractising = practiseRows.filter((r) => r.status !== 'improved');
+  const improved = practiseRows.filter((r) => r.status === 'improved');
+
+  const keyWords = Array.from(new Set(weekNotes.flatMap((d) => d.notes.keyWords))).slice(0, 14);
+  const gotItTopics = Array.from(new Set(gotIt.map((d) => d.notes.cleanTopic)));
+
+  const handleStartQuiz = () => {
+    const seen = new Set<string>();
+    const topics: WeeklyQuizTopic[] = [];
+    const add = (n: ClassNotesResult, needsPractice: boolean) => {
+      const key = topicKey(n);
+      if (seen.has(key)) return;
+      seen.add(key);
+      topics.push({ subject: n.subject || 'General', topic: n.cleanTopic, needsPractice });
+    };
+    stillPractising.forEach((r) => add(r.d.notes, true));
+    improved.forEach((r) => add(r.d.notes, false));
+    gotIt.forEach((d) => add(d.notes, false));
+    if (topics.length > 0) onStartQuiz(topics);
+  };
+
+  const formatShort = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+  if (allIds.length === 0) {
+    return (
+      <div className={`rounded-[28px] bg-white border-2 border-slate-200 p-6 text-center space-y-2 ${READ}`} style={DOTS}>
+        <p className="text-5xl">🗓️</p>
+        <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>Your week starts here!</p>
+        <p className="text-slate-600">
+          Do homework with Mama Titi this week, and your revision and Weekly Challenge will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  const statusChip = (row: typeof practiseRows[number]) => {
+    if (row.status === 'improved') {
+      return <span className="px-3 py-1.5 rounded-full bg-[#16A34A] text-white text-sm font-extrabold shrink-0">🚀 Improved!</span>;
+    }
+    if (row.status === 'needs_more') {
+      return <span className="px-3 py-1.5 rounded-full bg-[#FF6B35] text-white text-sm font-extrabold shrink-0">💪 Keep going</span>;
+    }
+    return <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 text-sm font-extrabold shrink-0">Not tested yet</span>;
+  };
+
+  return (
+    <div className={`rounded-[28px] bg-white border-2 border-slate-200 p-4 sm:p-6 space-y-7 ${READ} print:border-0 print:p-0`} style={DOTS}>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className={`${FUN} text-3xl font-bold text-[#064E3B]`}>{profile.name}'s Week 🗓️</p>
+          <span className={`${FUN} px-4 py-2 rounded-2xl bg-[#FFC83D] text-[#064E3B] font-bold border-b-4 border-[#E0A800]`}>
+            {formatShort(weekStart)} – {formatShort(weekEnd)}
+          </span>
+        </div>
+        <p className="text-slate-600 font-semibold">Your weekly revision: practise your 💪 topics, then take the challenge!</p>
+      </div>
+
+      {isLoading && weekNotes.length === 0 && carryNotes.length === 0 ? (
+        <div className="py-8 flex items-center justify-center gap-2 text-slate-500 font-semibold">
+          <span className="text-2xl animate-bounce">🗓️</span>
+          <span>Getting your week ready...</span>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-2xl bg-[#E0F4FF] p-3 text-center border-b-4 border-[#38BDF8]">
+              <p className="text-2xl">📚</p>
+              <p className={`${FUN} text-3xl font-bold text-[#0284C7]`}>{weekNotes.length}</p>
+              <p className="text-sm font-bold text-[#0284C7]">topics</p>
+            </div>
+            <div className="rounded-2xl bg-[#DCFCE7] p-3 text-center border-b-4 border-[#16A34A]">
+              <p className="text-2xl">⭐</p>
+              <p className={`${FUN} text-3xl font-bold text-[#064E3B]`}>{gotIt.length}</p>
+              <p className="text-sm font-bold text-[#064E3B]">got it</p>
+            </div>
+            <div className="rounded-2xl bg-[#FFE8DE] p-3 text-center border-b-4 border-[#FF6B35]">
+              <p className="text-2xl">💪</p>
+              <p className={`${FUN} text-3xl font-bold text-[#D9480F]`}>{stillPractising.length}</p>
+              <p className="text-sm font-bold text-[#D9480F]">practising</p>
+            </div>
+            <div className="rounded-2xl bg-[#F3E8FF] p-3 text-center border-b-4 border-[#A855F7]">
+              <p className="text-2xl">🚀</p>
+              <p className={`${FUN} text-3xl font-bold text-[#7E22CE]`}>{latestTest ? improved.length : '–'}</p>
+              <p className="text-sm font-bold text-[#7E22CE]">improved</p>
+            </div>
+          </div>
+
+          {/* Step 1: revise */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <StepBadge n={1} />
+              <p className={`${FUN} text-2xl font-bold text-slate-800`}>Revise these 💪</p>
+            </div>
+            {practiseRows.length === 0 ? (
+              <div className="rounded-2xl bg-[#DCFCE7] p-4 text-center">
+                <p className="text-3xl">🎉</p>
+                <p className={`${FUN} text-lg font-semibold text-[#064E3B]`}>Nothing to practise. You got everything right this week!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {practiseRows.map((row) => (
+                  <button
+                    key={topicKey(row.d.notes)}
+                    onClick={() => onReviseTopic(row.d.groupSubject, row.d.sessionId)}
+                    className={`${PRESS} w-full text-left rounded-2xl bg-white border-2 border-b-4 border-[#FF6B35]/40 p-4 flex items-center gap-3`}
+                  >
+                    <span className="w-12 h-12 rounded-2xl bg-[#FFE8DE] flex items-center justify-center text-2xl shrink-0">
+                      {subjectEmoji(row.d.notes.subject || row.d.groupSubject)}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className={`${FUN} block text-xl font-semibold text-slate-800`}>{row.d.notes.cleanTopic}</span>
+                      <span className="block text-sm text-slate-500 font-semibold">
+                        {row.result
+                          ? `${row.result.correct}/${row.result.total} in the challenge · tap to revise`
+                          : 'Tap to revise your notes'}
+                      </span>
+                    </span>
+                    {statusChip(row)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Step 2: the Weekly Challenge (revision test) */}
+          {(practiseRows.length > 0 || gotIt.length > 0) && (
+            <div className="space-y-3 print:hidden">
+              <div className="flex items-center gap-3">
+                <StepBadge n={2} />
+                <p className={`${FUN} text-2xl font-bold text-slate-800`}>Take the Weekly Challenge 🏆</p>
+              </div>
+              <div className="rounded-3xl bg-[#064E3B] text-white p-5 border-b-[6px] border-[#03301F] space-y-3 text-center">
+                <p className="text-5xl">🏆</p>
+                <p className="text-emerald-100 font-semibold">
+                  {latestTest
+                    ? `Last score: ${latestTest.score} / ${latestTest.total}. Try again and beat it! 🔥`
+                    : stillPractising.length > 0
+                    ? '10 questions, mostly on your 💪 topics. Show how much you have improved!'
+                    : '10 questions on this week\'s topics. You can do it!'}
+                </p>
+                <button
+                  onClick={handleStartQuiz}
+                  className={`${FUN} ${PRESS} w-full sm:w-auto px-8 py-4 rounded-2xl bg-[#FFC83D] text-[#064E3B] text-xl font-bold border-b-[6px] border-[#E0A800]`}
+                >
+                  {latestTest ? 'Play again ▶' : 'Start the challenge ▶'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {gotItTopics.length > 0 && (
+            <div className="space-y-2">
+              <p className={`${FUN} text-2xl font-bold text-slate-800`}>⭐ You got these</p>
+              <div className="flex flex-wrap gap-2">
+                {gotItTopics.map((t) => (
+                  <span key={t} className="px-4 py-2 rounded-2xl bg-[#DCFCE7] text-[#064E3B] font-bold">✓ {t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {keyWords.length > 0 && (
+            <div className="space-y-2">
+              <p className={`${FUN} text-2xl font-bold text-slate-800`}>🔑 Words of the week</p>
+              <div className="flex flex-wrap gap-2">
+                {keyWords.map((w, i) => (
+                  <span key={w} className={`px-3 py-1.5 rounded-full font-bold ${CHIP_COLORS[i % CHIP_COLORS.length]}`}>{w}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* For grown-ups. Every line comes straight from the real
+              results, not from the AI. */}
+          <div className="rounded-2xl bg-[#FFFBF2] border-2 border-dashed border-[#FFC83D] p-4 space-y-3">
+            <p className={`${FUN} text-xl font-semibold text-[#8A5A00]`}>👨‍👩‍👧 {profile.name}'s week, for grown-ups</p>
+            <div className="grid gap-2 text-[16px]">
+              <p className="rounded-xl bg-white px-4 py-2.5"><b>📚 Worked on:</b> {weekNotes.length} {weekNotes.length === 1 ? 'topic' : 'topics'}</p>
+              {gotItTopics.length > 0 && (
+                <p className="rounded-xl bg-white px-4 py-2.5"><b>⭐ Got it:</b> {gotItTopics.join(', ')}</p>
+              )}
+              <p className="rounded-xl bg-white px-4 py-2.5">
+                <b>🏆 Weekly Challenge:</b> {latestTest ? `${latestTest.score} out of ${latestTest.total}` : 'not taken yet'}
+              </p>
+              {improved.length > 0 && (
+                <p className="rounded-xl bg-white px-4 py-2.5"><b>🚀 Improved in:</b> {improved.map((r) => r.d.notes.cleanTopic).join(', ')}</p>
+              )}
+              {stillPractising.length > 0 ? (
+                <p className="rounded-xl bg-white px-4 py-2.5"><b>💪 Still practising:</b> {stillPractising.map((r) => r.d.notes.cleanTopic).join(', ')}</p>
+              ) : (
+                practiseRows.length === 0 && (
+                  <p className="rounded-xl bg-white px-4 py-2.5"><b>🎉 Everything this week was answered correctly.</b></p>
+                )
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-slate-600">
+              <p>✍️ Parent's signature: ____________</p>
+              <p>🏆 Challenge score: {latestTest ? `${latestTest.score} / ${latestTest.total}` : '______'}</p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -621,6 +1058,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   onOpenPricingModal
 }) => {
   const isPremium = isPremiumActive(subscription);
+  useFunFonts();
 
   const [notebookViewCount, setNotebookViewCount] = useState<number>(
     () => getNotebookDailyViewCount().count
@@ -633,18 +1071,12 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   const examPrepLimitReached = !isPremium && examAttemptCount >= FREE_DAILY_EXAM_ATTEMPTS;
 
   const [activeView, setActiveView] = useState<'hub' | 'notebook' | 'revision'>('hub');
-  
+
   const [selectedExam, setSelectedExam] = useState<ExamType | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<ExamSubject | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<ExamTopic | null>(null);
-  // Lets a student narrow the topic list to a specific JSS grade, since
-  // BECE genuinely covers JSS1-3 cumulatively and some topics (e.g.
-  // Simple Equations) intentionally blend all three grades together.
-  // Derived from each topic's stored nerdcUnit text rather than a
-  // separate database column, since that value already encodes grade
-  // info (e.g. "JSS1 Chapter 5", "BECE Chapter — X (JSS1-3)").
   const [gradeFilter, setGradeFilter] = useState<'all' | 'JSS1' | 'JSS2' | 'JSS3'>('all');
-  
+
   const [userAnswers, setUserAnswers] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [mode, setMode] = useState<'choose' | 'solve' | 'print'>('choose');
@@ -658,7 +1090,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   React.useEffect(() => {
     let cancelled = false;
     setIsLoadingNotes(true);
-    fetchHomeworkRecords(userId, 50).then(records => {
+    fetchHomeworkRecords(userId, 200).then(records => {
       if (!cancelled) {
         setCompiledNotes(records);
         setIsLoadingNotes(false);
@@ -670,67 +1102,75 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   }, [userId]);
 
   const studySessions = useMemo(() => groupIntoSessions(compiledNotes), [compiledNotes]);
-
   const subjectGroups = useMemo(() => groupSessionsBySubject(studySessions), [studySessions]);
-  const weeklySubjectGroups = useMemo(() => getThisWeeksSubjectGroups(studySessions), [studySessions]);
 
-  // Which slice of the notebook is showing -- the full all-time record,
-  // or just the last 7 days for quick weekly revision.
+  // Daily notebook pages ("all") or the end-of-week revision sheet.
   const [notebookMode, setNotebookMode] = useState<'all' | 'week'>('all');
-  const visibleSubjectGroups = notebookMode === 'week' ? weeklySubjectGroups : subjectGroups;
 
   const [activeNotebookSubject, setActiveNotebookSubject] = useState<string | null>(null);
   React.useEffect(() => {
-    if (visibleSubjectGroups.length === 0) {
+    if (subjectGroups.length === 0) {
       setActiveNotebookSubject(null);
       return;
     }
-    if (!activeNotebookSubject || !visibleSubjectGroups.some(g => g.subject === activeNotebookSubject)) {
-      setActiveNotebookSubject(visibleSubjectGroups[0].subject);
+    if (!activeNotebookSubject || !subjectGroups.some(g => g.subject === activeNotebookSubject)) {
+      setActiveNotebookSubject(subjectGroups[0].subject);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleSubjectGroups]);
+  }, [subjectGroups]);
 
-  const activeSubjectGroup = visibleSubjectGroups.find(g => g.subject === activeNotebookSubject) || null;
+  const activeSubjectGroup = subjectGroups.find(g => g.subject === activeNotebookSubject) || null;
 
-  // Weekly AI-generated revision quiz -- fetched (or generated, on the
-  // first visit each week) only when the child actually switches to
-  // "This Week's Revision" and there's real material to quiz on.
-  // Kept as separate state from the regular Exam Prep quiz flow since
-  // it's a distinct set of questions built from this child's own real
-  // topics, not the shared curriculum bank.
-  const [weeklyQuiz, setWeeklyQuiz] = useState<WeeklyRevisionQuestion[] | null>(null);
+  // Weekly test -- questions built from this week's topics, mostly on
+  // the ones still being practised, each tagged with its topic so the
+  // result shows per topic whether the child improved.
+  const [weeklyQuiz, setWeeklyQuiz] = useState<WeeklyTestQuestion[] | null>(null);
+  const [weeklyQuizTopicsKey, setWeeklyQuizTopicsKey] = useState<string>('');
   const [isLoadingWeeklyQuiz, setIsLoadingWeeklyQuiz] = useState(false);
   const [weeklyQuizError, setWeeklyQuizError] = useState<string | null>(null);
   const [weeklyQuizAnswers, setWeeklyQuizAnswers] = useState<Record<string, number>>({});
   const [weeklyQuizSubmitted, setWeeklyQuizSubmitted] = useState(false);
   const [showWeeklyQuiz, setShowWeeklyQuiz] = useState(false);
+  const lastWeeklyTopicsRef = React.useRef<WeeklyQuizTopic[]>([]);
+  const [latestTestResult, setLatestTestResult] = useState<WeeklyTestResult | null>(null);
+  const [submittedResult, setSubmittedResult] = useState<WeeklyTestResult | null>(null);
+  const [showChallengeAnswers, setShowChallengeAnswers] = useState(false);
+  const [challengeHint, setChallengeHint] = useState<string | null>(null);
 
-  const handleStartWeeklyQuiz = async () => {
-    if (weeklySubjectGroups.length === 0) return;
+  React.useEffect(() => {
+    let cancelled = false;
+    getLatestWeeklyTestResult(userId).then((result) => {
+      if (!cancelled) setLatestTestResult(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const handleStartWeeklyQuiz = async (topics: WeeklyQuizTopic[]) => {
+    if (topics.length === 0) return;
+    lastWeeklyTopicsRef.current = topics;
     setShowWeeklyQuiz(true);
     setWeeklyQuizAnswers({});
     setWeeklyQuizSubmitted(false);
+    setSubmittedResult(null);
+    setShowChallengeAnswers(false);
+    setChallengeHint(null);
 
-    // Already have this week's quiz loaded -- no need to re-fetch.
-    if (weeklyQuiz) return;
+    // Reuse the loaded test only if the topics haven't changed since.
+    const topicsKey = topics.map((t) => `${t.topic}:${t.needsPractice ? 1 : 0}`).join('|');
+    if (weeklyQuiz && topicsKey === weeklyQuizTopicsKey) return;
 
     setIsLoadingWeeklyQuiz(true);
     setWeeklyQuizError(null);
 
-    const weeklyTopics = weeklySubjectGroups.flatMap((group) =>
-      group.sessions.map((session) => ({
-        subject: group.subject,
-        topic: session.exchanges[0]?.topic || ''
-      }))
-    );
+    const questions = await getWeeklyTest(userId, profile.classLevel, profile.language, topics);
 
-    const result = await getWeeklyRevisionQuiz(userId, profile.classLevel, profile.language, weeklyTopics);
-
-    if (result && result.questions.length > 0) {
-      setWeeklyQuiz(result.questions);
+    if (questions) {
+      setWeeklyQuiz(questions);
+      setWeeklyQuizTopicsKey(topicsKey);
     } else {
-      setWeeklyQuizError("Couldn't build this week's quiz right now. Please try again in a moment.");
+      setWeeklyQuizError("This week's test didn't load. Check your internet connection and try again.");
     }
     setIsLoadingWeeklyQuiz(false);
   };
@@ -743,6 +1183,68 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   const weeklyQuizScore = weeklyQuiz
     ? weeklyQuiz.filter((q) => weeklyQuizAnswers[q.id] === q.correctOptionIndex).length
     : 0;
+
+  const handleSubmitWeeklyQuiz = () => {
+    if (!weeklyQuiz) return;
+
+    const byTopic = new Map<string, WeeklyTestTopicResult>();
+    weeklyQuiz.forEach((q) => {
+      const key = q.topic.trim().toLowerCase();
+      const entry = byTopic.get(key) || {
+        topic: q.topic,
+        subject: q.subject,
+        needsPractice: q.needsPractice,
+        correct: 0,
+        total: 0,
+        improved: false
+      };
+      entry.total += 1;
+      if (weeklyQuizAnswers[q.id] === q.correctOptionIndex) entry.correct += 1;
+      byTopic.set(key, entry);
+    });
+
+    // Improved = a practice topic with at least two thirds right.
+    const topicResults = Array.from(byTopic.values()).map((t) => ({
+      ...t,
+      improved: t.needsPractice && t.correct / t.total >= 2 / 3
+    }));
+
+    const result: WeeklyTestResult = {
+      score: weeklyQuizScore,
+      total: weeklyQuiz.length,
+      topicResults,
+      createdAt: new Date().toISOString()
+    };
+
+    setWeeklyQuizSubmitted(true);
+    setSubmittedResult(result);
+    setLatestTestResult(result);
+    saveWeeklyTestResult(userId, result);
+
+    // Confetti and the chime only for a perfect score.
+    if (result.score === result.total) {
+      celebrate(true);
+    }
+  };
+
+  const sendTestResult = (to: 'parent' | 'teacher') => {
+    if (!submittedResult) return;
+    const text = encodeURIComponent(buildTestResultMessage(profile, submittedResult));
+    const parentNumber = (profile.parentWhatsApp || '').replace(/[^\d]/g, '');
+    const url = to === 'parent' && parentNumber
+      ? `https://wa.me/${parentNumber}?text=${text}`
+      : `https://wa.me/?text=${text}`;
+    window.open(url, '_blank');
+  };
+
+  // From My Week: open the notebook page for a topic to revise.
+  const handleReviseTopic = (subject: string, sessionId: string) => {
+    setNotebookMode('all');
+    setActiveNotebookSubject(subject);
+    setTimeout(() => {
+      document.getElementById(`entry-${sessionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 350);
+  };
 
   const [examData, setExamData] = useState<ExamType[]>(
     EXAM_META.map(meta => ({ ...meta, subjects: [] }))
@@ -767,6 +1269,16 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   }, []);
 
   const handlePrint = () => {
+    window.print();
+  };
+
+  // Printing the notebook is a paid feature (as the upgrade prompts
+  // already promise). Trial users count as paid.
+  const handlePrintNotebook = () => {
+    if (!isPremium) {
+      onOpenPricingModal();
+      return;
+    }
     window.print();
   };
 
@@ -852,13 +1364,19 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
   const comingSoonForExam = selectedExam ? (COMING_SOON_SUBJECTS[selectedExam.id] || []) : [];
 
-  const totalTopics = studySessions.length;
-  const totalCorrect = studySessions.filter(s => s.resolved).length;
+  // Sessions that were only a starter greeting don't count as topics.
+  const realSessions = studySessions.filter(
+    (s) => !s.exchanges.every((ex) => isGenericSubjectPrompt(ex.topic))
+  );
+  const totalTopics = realSessions.length;
+  const totalCorrect = realSessions.filter(s => s.resolved).length;
 
   return (
-    <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 pb-28 font-sans">
-      
-      <div className="hidden print:block print:p-0 print:m-0 print:bg-white print:text-black">
+    <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 pb-28 font-sans print:p-0 print:pb-0">
+
+      {/* Print version of an Exam Revision topic. The notebook prints
+          straight from its own on-screen pages (see below). */}
+      <div className={activeView === 'revision' && selectedTopic ? 'hidden print:block print:p-0 print:m-0 print:bg-white print:text-black' : 'hidden'}>
         <div className="border-b-2 border-slate-900 pb-4 mb-6">
           <div className="flex justify-between items-center">
             <div>
@@ -875,50 +1393,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
           </div>
         </div>
 
-        {activeView === 'notebook' ? (
-          <div className="space-y-6">
-            <h2 className="text-xl font-serif font-bold text-slate-900 border-b border-slate-300 pb-2">
-              {profile.name}'s Study Notebook
-            </h2>
-            <p className="text-xs text-slate-600">
-              {totalTopics} topics covered · {totalCorrect} correct answers
-            </p>
-            {subjectGroups.length === 0 ? (
-              <p className="text-sm text-slate-600 italic">
-                No homework sessions recorded yet. Chat with Mama Titi to build your notebook!
-              </p>
-            ) : (
-              subjectGroups.map((group) => (
-                <div key={group.subject} className="space-y-3">
-                  <h3 className="text-base font-bold font-serif border-b border-slate-200 pb-1">
-                    {group.subject}
-                  </h3>
-                  {group.sessions.map((session, i) => {
-                    const firstExchange = session.exchanges[0];
-                    return (
-                      <div key={session.sessionId} className="p-4 border border-slate-300 rounded-lg space-y-2">
-                        <div className="flex justify-between font-bold text-sm">
-                          <span>Q: {firstExchange.topic}</span>
-                          <span className="text-xs text-slate-500 shrink-0 ml-2">
-                            {new Date(session.latestDate).toLocaleDateString()}
-                          </span>
-                        </div>
-                        {firstExchange.mamaReply && (
-                          <p className="text-xs text-slate-700 italic">
-                            Mama Titi's Note: {firstExchange.mamaReply}
-                          </p>
-                        )}
-                        <p className="text-xs text-slate-700 font-bold">
-                          {session.resolved ? 'CORRECT ✅' : 'PRACTICING 💪'}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))
-            )}
-          </div>
-        ) : selectedTopic ? (
+        {selectedTopic && (
           <div className="space-y-6">
             <div className="border border-slate-300 p-4 rounded-lg space-y-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -961,42 +1436,33 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               ))}
             </div>
           </div>
-        ) : null}
+        )}
 
         <div className="mt-8 pt-4 border-t border-slate-300 text-center text-xs text-slate-500">
           Generated via FunlyLearn Companion
         </div>
       </div>
 
-      <div className="print:hidden space-y-6">
-        
-        <div className="bg-[#064E3B] text-white p-5 sm:p-6 rounded-3xl border-2 border-amber-400/40 shadow-xl space-y-4 relative overflow-hidden">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                  {profile.isOutOfSchool ? 'Catch Up Scholar' : 'Student Scholar'}
-                </span>
-                <span className="text-xs text-emerald-200 whitespace-nowrap">NERDC Aligned</span>
-              </div>
-              <h1 className="font-serif text-2xl font-bold text-white mt-0.5">
-                {profile.name}
-              </h1>
-              <p className="text-xs text-emerald-200 font-sans">
-                Class Level: <strong className="text-amber-300">{profile.classLevel}</strong> · {profile.language === 'yo' ? 'Yoruba & English' : 'English'}
-              </p>
-            </div>
+      <div className="space-y-6">
 
-            <div className="text-right shrink-0">
-              <div className="p-2.5 bg-amber-400/20 text-amber-300 rounded-2xl border border-amber-300/30 text-xs font-jakarta font-bold flex items-center space-x-1.5">
-                <span>⭐ {profile.stars} Stars</span>
-              </div>
-            </div>
+        <div className={`rounded-3xl bg-[#064E3B] text-white p-5 border-b-[6px] border-[#03301F] flex items-center gap-4 ${READ} print:hidden`}>
+          <div className={`${FUN} w-16 h-16 rounded-2xl bg-[#FFC83D] text-[#064E3B] flex items-center justify-center text-3xl font-bold shrink-0 border-b-4 border-[#E0A800]`}>
+            {(profile.name || 'S').charAt(0).toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`${FUN} text-2xl font-bold leading-tight truncate`}>{profile.name}</p>
+            <p className="text-emerald-100 text-sm font-semibold">
+              {profile.classLevel} · {profile.isOutOfSchool ? 'Catch Up Scholar' : 'Student Scholar'}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5 shrink-0">
+            <span className="px-3 py-1 rounded-full bg-[#FFC83D] text-[#064E3B] text-sm font-extrabold">⭐ {profile.stars}</span>
+            <span className="px-3 py-1 rounded-full bg-white/15 text-white text-sm font-extrabold">🪙 {profile.coins || 0}</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
+
           <button
             onClick={() => {
               if (!isPremium) {
@@ -1024,7 +1490,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                 Create Notebook
               </h3>
               <p className={`text-xs leading-relaxed ${activeView === 'notebook' ? 'text-emerald-100' : 'text-slate-600'}`}>
-                Compiles everything you've learned from homework sessions with Mama Titi into a printable notebook.
+                Every homework session with Mama Titi becomes a proper notebook page, ready to revise, print, and sign.
               </p>
             </div>
 
@@ -1074,206 +1540,146 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
         </div>
 
         {activeView === 'notebook' && (
-          <div className="rounded-3xl border-2 border-amber-300/80 shadow-xl overflow-hidden animate-fadeIn bg-amber-100">
+          <div className={`space-y-5 animate-fadeIn ${READ} print:space-y-0`}>
 
-            {/* All Notes / This Week's Revision toggle -- the weekly
-                view is just the last 7 days of the same real sessions,
-                filtered and re-grouped, so a parent or child can see
-                what's actually been covered this week without scrolling
-                the full all-time notebook. */}
-            <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-4">
+            <div className="grid grid-cols-2 gap-2 bg-white rounded-2xl p-1.5 border-2 border-slate-200 print:hidden">
               <button
                 onClick={() => setNotebookMode('all')}
-                className={`px-4 py-2 rounded-full text-xs font-jakarta font-bold transition-all ${
-                  notebookMode === 'all'
-                    ? 'bg-[#064E3B] text-white'
-                    : 'bg-white/60 text-slate-600 hover:bg-white'
+                className={`py-3 rounded-xl ${FUN} text-lg font-semibold transition-all ${
+                  notebookMode === 'all' ? 'bg-[#16A34A] text-white' : 'text-slate-500'
                 }`}
               >
-                All Notes
+                📒 My Notes
               </button>
               <button
                 onClick={() => setNotebookMode('week')}
-                className={`px-4 py-2 rounded-full text-xs font-jakarta font-bold transition-all ${
-                  notebookMode === 'week'
-                    ? 'bg-[#064E3B] text-white'
-                    : 'bg-white/60 text-slate-600 hover:bg-white'
+                className={`py-3 rounded-xl ${FUN} text-lg font-semibold leading-tight transition-all ${
+                  notebookMode === 'week' ? 'bg-[#16A34A] text-white' : 'text-slate-500'
                 }`}
               >
-                This Week's Revision
+                🗓️ My Week
+                <span className="block text-xs font-bold opacity-80">Revision + Challenge</span>
               </button>
             </div>
 
             {notebookMode === 'week' && !isPremium ? (
-              <div className="relative m-4 sm:m-6 rounded-2xl overflow-hidden">
-                {/* Blurred preview behind the lock -- gives a real
-                    sense that there's genuine content here without
-                    actually revealing it, rather than just a blank
-                    locked box. */}
-                <div className="pointer-events-none select-none blur-sm opacity-60 p-5 space-y-3 bg-[#FFFBF5]">
-                  <div className="h-4 w-2/3 bg-slate-300 rounded" />
-                  <div className="h-3 w-full bg-slate-200 rounded" />
-                  <div className="h-3 w-5/6 bg-slate-200 rounded" />
-                  <div className="h-3 w-3/4 bg-slate-200 rounded" />
-                  <div className="h-4 w-1/2 bg-slate-300 rounded mt-4" />
-                  <div className="h-3 w-full bg-slate-200 rounded" />
-                  <div className="h-3 w-4/5 bg-slate-200 rounded" />
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 p-5">
-                  <div className="bg-white rounded-2xl p-5 text-center space-y-3 max-w-xs shadow-2xl">
-                    <span className="text-3xl block">🔒</span>
-                    <h3 className="font-serif text-base font-bold text-[#064E3B]">
-                      Premium
-                    </h3>
-                    <p className="text-xs text-slate-600">
-                      View Weekly Accumulation + Send to Teacher — ₦2,500/month
-                    </p>
-                    <button
-                      onClick={onOpenPricingModal}
-                      className="w-full py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
-                    >
-                      Upgrade Now
-                    </button>
-                  </div>
-                </div>
+              <div className="rounded-[28px] bg-white border-2 border-slate-200 p-6 text-center space-y-3 print:hidden" style={DOTS}>
+                <p className="text-5xl">🔒</p>
+                <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>Unlock My Week</p>
+                <p className="text-slate-600 max-w-sm mx-auto">
+                  Weekly revision of everything {profile.name} learned, the topics to practise, and a fun Weekly Challenge. Included in the Basic and Family plans.
+                </p>
+                <button
+                  onClick={onOpenPricingModal}
+                  className={`${FUN} ${PRESS} px-8 py-3.5 rounded-2xl bg-[#FF6B35] text-white text-lg font-semibold border-b-[5px] border-[#D9480F]`}
+                >
+                  See plans
+                </button>
               </div>
             ) : (
               <>
-
-            {notebookMode === 'week' && weeklySubjectGroups.length > 0 && (
-              <div className="px-4 sm:px-6 pt-3">
-                <button
-                  onClick={handleStartWeeklyQuiz}
-                  className="w-full py-3 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white font-jakarta font-bold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
-                >
-                  <span>🎯</span>
-                  <span>Take This Week's Quiz</span>
-                </button>
-              </div>
-            )}
-
-            {visibleSubjectGroups.length > 1 && (
-              <div className="flex items-end space-x-1 px-4 sm:px-6 pt-3 overflow-x-auto no-scrollbar">
-                {visibleSubjectGroups.map((group) => (
-                  <button
-                    key={group.subject}
-                    onClick={() => setActiveNotebookSubject(group.subject)}
-                    className={`px-5 py-2.5 rounded-t-2xl text-xs sm:text-sm font-jakarta font-bold whitespace-nowrap transition-all relative ${
-                      activeNotebookSubject === group.subject
-                        ? 'bg-[#FFFBF5] text-[#064E3B] shadow-[0_-2px_6px_rgba(0,0,0,0.04)]'
-                        : 'bg-amber-200/60 text-amber-900/60 hover:text-amber-900 -mb-0.5'
-                    }`}
-                  >
-                    {group.subject}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="relative bg-[#FFFBF5] pl-8 pr-5 py-6 sm:pl-14 sm:pr-8 sm:py-8">
-
-              <div className="absolute left-2.5 sm:left-5 top-0 bottom-0 w-3 flex flex-col justify-evenly py-6">
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <span key={i} className="w-3 h-3 rounded-full bg-amber-100 border border-amber-300/70 shadow-inner" />
-                ))}
-              </div>
-
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  backgroundImage:
-                    'repeating-linear-gradient(to bottom, transparent, transparent 35px, rgba(6,78,59,0.08) 35px, rgba(6,78,59,0.08) 36px)',
-                  backgroundPosition: '0 90px'
-                }}
-              />
-              <div className="absolute left-14 sm:left-24 top-0 bottom-0 w-px bg-rose-300/50 hidden sm:block" />
-
-              <div className="relative space-y-6">
-
-                <div className="flex items-start justify-between gap-4 flex-wrap border-b-2 border-slate-800/80 pb-5">
-                  <div>
-                    <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#064E3B]">
-                      {profile.name}'s Study Notebook
-                    </h2>
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider border border-slate-300 text-slate-700 px-2.5 py-0.5 rounded-full bg-white">
-                        {profile.classLevel}
-                      </span>
-                      <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider border border-amber-300 text-amber-800 px-2.5 py-0.5 rounded-full bg-white">
-                        NERDC Aligned
-                      </span>
-                    </div>
-                  </div>
+                {/* Cover page -- only appears on paper. */}
+                <div className="hidden print:flex flex-col items-center justify-center text-center min-h-[85vh] break-after-page space-y-3">
+                  <p className="text-6xl">📒</p>
+                  <p className={`${FUN} text-4xl font-bold text-slate-900`}>{profile.name}'s Notebook</p>
+                  <p className="text-lg text-slate-800">Class: {profile.classLevel}</p>
+                  <p className="text-lg text-slate-800">
+                    {notebookMode === 'week' ? 'My Week: revision' : `Subject: ${activeNotebookSubject || 'All subjects'}`}
+                  </p>
+                  <p className="text-slate-600">
+                    {totalTopics} topics covered · {totalCorrect} answered correctly
+                  </p>
+                  <p className="text-slate-600">Printed on {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                  <p className="text-xs text-slate-500 pt-10">FunlyLearn · NERDC aligned · funlylearn.com</p>
                 </div>
 
-                <div className="flex items-center gap-8">
-                  <div>
-                    <p className="font-serif text-2xl font-bold text-[#064E3B]">{totalTopics}</p>
-                    <p className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-slate-500">
-                      Topics Covered
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-serif text-2xl font-bold text-[#064E3B]">{totalCorrect}</p>
-                    <p className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-slate-500">
-                      Correct Answers
-                    </p>
-                  </div>
+                <div className="flex items-center justify-between gap-2 print:hidden">
+                  {notebookMode === 'all' && subjectGroups.length > 0 ? (
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 min-w-0">
+                      {subjectGroups.map((group) => {
+                        const active = activeNotebookSubject === group.subject;
+                        return (
+                          <button
+                            key={group.subject}
+                            onClick={() => setActiveNotebookSubject(group.subject)}
+                            className={`${FUN} px-4 py-2.5 rounded-2xl font-semibold whitespace-nowrap transition-all ${
+                              active
+                                ? 'bg-[#16A34A] text-white border-b-4 border-[#064E3B]'
+                                : 'bg-white text-slate-600 border-2 border-slate-200'
+                            }`}
+                          >
+                            {subjectEmoji(group.subject)} {group.subject}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <span />
+                  )}
+                  <button
+                    onClick={handlePrintNotebook}
+                    className={`${FUN} ${PRESS} shrink-0 px-4 py-2.5 rounded-2xl bg-white border-2 border-b-4 border-slate-300 font-semibold text-[#064E3B]`}
+                  >
+                    {isPremium ? '🖨️ Print' : '🔒 Print'}
+                  </button>
                 </div>
 
                 {isLoadingNotes ? (
-                  <div className="py-10 text-center text-sm text-slate-500">Loading your sessions...</div>
+                  <div className="py-12 flex items-center justify-center gap-2 text-slate-500 font-semibold">
+                    <span className="text-3xl animate-bounce">📒</span>
+                    <span>Opening your notebook...</span>
+                  </div>
                 ) : notebookLimitReached ? (
-                  <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-amber-50 to-emerald-50 border-2 border-amber-300 text-center space-y-3">
-                    <span className="text-4xl block">📓</span>
-                    <h3 className="font-serif text-lg font-bold text-[#064E3B]">
-                      You've used today's {FREE_DAILY_NOTEBOOK_VIEWS} free notebook views
-                    </h3>
-                    <p className="text-xs text-slate-600 max-w-sm mx-auto">
-                      Upgrade to Basic or Family for unlimited notebook access, plus printing and downloading {profile.name}'s full study notebook anytime.
+                  <div className="rounded-[28px] bg-white border-2 border-slate-200 p-6 text-center space-y-3 print:hidden" style={DOTS}>
+                    <p className="text-5xl">📒</p>
+                    <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>That's today's {FREE_DAILY_NOTEBOOK_VIEWS} free looks!</p>
+                    <p className="text-slate-600 max-w-sm mx-auto">
+                      Come back tomorrow, or upgrade to Basic or Family to open and print {profile.name}'s notebook anytime.
                     </p>
                     <button
                       onClick={onOpenPricingModal}
-                      className="px-5 py-2.5 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] text-white text-xs font-jakarta font-bold shadow-md transition-all"
+                      className={`${FUN} ${PRESS} px-8 py-3.5 rounded-2xl bg-[#FF6B35] text-white text-lg font-semibold border-b-[5px] border-[#D9480F]`}
                     >
-                      Upgrade for Unlimited Access
+                      See plans
                     </button>
                   </div>
-                ) : visibleSubjectGroups.length === 0 ? (
-                  <div className="p-6 rounded-2xl bg-white/70 border border-slate-200 text-center space-y-1">
-                    <span className="text-3xl block">📚</span>
-                    <p className="text-sm font-medium text-slate-600">
-                      {notebookMode === 'week' ? 'Nothing covered this week yet' : 'No homework sessions yet'}
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      {notebookMode === 'week'
-                        ? `Chat with Mama Titi this week to build ${profile.name}'s weekly revision!`
-                        : 'Chat with Mama Titi about your homework to start building your notebook!'}
+                ) : notebookMode === 'week' ? (
+                  <WeeklyRevisionSheet
+                    sessions={studySessions}
+                    profile={profile}
+                    onStartQuiz={handleStartWeeklyQuiz}
+                    onReviseTopic={handleReviseTopic}
+                    latestTest={latestTestResult}
+                  />
+                ) : subjectGroups.length === 0 ? (
+                  <div className="rounded-[28px] bg-white border-2 border-slate-200 p-6 text-center space-y-2" style={DOTS}>
+                    <p className="text-5xl">📒</p>
+                    <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>Your notebook is waiting!</p>
+                    <p className="text-slate-600">
+                      Do your homework with Mama Titi, and every lesson becomes a page here.
                     </p>
                   </div>
                 ) : !activeSubjectGroup ? null : (
-                  <div className="space-y-12 pt-2">
-                    {groupSessionsByDay(activeSubjectGroup.sessions).map((dayPage) => (
+                  <div className="space-y-6">
+                    {groupSessionsByDay(activeSubjectGroup.sessions).map((dayPage, index) => (
                       <DayPageCard
                         key={dayPage.dateKey}
                         dayPage={dayPage}
                         subject={activeSubjectGroup.subject}
                         profile={profile}
+                        breakBefore={index > 0}
                       />
                     ))}
                   </div>
                 )}
-
-              </div>
-              </div>
               </>
             )}
           </div>
         )}
 
         {activeView === 'revision' && (
-          <div className="space-y-5 animate-fadeIn">
-            
+          <div className="space-y-5 animate-fadeIn print:hidden">
+
             <div className="flex items-center space-x-2 text-xs font-jakarta font-bold text-slate-600 bg-slate-100 p-3 rounded-2xl overflow-x-auto">
               <button
                 onClick={() => {
@@ -1367,7 +1773,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
             {selectedExam && !selectedTopic && (
               <div className="space-y-6">
-                
+
                 <div className="flex items-center justify-between bg-[#064E3B] text-white p-4 rounded-2xl">
                   <div>
                     <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider text-amber-300">
@@ -1433,10 +1839,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                       </span>
                     </div>
 
-                    {/* JSS grade filter — lets a student narrow to just
-                        their own year's topics, since BECE deliberately
-                        covers JSS1-3 cumulatively and some topics blend
-                        multiple grades together. */}
                     <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-0.5">
                       {(['all', 'JSS1', 'JSS2', 'JSS3'] as const).map((g) => (
                         <button
@@ -1515,7 +1917,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
               </div>
             ) : selectedExam && selectedTopic && (
               <div className="bg-white p-5 sm:p-6 rounded-3xl border-2 border-emerald-200 shadow-soft space-y-6">
-                
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div>
                     <span className="text-[10px] font-mono font-bold uppercase text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
@@ -1588,7 +1990,6 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </div>
 
                   {displayedQuestions.map((q, qIdx) => {
-                    const isSelected = userAnswers[q.id] !== undefined;
                     const isCorrect = userAnswers[q.id] === q.correctOptionIndex;
 
                     return (
@@ -1709,20 +2110,17 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
       </div>
 
-      {/* Weekly Revision Quiz -- fresh AI-generated questions built
-          from this child's own real topics from the past 7 days,
-          cached per week so this doesn't regenerate on every open. */}
+      {/* Weekly Challenge (the weekly revision test) */}
       {showWeeklyQuiz && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl border-2 border-orange-300 shadow-2xl max-w-lg w-full my-8 p-5 sm:p-6 space-y-5">
+        <div className={`fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/50 p-4 overflow-y-auto print:hidden ${READ}`}>
+          <div className="bg-white rounded-[28px] max-w-lg w-full my-6 p-5 sm:p-6 space-y-5 border-b-8 border-slate-200 text-[17px] text-slate-800">
 
-            <div className="flex items-center justify-between">
-              <h3 className="font-serif text-lg sm:text-xl font-bold text-[#064E3B]">
-                🎯 {profile.name}'s Weekly Quiz
-              </h3>
+            <div className="flex items-center justify-between gap-3">
+              <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>🏆 Weekly Challenge</p>
               <button
                 onClick={() => setShowWeeklyQuiz(false)}
-                className="p-1.5 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close the challenge"
+                className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 font-bold shrink-0"
               >
                 ✕
               </button>
@@ -1730,83 +2128,197 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
 
             {isLoadingWeeklyQuiz ? (
               <div className="py-10 text-center space-y-2">
-                <span className="text-3xl block animate-bounce">🧠</span>
-                <p className="text-sm text-slate-600">Building a quiz from this week's topics...</p>
+                <span className="text-5xl block animate-bounce">🧠</span>
+                <p className={`${FUN} text-xl font-semibold text-[#064E3B]`}>Getting your challenge ready...</p>
               </div>
             ) : weeklyQuizError ? (
               <div className="py-8 text-center space-y-3">
-                <p className="text-sm text-rose-600">{weeklyQuizError}</p>
+                <p className="text-4xl">😕</p>
+                <p className="text-slate-600">{weeklyQuizError}</p>
                 <button
-                  onClick={handleStartWeeklyQuiz}
-                  className="px-5 py-2.5 rounded-2xl bg-[#064E3B] text-white text-xs font-jakarta font-bold"
+                  onClick={() => handleStartWeeklyQuiz(lastWeeklyTopicsRef.current)}
+                  className={`${FUN} ${PRESS} px-6 py-3 rounded-2xl bg-[#16A34A] text-white font-semibold border-b-4 border-[#064E3B]`}
                 >
-                  Try Again
+                  🔄 Try again
                 </button>
               </div>
-            ) : weeklyQuiz && weeklyQuizSubmitted ? (
-              <div className="space-y-4">
-                <div className="text-center p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-emerald-50 border-2 border-amber-300">
-                  <p className="font-serif text-3xl font-bold text-[#064E3B]">
-                    {weeklyQuizScore} / {weeklyQuiz.length}
-                  </p>
-                  <p className="text-xs text-slate-600 mt-1">
-                    {weeklyQuizScore === weeklyQuiz.length
-                      ? `Perfect score, ${profile.name}! 🎉`
-                      : "Great effort -- review the ones you missed below."}
-                  </p>
-                </div>
-                {weeklyQuiz.map((q, idx) => {
-                  const userAnswer = weeklyQuizAnswers[q.id];
-                  const isCorrect = userAnswer === q.correctOptionIndex;
-                  return (
-                    <div key={q.id} className={`p-4 rounded-2xl border-2 ${isCorrect ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'}`}>
-                      <p className="text-sm font-bold text-slate-900">{idx + 1}. {q.question}</p>
-                      <p className="text-xs text-slate-600 mt-1">
-                        Correct answer: <strong>{q.options[q.correctOptionIndex]}</strong>
+            ) : weeklyQuiz && weeklyQuizSubmitted && submittedResult ? (
+              (() => {
+                const practice = submittedResult.topicResults.filter((t) => t.needsPractice);
+                const others = submittedResult.topicResults.filter((t) => !t.needsPractice);
+                const improvedCount = practice.filter((t) => t.improved).length;
+                const stars = starsFor(submittedResult.score, submittedResult.total);
+                const perfect = submittedResult.score === submittedResult.total;
+                const headline = perfect
+                  ? `Perfect score, ${profile.name}! 🌟`
+                  : improvedCount > 0
+                  ? `Ehhh! Well done, ${profile.name}!`
+                  : `Well done for finishing, ${profile.name}!`;
+                const subline = perfect
+                  ? 'You got every single one right!'
+                  : improvedCount > 0
+                  ? `You improved in ${improvedCount} ${improvedCount === 1 ? 'topic' : 'topics'} 🚀`
+                  : "Keep practising, you're getting better 💪";
+                const hasParentNumber = !!(profile.parentWhatsApp || '').replace(/[^\d]/g, '');
+
+                return (
+                  <div className="space-y-4">
+                    <div className="text-center space-y-1">
+                      <p className="text-7xl">{perfect ? '🏆' : improvedCount > 0 ? '🚀' : '💪'}</p>
+                      <p className={`${FUN} text-3xl font-bold text-[#064E3B]`}>{headline}</p>
+                      <p className="text-slate-600 font-semibold">{subline}</p>
+                      <p className="text-3xl tracking-wider" aria-label={`${stars} out of 5 stars`}>
+                        {'⭐'.repeat(stars)}
+                        <span className="opacity-25">{'⭐'.repeat(5 - stars)}</span>
                       </p>
-                      {q.explanation && (
-                        <p className="text-xs text-slate-500 italic mt-1">{q.explanation}</p>
-                      )}
+                      <p className={`${FUN} text-5xl font-bold text-[#FF6B35]`}>
+                        {submittedResult.score} / {submittedResult.total}
+                      </p>
                     </div>
-                  );
-                })}
-                <button
-                  onClick={() => setShowWeeklyQuiz(false)}
-                  className="w-full py-3 rounded-2xl bg-[#064E3B] text-white font-jakarta font-bold text-sm"
-                >
-                  Done
-                </button>
-              </div>
+
+                    {practice.length > 0 && (
+                      <div className="space-y-2">
+                        <p className={`${FUN} text-xl font-semibold`}>Your 💪 topics</p>
+                        {practice.map((t) => (
+                          <div
+                            key={t.topic}
+                            className={`rounded-2xl p-3 flex items-center justify-between gap-2 ${t.improved ? 'bg-[#DCFCE7]' : 'bg-[#FFE8DE]'}`}
+                          >
+                            <span className="font-bold">{subjectEmoji(t.subject)} {t.topic}</span>
+                            <span
+                              className={`px-3 py-1 rounded-full text-white text-sm font-extrabold shrink-0 ${t.improved ? 'bg-[#16A34A]' : 'bg-[#FF6B35]'}`}
+                            >
+                              {t.improved ? '🚀 Improved!' : '💪 Keep going'} {t.correct}/{t.total}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {others.length > 0 && (
+                      <p className="text-sm text-slate-500 font-semibold text-center">
+                        Other topics: {others.reduce((s, t) => s + t.correct, 0)}/{others.reduce((s, t) => s + t.total, 0)} correct ⭐
+                      </p>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        onClick={() => sendTestResult('parent')}
+                        className={`${FUN} ${PRESS} py-3.5 rounded-2xl bg-[#16A34A] text-white text-lg font-semibold border-b-[5px] border-[#064E3B]`}
+                      >
+                        📲 {hasParentNumber ? 'Tell my parent' : 'Share my score'}
+                      </button>
+                      <button
+                        onClick={() => sendTestResult('teacher')}
+                        className={`${FUN} ${PRESS} py-3.5 rounded-2xl bg-white text-[#064E3B] text-lg font-semibold border-2 border-b-[5px] border-[#16A34A]`}
+                      >
+                        📲 Tell my teacher
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => setShowChallengeAnswers((v) => !v)}
+                      className={`${FUN} w-full py-2 text-[#064E3B] font-semibold`}
+                    >
+                      {showChallengeAnswers ? '🙈 Hide the answers' : '👀 See the answers'}
+                    </button>
+
+                    {showChallengeAnswers && (
+                      <div className="space-y-3">
+                        {weeklyQuiz.map((q, idx) => {
+                          const isCorrect = weeklyQuizAnswers[q.id] === q.correctOptionIndex;
+                          return (
+                            <div key={q.id} className={`p-4 rounded-2xl border-2 ${isCorrect ? 'border-[#16A34A]/40 bg-[#DCFCE7]' : 'border-[#FF6B35]/40 bg-[#FFE8DE]'}`}>
+                              <p className="font-bold">{isCorrect ? '✅' : '❌'} {idx + 1}. {q.question}</p>
+                              <p className="text-sm text-slate-700 mt-1">
+                                Answer: <strong>{q.options[q.correctOptionIndex]}</strong>
+                              </p>
+                              {q.explanation && <p className="text-sm text-slate-600 mt-1">{q.explanation}</p>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setShowWeeklyQuiz(false)}
+                      className={`${FUN} ${PRESS} w-full py-3.5 rounded-2xl bg-[#FFC83D] text-[#064E3B] text-lg font-bold border-b-[5px] border-[#E0A800]`}
+                    >
+                      Done 🎉
+                    </button>
+                  </div>
+                );
+              })()
             ) : weeklyQuiz ? (
-              <div className="space-y-5">
-                {weeklyQuiz.map((q, idx) => (
-                  <div key={q.id} className="space-y-2.5">
-                    <p className="text-sm font-bold text-slate-900">{idx + 1}. {q.question}</p>
-                    <div className="grid grid-cols-1 gap-2">
-                      {q.options.map((opt, oIdx) => (
-                        <button
-                          key={oIdx}
-                          onClick={() => handleSelectWeeklyAnswer(q.id, oIdx)}
-                          className={`text-left px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
-                            weeklyQuizAnswers[q.id] === oIdx
-                              ? 'border-[#064E3B] bg-emerald-50 text-[#064E3B] font-bold'
-                              : 'border-slate-200 text-slate-700 hover:border-slate-300'
+              (() => {
+                const answered = Object.keys(weeklyQuizAnswers).length;
+                const remaining = weeklyQuiz.length - answered;
+                return (
+                  <div className="space-y-5">
+                    <div className="space-y-1">
+                      <div className="h-4 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-[#16A34A] transition-all"
+                          style={{ width: `${Math.round((answered / weeklyQuiz.length) * 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-sm text-slate-500 font-bold text-center">
+                        {answered} of {weeklyQuiz.length} answered
+                      </p>
+                    </div>
+
+                    {weeklyQuiz.map((q, idx) => (
+                      <div key={q.id} className="rounded-2xl border-2 border-slate-200 p-4 space-y-3">
+                        <span
+                          className={`inline-block px-3 py-1 rounded-full text-xs font-extrabold ${
+                            q.needsPractice ? 'bg-[#FFE8DE] text-[#D9480F]' : 'bg-[#E0F4FF] text-[#0284C7]'
                           }`}
                         >
-                          {opt}
-                        </button>
-                      ))}
-                    </div>
+                          {q.needsPractice ? '💪 ' : subjectEmoji(q.subject) + ' '}{q.topic}
+                        </span>
+                        <p className={`${FUN} text-xl font-semibold`}>{idx + 1}. {q.question}</p>
+                        <div className="grid grid-cols-1 gap-2">
+                          {q.options.map((opt, oIdx) => {
+                            const chosen = weeklyQuizAnswers[q.id] === oIdx;
+                            return (
+                              <button
+                                key={oIdx}
+                                onClick={() => {
+                                  handleSelectWeeklyAnswer(q.id, oIdx);
+                                  setChallengeHint(null);
+                                }}
+                                className={`${PRESS} text-left px-4 py-3 rounded-xl border-2 border-b-4 font-bold transition-colors ${
+                                  chosen
+                                    ? 'border-[#16A34A] bg-[#DCFCE7] text-[#064E3B]'
+                                    : 'border-slate-200 bg-white text-slate-700'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+
+                    {challengeHint && (
+                      <p className="text-center text-[#D9480F] font-bold">{challengeHint}</p>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (remaining > 0) {
+                          setChallengeHint(`Answer ${remaining} more ${remaining === 1 ? 'question' : 'questions'} to finish 😊`);
+                          return;
+                        }
+                        handleSubmitWeeklyQuiz();
+                      }}
+                      className={`${FUN} ${PRESS} w-full py-4 rounded-2xl bg-[#FFC83D] text-[#064E3B] text-xl font-bold border-b-[6px] border-[#E0A800]`}
+                    >
+                      Finish the challenge 🎉
+                    </button>
                   </div>
-                ))}
-                <button
-                  onClick={() => setWeeklyQuizSubmitted(true)}
-                  disabled={Object.keys(weeklyQuizAnswers).length < weeklyQuiz.length}
-                  className="w-full py-3 rounded-2xl bg-[#FF6B35] hover:bg-[#E85523] disabled:opacity-40 disabled:cursor-not-allowed text-white font-jakarta font-bold text-sm"
-                >
-                  Submit Answers
-                </button>
-              </div>
+                );
+              })()
             ) : null}
 
           </div>
