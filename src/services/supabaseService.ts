@@ -858,14 +858,25 @@ async function callWeeklyTestFunction(body: Record<string, unknown>): Promise<an
   }
 }
 
+// variant 'game' is the Naija Lingo Homework Game: same kind of
+// questions, but a fresh set each day, separate from the Weekly
+// Challenge, so the two never show the same questions.
 export async function getWeeklyTest(
   userId: string,
   classLevel: string,
   language: string,
-  topics: { subject: string; topic: string; needsPractice: boolean }[]
+  topics: { subject: string; topic: string; needsPractice: boolean }[],
+  options: { variant?: 'challenge' | 'game' } = {}
 ): Promise<WeeklyTestQuestion[] | null> {
   if (topics.length === 0) return null;
-  const data = await callWeeklyTestFunction({ action: 'generate', userId, classLevel, language, topics });
+  const data = await callWeeklyTestFunction({
+    action: 'generate',
+    userId,
+    classLevel,
+    language,
+    topics,
+    variant: options.variant || 'challenge'
+  });
   return data?.questions && data.questions.length > 0 ? (data.questions as WeeklyTestQuestion[]) : null;
 }
 
