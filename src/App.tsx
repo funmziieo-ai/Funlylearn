@@ -342,6 +342,7 @@ export default function App() {
                 profile={profile}
                 onProfileUpdate={handleProfileUpdate}
                 onOpenWordCrushPreview={() => setActiveTab('word_crush')}
+                userId={user?.id || getOrCreateGuestSessionId()}
               />
             )}
 
