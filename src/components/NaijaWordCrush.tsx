@@ -1,1340 +1,1357 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import {
-  Sparkles, Flame, Trophy, Play, CheckCircle2, RotateCcw,
-  Volume2, Heart, Crown, Share2, Award, ArrowRight, ArrowLeft, RefreshCw
-} from 'lucide-react';
-import {
-  WORD_CRUSH_VOCABULARY, NIGERIAN_ITEMS,
-  CrushWord, NigerianItem
-} from '../data/naijaWordCrushData';
+import { WORD_CRUSH_VOCABULARY } from '../data/naijaWordCrushData';
 import { fetchAudioTTS } from '../services/apiClient';
-import { UserProfile, ClassLevel } from '../types';
+import { UserProfile } from '../types';
+import { gameAudio } from '../utils/gameAudio';
 
 export interface NaijaWordCrushProps {
   profile?: UserProfile;
   onBackToApp?: () => void;
   isStandalonePreview?: boolean;
+  // Lets the games add the coins a child wins to their profile.
+  onProfileUpdate?: (profile: UserProfile) => void;
 }
 
-// Maps a child's class level to the vocabulary difficulty band their
-// content should be filtered to.
-function getAgeBandForClassLevel(classLevel?: ClassLevel): 'primary' | 'jss' | 'ss' {
-  if (!classLevel) return 'primary';
-  if (classLevel.startsWith('Primary')) return 'primary';
-  if (classLevel.startsWith('JSS')) return 'jss';
-  return 'ss';
-}
+// ---------- design tokens (same as the Game Zone) ----------
+const FUN = "font-['Fredoka']";
+const READ = "font-['Nunito']";
+const PRESS = 'transition-transform active:translate-y-[4px]';
+const STARRY: React.CSSProperties = {
+  backgroundColor: '#2E1065',
+  backgroundImage: [
+    'radial-gradient(circle at 15% 8%, rgba(255,200,61,.20), transparent 35%)',
+    'radial-gradient(circle at 90% 30%, rgba(56,189,248,.16), transparent 35%)',
+    'radial-gradient(circle at 50% 95%, rgba(22,163,74,.20), transparent 40%)',
+    'radial-gradient(rgba(255,255,255,.08) 1.5px, transparent 1.5px)'
+  ].join(','),
+  backgroundSize: 'auto, auto, auto, 26px 26px'
+};
+const TILE_COLORS = [
+  'bg-[#16A34A] border-[#064E3B]',
+  'bg-[#0284C7] border-[#075985]',
+  'bg-[#7E22CE] border-[#4C1D95]',
+  'bg-[#FF6B35] border-[#D9480F]',
+  'bg-[#E0A800] border-[#8A5A00]',
+  'bg-[#DB2777] border-[#9D174D]'
+];
+const CONFETTI_COLORS = ['#FFC83D', '#FF6B35', '#16A34A', '#38BDF8', '#A855F7', '#E11D48', '#ffffff'];
 
-type GameMode = 'fruit_match' | 'lego_builder' | 'speed_crush';
-type Language = 'Yoruba' | 'Igbo' | 'Hausa';
+// Candy looks for Letter Crush: colour plus shape, so children who see
+// colours differently can still tell the candies apart.
+const CANDY_LOOKS = [
+  { bg: 'radial-gradient(circle at 30% 25%, #FF8FB1, #E11D48 60%, #9F1239)', shape: 'circle' },
+  { bg: 'radial-gradient(circle at 30% 25%, #86EFAC, #16A34A 60%, #14532D)', shape: 'square' },
+  { bg: 'radial-gradient(circle at 30% 25%, #7DD3FC, #0284C7 60%, #0C4A6E)', shape: 'diamond' },
+  { bg: 'radial-gradient(circle at 30% 25%, #FDE68A, #F59E0B 60%, #92400E)', shape: 'circle' },
+  { bg: 'radial-gradient(circle at 30% 25%, #D8B4FE, #9333EA 60%, #581C87)', shape: 'square' }
+];
+const PRAISE = ['Sweet! 🍬', 'Ẹ̀wà! ✨', 'Ó dára! 🎉', 'Jollof! 🔥', 'Super! ⭐', 'Ẹ kú iṣẹ́! 🏆'];
 
-const GRID_SIZE = 6;
+const N = 7;                 // Letter Crush board is 7 x 7
+const WORDS_PER_ROUND = 10;
+const MOVES_PER_WORD = 20;
+const NEED_PER_LETTER = 10;  // tuned so a word takes about 6 moves
+const CATCH_GOAL = 10;
+const HINT_COST = 5;
+const BEST_KEY = 'naija_word_crush_best_catch';
 
-// Real touchscreens register several pixels of finger jitter even on a
-// stationary tap — 6px was too small and caused ordinary taps to be
-// misread as intentional swipes, triggering accidental (and, with only
-// 3-4 letter types on the grid, near-guaranteed) matches.
-const SWIPE_THRESHOLD = 18;
+const STYLES = `
+.wc-candy { position: absolute; width: calc(100% / ${N}); height: calc(100% / ${N}); padding: 4px; cursor: pointer;
+  transition: top .24s cubic-bezier(.5,0,.75,1.4), left .22s ease, transform .2s ease, opacity .2s ease; touch-action: none; }
+.wc-candy .shape { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #fff;
+  box-shadow: inset 0 -6px 0 rgba(0,0,0,.25), inset 0 5px 8px rgba(255,255,255,.55), 0 4px 8px rgba(0,0,0,.35); transition: transform .15s; }
+.wc-candy .shape b { font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: clamp(18px, 5.5vw, 32px); text-shadow: 0 2px 2px rgba(0,0,0,.4); }
+.wc-candy .circle { border-radius: 50%; }
+.wc-candy .square { border-radius: 30%; }
+.wc-candy .diamond { border-radius: 22%; transform: rotate(45deg) scale(.8); }
+.wc-candy .diamond b { transform: rotate(-45deg); }
+.wc-candy.sel .shape { outline: 4px solid #FFC83D; outline-offset: 1px; transform: scale(1.12); }
+.wc-candy.sel .diamond { transform: rotate(45deg) scale(.92); }
+.wc-candy.boom { transform: scale(1.6); opacity: 0; }
+.wc-candy.hint .shape { animation: wc-wiggle .5s ease-in-out 4; }
+@keyframes wc-wiggle { 0%,100% { rotate: 0deg } 25% { rotate: -12deg } 75% { rotate: 12deg } }
+.wc-praise { transform: translate(-50%, -50%); animation: wc-praise .9s ease-out forwards; text-shadow: 0 3px 0 #D9480F, 0 6px 12px rgba(0,0,0,.4); white-space: nowrap; }
+@keyframes wc-praise { 0% { transform: translate(-50%, -20%) scale(.5); opacity: 0 } 25% { transform: translate(-50%, -50%) scale(1.15); opacity: 1 } 100% { transform: translate(-50%, -120%) scale(1); opacity: 0 } }
+.wc-wobble { animation: wc-wobble .4s; }
+@keyframes wc-wobble { 0%,100% { transform: translateX(0) } 25% { transform: translateX(-8px) rotate(-4deg) } 75% { transform: translateX(8px) rotate(4deg) } }
+.wc-pop { animation: wc-pop .3s ease-out; }
+@keyframes wc-pop { 0% { transform: scale(.6); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
+.wc-bubble { position: absolute; transform: translateX(-50%); }
+@media (prefers-reduced-motion: reduce) { .wc-candy, .wc-wobble, .wc-pop, .wc-praise { animation: none !important; transition: none !important; } }
+`;
 
-export interface LetterCandyItem {
+// ---------- words ----------
+interface GameWord {
   id: string;
-  letter: string;
-  phonetics: string;
-  color: string;
-  borderColor: string;
+  word: string;
+  en: string;
+  emoji: string;
 }
 
-const getLetterItemsForLanguage = (lang: Language): LetterCandyItem[] => {
-  const colorStyles = [
-    { color: 'bg-gradient-to-br from-rose-500 via-pink-600 to-rose-700 text-white shadow-rose-950/40', border: 'border-rose-200' },
-    { color: 'bg-gradient-to-br from-[#0E8256] via-emerald-600 to-teal-700 text-white shadow-emerald-950/40', border: 'border-emerald-200' },
-    { color: 'bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 text-white shadow-amber-950/40', border: 'border-amber-200' },
-    { color: 'bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 text-white shadow-indigo-950/40', border: 'border-blue-200' },
-    { color: 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-purple-800 text-white shadow-purple-950/40', border: 'border-purple-200' },
-    { color: 'bg-gradient-to-br from-orange-500 via-red-600 to-orange-700 text-white shadow-orange-950/40', border: 'border-orange-200' },
-  ];
+const WORDS: GameWord[] = WORD_CRUSH_VOCABULARY
+  .filter(w => w.language === 'Yoruba')
+  .map(w => ({ id: w.id, word: w.word, en: w.english, emoji: w.itemEmoji }));
 
-  let rawList: { letter: string; phonetics: string }[] = [];
-
-  if (lang === 'Yoruba') {
-    rawList = [
-      { letter: 'A', phonetics: 'Ah' },
-      { letter: 'B', phonetics: 'Bii' },
-      { letter: 'D', phonetics: 'Dii' },
-      { letter: 'E', phonetics: 'Aii' },
-      { letter: 'Ẹ', phonetics: 'Eh' },
-      { letter: 'F', phonetics: 'Fii' },
-      { letter: 'G', phonetics: 'Gii' },
-      { letter: 'GB', phonetics: 'Gbi' },
-      { letter: 'I', phonetics: 'Eee' },
-      { letter: 'J', phonetics: 'Jii' },
-      { letter: 'K', phonetics: 'Kii' },
-      { letter: 'L', phonetics: 'Lii' },
-      { letter: 'M', phonetics: 'Mii' },
-      { letter: 'N', phonetics: 'Nii' },
-      { letter: 'O', phonetics: 'Oh' },
-      { letter: 'Ọ', phonetics: 'Aw' },
-      { letter: 'P', phonetics: 'Pii' },
-      { letter: 'R', phonetics: 'Rii' },
-      { letter: 'S', phonetics: 'Sii' },
-      { letter: 'Ṣ', phonetics: 'Shii' },
-      { letter: 'T', phonetics: 'Tii' },
-      { letter: 'U', phonetics: 'Ooo' },
-      { letter: 'W', phonetics: 'Wii' },
-      { letter: 'Y', phonetics: 'Yii' },
-    ];
-  } else if (lang === 'Igbo') {
-    rawList = [
-      { letter: 'A', phonetics: 'Ah' },
-      { letter: 'Ị', phonetics: 'Ih' },
-      { letter: 'KP', phonetics: 'Kpa' },
-      { letter: 'Ọ', phonetics: 'Aw' },
-      { letter: 'Ụ', phonetics: 'Oo' },
-      { letter: 'Ṅ', phonetics: 'Nga' },
-    ];
-  } else {
-    // Hausa
-    rawList = [
-      { letter: 'A', phonetics: 'Ah' },
-      { letter: 'Ɓ', phonetics: 'Bha' },
-      { letter: 'Ɗ', phonetics: 'Dha' },
-      { letter: 'Ƙ', phonetics: 'Kha' },
-      { letter: 'TS', phonetics: 'Tsa' },
-      { letter: 'Ƴ', phonetics: 'Yha' },
-    ];
+// Yorùbá letters for spelling: keeps the dot under Ẹ, Ọ, Ṣ and the GB
+// letter, and only leaves out the tone marks on top (the finished word
+// is always shown with its full tone marks).
+function lettersOf(word: string): string[] {
+  const s = word.normalize('NFD').replace(/[\u0300\u0301\u0302\u0304]/g, '').normalize('NFC').toUpperCase();
+  const out: string[] = [];
+  for (let i = 0; i < s.length;) {
+    if (/[\s\-/,.'’]/.test(s[i])) { i++; continue; }
+    if (s.substr(i, 2) === 'GB') { out.push('GB'); i += 2; continue; }
+    out.push(s[i]);
+    i++;
   }
-
-  return rawList.map((item, idx) => ({
-    id: `letter-${lang}-${item.letter}`,
-    letter: item.letter,
-    phonetics: item.phonetics,
-    color: colorStyles[idx % colorStyles.length].color,
-    borderColor: colorStyles[idx % colorStyles.length].border,
-  }));
-};
-
-const getLetterItemsForWord = (targetWord: CrushWord | null, lang: Language): LetterCandyItem[] => {
-  const colorStyles = [
-    { color: 'bg-gradient-to-br from-rose-500 via-pink-600 to-rose-700 text-white shadow-rose-950/40', border: 'border-rose-200' },
-    { color: 'bg-gradient-to-br from-[#0E8256] via-emerald-600 to-teal-700 text-white shadow-emerald-950/40', border: 'border-emerald-200' },
-    { color: 'bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 text-white shadow-amber-950/40', border: 'border-amber-200' },
-    { color: 'bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 text-white shadow-indigo-950/40', border: 'border-blue-200' },
-    { color: 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-purple-800 text-white shadow-purple-950/40', border: 'border-purple-200' },
-    { color: 'bg-gradient-to-br from-orange-500 via-red-600 to-orange-700 text-white shadow-orange-950/40', border: 'border-orange-200' },
-  ];
-
-  const wordLetters: { letter: string; phonetics: string }[] = [];
-
-  if (targetWord && targetWord.word) {
-    const rawNormalized = targetWord.word.normalize('NFD').replace(/[\u0300\u0301\u0302\u0304]/g, '').normalize('NFC');
-    const str = rawNormalized.toUpperCase();
-    const digraphs = ['GB', 'KP', 'TS', 'CH', 'SH', 'GW', 'KW', 'NW', 'NY'];
-    const extractedLetters: string[] = [];
-
-    let i = 0;
-    while (i < str.length) {
-      if (/[\s\-\/\,\.]/.test(str[i])) {
-        i++;
-        continue;
-      }
-      let matchedDigraph = false;
-      for (const dg of digraphs) {
-        if (str.substring(i, i + dg.length) === dg) {
-          if (!extractedLetters.includes(dg)) {
-            extractedLetters.push(dg);
-          }
-          i += dg.length;
-          matchedDigraph = true;
-          break;
-        }
-      }
-      if (!matchedDigraph) {
-        const char = str[i];
-        if (char && !extractedLetters.includes(char)) {
-          extractedLetters.push(char);
-        }
-        i++;
-      }
-    }
-
-    extractedLetters.forEach(l => {
-      wordLetters.push({
-        letter: l,
-        phonetics: `'${l}' Sound`,
-      });
-    });
-  }
-
-  const defaults = getLetterItemsForLanguage(lang);
-  for (const def of defaults) {
-    if (wordLetters.length >= 3) break;
-    if (!wordLetters.some(item => item.letter === def.letter)) {
-      wordLetters.push({
-        letter: def.letter,
-        phonetics: def.phonetics,
-      });
-    }
-  }
-
-  return wordLetters.slice(0, 4).map((item, idx) => ({
-    id: `letter-${lang}-${item.letter}`,
-    letter: item.letter,
-    phonetics: item.phonetics,
-    color: colorStyles[idx % colorStyles.length].color,
-    borderColor: colorStyles[idx % colorStyles.length].border,
-  }));
-};
-
-interface CandyCell {
-  gridKey: string;
-  item: LetterCandyItem;
-  isCrushing?: boolean;
+  return out;
 }
 
-const createRandomCandyGrid = (letterItems: LetterCandyItem[]): CandyCell[][] => {
-  const newGrid: CandyCell[][] = [];
-  const palette = letterItems && letterItems.length > 0 ? letterItems : getLetterItemsForLanguage('Yoruba');
-  for (let r = 0; r < GRID_SIZE; r++) {
-    const row: CandyCell[] = [];
-    for (let c = 0; c < GRID_SIZE; c++) {
-      let available = [...palette];
-      if (r >= 2) {
-        const id1 = newGrid[r - 1][c].item.id;
-        const id2 = newGrid[r - 2][c].item.id;
-        if (id1 === id2) {
-          available = available.filter(i => i.id !== id1);
-        }
-      }
-      if (c >= 2) {
-        const id1 = row[c - 1].item.id;
-        const id2 = row[c - 2].item.id;
-        if (id1 === id2) {
-          available = available.filter(i => i.id !== id1);
-        }
-      }
-      const item = available[Math.floor(Math.random() * available.length)] || palette[0];
-      row.push({
-        gridKey: `cell-${r}-${c}-${Math.random()}`,
-        item,
-      });
+function shuffle<T>(list: T[]): T[] {
+  return [...list].sort(() => Math.random() - 0.5);
+}
+
+// Each word comes up once before any word repeats.
+function makeDeck(list: GameWord[]) {
+  let deck: GameWord[] = [];
+  let last: GameWord | null = null;
+  return (): GameWord => {
+    if (deck.length === 0) {
+      deck = shuffle(list);
+      if (last && deck.length > 1 && deck[0].id === last.id) deck.push(deck.shift()!);
     }
-    newGrid.push(row);
-  }
-
-  return newGrid;
-};
-
-const findGridMatches = (grid: CandyCell[][]): { r: number; c: number }[] => {
-  if (!grid || grid.length < GRID_SIZE) return [];
-  const matchedSet = new Set<string>();
-
-  for (let r = 0; r < GRID_SIZE; r++) {
-    for (let c = 0; c < GRID_SIZE - 2; c++) {
-      if (!grid[r] || !grid[r][c] || !grid[r][c + 1] || !grid[r][c + 2]) continue;
-      const id1 = grid[r][c].item.id;
-      const id2 = grid[r][c + 1].item.id;
-      const id3 = grid[r][c + 2].item.id;
-      if (id1 === id2 && id2 === id3) {
-        matchedSet.add(`${r},${c}`);
-        matchedSet.add(`${r},${c + 1}`);
-        matchedSet.add(`${r},${c + 2}`);
-      }
-    }
-  }
-
-  for (let c = 0; c < GRID_SIZE; c++) {
-    for (let r = 0; r < GRID_SIZE - 2; r++) {
-      if (!grid[r] || !grid[r + 1] || !grid[r + 2]) continue;
-      const id1 = grid[r][c].item.id;
-      const id2 = grid[r + 1][c].item.id;
-      const id3 = grid[r + 2][c].item.id;
-      if (id1 === id2 && id2 === id3) {
-        matchedSet.add(`${r},${c}`);
-        matchedSet.add(`${r + 1},${c}`);
-        matchedSet.add(`${r + 2},${c}`);
-      }
-    }
-  }
-
-  const matches: { r: number; c: number }[] = [];
-  matchedSet.forEach(key => {
-    const [r, c] = key.split(',').map(Number);
-    matches.push({ r, c });
-  });
-  return matches;
-};
-
-export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({
-  profile,
-  onBackToApp,
-  isStandalonePreview = true
-}) => {
-  const [mode, setMode] = useState<GameMode>('fruit_match');
-  const [language, setLanguage] = useState<Language>('Yoruba');
-  const [score, setScore] = useState<number>(0);
-  const [highScore, setHighScore] = useState<number>(() => {
-    return parseInt(localStorage.getItem('naija_word_crush_highscore') || '0', 10);
-  });
-  const [lives, setLives] = useState<number>(3);
-  const [streak, setStreak] = useState<number>(0);
-  const [level, setLevel] = useState<number>(1);
-  const [comboCount, setComboCount] = useState<number>(0);
-
-  const [showLevelComplete, setShowLevelComplete] = useState<boolean>(false);
-  const [showGameOver, setShowGameOver] = useState<boolean>(false);
-  const [feedbackMessage, setFeedbackMessage] = useState<string>('Swap adjacent fruits to match 3 in a row!');
-  const [shakingItemId, setShakingItemId] = useState<string | null>(null);
-
-  const [fruitTargetWord, setFruitTargetWord] = useState<CrushWord | null>(null);
-  const [candyGrid, setCandyGrid] = useState<CandyCell[][]>([]);
-  const [selectedCell, setSelectedCell] = useState<{ r: number; c: number } | null>(null);
-  const [isProcessingMatch, setIsProcessingMatch] = useState<boolean>(false);
-
-  // Default the difficulty to match the child's age band, so a JSS/SS
-  // student isn't stuck on the same 'easy' default as a Primary child —
-  // they can still override it manually via the difficulty buttons.
-  const defaultDifficultyForAgeBand: Record<'primary' | 'jss' | 'ss', 'easy' | 'medium' | 'hard'> = {
-    primary: 'easy',
-    jss: 'medium',
-    ss: 'hard'
+    last = deck.shift()!;
+    return last;
   };
-  const [builderDifficulty, setBuilderDifficulty] = useState<'easy' | 'medium' | 'hard'>(
-    defaultDifficultyForAgeBand[getAgeBandForClassLevel(profile?.classLevel)]
+}
+
+const LC_WORDS = WORDS.filter(w => { const u = new Set(lettersOf(w.word)); return u.size >= 2 && u.size <= 5; });
+const BUILDER_WORDS = WORDS.filter(w => lettersOf(w.word).length <= 8);
+type BuilderLevel = 'easy' | 'medium' | 'hard';
+const BUILDER_LEVELS: Record<BuilderLevel, (w: GameWord) => boolean> = {
+  easy: w => lettersOf(w.word).length <= 3,
+  medium: w => { const n = lettersOf(w.word).length; return n >= 4 && n <= 5; },
+  hard: w => lettersOf(w.word).length >= 6
+};
+const FILLER_LETTERS = ['A', 'B', 'D', 'E', 'I', 'K', 'L', 'M', 'N', 'O', 'R', 'T', 'Y'];
+const DECOY_LETTERS = ['A', 'B', 'D', 'E', 'Ẹ', 'I', 'K', 'L', 'M', 'N', 'O', 'Ọ', 'R', 'Ṣ', 'T', 'W', 'Y'];
+
+function readBest(): number {
+  try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (_e) { return 0; }
+}
+function saveBest(n: number) {
+  try { localStorage.setItem(BEST_KEY, String(n)); } catch (_e) {}
+}
+
+function useFunFonts() {
+  useEffect(() => {
+    const id = 'funlylearn-fun-fonts';
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap';
+    document.head.appendChild(link);
+  }, []);
+}
+
+// ---------- Mama Titi's voice ----------
+let currentVoice: HTMLAudioElement | null = null;
+
+async function speakYoruba(text: string): Promise<boolean> {
+  if (currentVoice) { currentVoice.pause(); currentVoice = null; }
+  try {
+    const res = await fetchAudioTTS(text, 'yo');
+    if (!res.audioUrl) return false;
+    const audio = new Audio(res.audioUrl);
+    currentVoice = audio;
+    gameAudio.duck();
+    const done = () => { gameAudio.unduck(); if (currentVoice === audio) currentVoice = null; };
+    audio.onended = done;
+    audio.onerror = done;
+    await audio.play();
+    return true;
+  } catch (_e) {
+    gameAudio.unduck();
+    return false;
+  }
+}
+
+function stopVoice() {
+  if (currentVoice) { currentVoice.pause(); currentVoice = null; }
+  gameAudio.unduck();
+}
+
+const ListenButton: React.FC<{ text: string; label?: string; className?: string }> = ({ text, label = 'Listen', className = '' }) => {
+  const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
+  return (
+    <button
+      onClick={async e => {
+        e.stopPropagation();
+        gameAudio.sfx('tap');
+        setState('loading');
+        setState((await speakYoruba(text)) ? 'idle' : 'error');
+      }}
+      aria-label={`Listen to ${text}`}
+      className={`${PRESS} ${className}`}
+    >
+      {state === 'loading' ? '⏳' : state === 'error' ? '🔁' : '🔊'}{label ? ` ${label}` : ''}
+    </button>
   );
-  const [builderWord, setBuilderWord] = useState<CrushWord | null>(null);
-  const [jumbledBlocks, setJumbledBlocks] = useState<{ id: string; letter: string }[]>([]);
-  const [placedSlots, setPlacedSlots] = useState<(string | null)[]>([]);
+};
 
-  const [speedTarget, setSpeedTarget] = useState<CrushWord | null>(null);
-  const [fallingItems, setFallingItems] = useState<
-    { id: string; word: CrushWord; top: number; left: number; speed: number }[]
-  >([]);
-  const [speedScore, setSpeedScore] = useState<number>(0);
-  const speedLoopRef = useRef<number | null>(null);
+// ---------- game models ----------
+interface Candy {
+  id: number;
+  l: string;
+  r: number;
+  c: number;
+  shownR: number;
+  boom: boolean;
+  hint: boolean;
+}
 
-  // Web Audio Synth for Custom Sound Effects
-  const playSynthSound = useCallback((type: 'pop' | 'click' | 'crush' | 'win' | 'wrong' | 'splash') => {
-    try {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
+interface LetterCrushModel {
+  word: GameWord;
+  types: string[];
+  look: Record<string, typeof CANDY_LOOKS[number]>;
+  goals: { l: string; got: number }[];
+  moves: number;
+  busy: boolean;
+  sel: Candy | null;
+  round: number;
+  perfect: boolean;
+  learned: GameWord[];
+  overlay: 'done' | 'out' | null;
+  cascade: number;
+}
 
-      if (type === 'splash') {
-        // Layered noise burst + quick pitch-drop tone for a juicy, satisfying
-        // "splash" feel on every match, instead of a thin single-tone beep.
-        const now = ctx.currentTime;
+interface BuilderModel {
+  level: BuilderLevel;
+  word: GameWord;
+  units: string[];
+  placed: string[];
+  tiles: { id: number; l: string; used: boolean }[];
+  busy: boolean;
+  round: number;
+  perfect: boolean;
+  learned: GameWord[];
+}
 
-        const bufferSize = ctx.sampleRate * 0.25;
-        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const data = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
-        }
-        const noiseSource = ctx.createBufferSource();
-        noiseSource.buffer = noiseBuffer;
+interface CatchItem {
+  id: number;
+  word: GameWord;
+  x: number;
+  y: number;
+  speed: number;
+  gone: boolean;
+}
 
-        const noiseFilter = ctx.createBiquadFilter();
-        noiseFilter.type = 'bandpass';
-        noiseFilter.frequency.setValueAtTime(1200, now);
-        noiseFilter.frequency.exponentialRampToValueAtTime(300, now + 0.2);
-        noiseFilter.Q.value = 0.8;
+interface CatchModel {
+  lives: number;
+  catches: number;
+  target: GameWord;
+  sinceTarget: number;
+  items: CatchItem[];
+  running: boolean;
+  learned: GameWord[];
+  lostLife: boolean;
+}
 
-        const noiseGain = ctx.createGain();
-        noiseGain.gain.setValueAtTime(0.35, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+type Screen = 'home' | 'lc' | 'wb' | 'sc' | 'results';
+type GameKey = 'lc' | 'wb' | 'sc';
 
-        noiseSource.connect(noiseFilter);
-        noiseFilter.connect(noiseGain);
-        noiseGain.connect(ctx.destination);
-        noiseSource.start(now);
-        noiseSource.stop(now + 0.25);
+interface RoundResult {
+  game: GameKey;
+  got: number;
+  total: number;
+  perfect: boolean;
+  learned: GameWord[];
+}
 
-        const tone = ctx.createOscillator();
-        const toneGain = ctx.createGain();
-        tone.connect(toneGain);
-        toneGain.connect(ctx.destination);
-        tone.type = 'sine';
-        tone.frequency.setValueAtTime(700, now);
-        tone.frequency.exponentialRampToValueAtTime(180, now + 0.18);
-        toneGain.gain.setValueAtTime(0.25, now);
-        toneGain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
-        tone.start(now);
-        tone.stop(now + 0.18);
-        return;
-      }
+const GAME_NAMES: Record<GameKey, string> = {
+  lc: '🍬 Letter Crush',
+  wb: '🏗️ Word Builder',
+  sc: '⚡ Speed Catch'
+};
 
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackToApp, onProfileUpdate }) => {
+  useFunFonts();
 
-      const now = ctx.currentTime;
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
 
-      if (type === 'pop') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(400, now);
-        osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-      } else if (type === 'click') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(600, now);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.linearRampToValueAtTime(0.01, now + 0.05);
-        osc.start(now);
-        osc.stop(now + 0.05);
-      } else if (type === 'crush') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(150, now + 0.2);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
-        osc.start(now);
-        osc.stop(now + 0.2);
-      } else if (type === 'win') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, now);
-        osc.frequency.setValueAtTime(659.25, now + 0.1);
-        osc.frequency.setValueAtTime(783.99, now + 0.2);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
-        osc.start(now);
-        osc.stop(now + 0.4);
-      } else if (type === 'wrong') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(180, now);
-        osc.frequency.setValueAtTime(140, now + 0.1);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
-        osc.start(now);
-        osc.stop(now + 0.25);
-      }
-    } catch {
-      // Audio fallback
-    }
+  const [screen, setScreen] = useState<Screen>('home');
+  const screenRef = useRef<Screen>('home');
+  screenRef.current = screen;
+  const [, setTick] = useState(0);
+  const bump = () => setTick(t => t + 1);
+  const [needsTap, setNeedsTap] = useState(false);
+  const [musicOn, setMusicOn] = useState(gameAudio.isMusicEnabled());
+  const [sfxOn, setSfxOn] = useState(gameAudio.isSfxEnabled());
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [result, setResult] = useState<RoundResult | null>(null);
+  const [best, setBest] = useState(readBest());
+  const [coinsPop, setCoinsPop] = useState<string | null>(null);
+
+  const coins = profile?.coins || 0;
+
+  const showToast = (text: string) => {
+    setToast(text);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2400);
+  };
+
+  const award = (n: number) => {
+    const p = profileRef.current;
+    gameAudio.sfx('coin');
+    setCoinsPop(`+${n} 🪙`);
+    setTimeout(() => setCoinsPop(null), 1000);
+    if (p && onProfileUpdate) onProfileUpdate({ ...p, coins: (p.coins || 0) + n });
+  };
+
+  const spend = (n: number): boolean => {
+    const p = profileRef.current;
+    if (!p || !onProfileUpdate || (p.coins || 0) < n) return false;
+    onProfileUpdate({ ...p, coins: (p.coins || 0) - n });
+    return true;
+  };
+
+  const bigConfetti = () => {
+    const base = { spread: 80, zIndex: 9999, colors: CONFETTI_COLORS };
+    confetti({ ...base, particleCount: 150, origin: { y: 0.6 } });
+    setTimeout(() => confetti({ ...base, particleCount: 80, angle: 60, origin: { x: 0, y: 0.7 } }), 250);
+    setTimeout(() => confetti({ ...base, particleCount: 80, angle: 120, origin: { x: 1, y: 0.7 } }), 450);
+  };
+
+  // ---------- music ----------
+  useEffect(() => {
+    let cancelled = false;
+    gameAudio.unlock().then(ok => {
+      if (cancelled) return;
+      if (ok) gameAudio.playMusic('hub');
+      else setNeedsTap(true);
+    });
+    const unsubscribe = gameAudio.subscribe(() => {
+      setMusicOn(gameAudio.isMusicEnabled());
+      setSfxOn(gameAudio.isSfxEnabled());
+    });
+    const onVisibility = () => {
+      if (document.hidden) gameAudio.pauseMusic();
+      else gameAudio.resumeMusic();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      document.removeEventListener('visibilitychange', onVisibility);
+      stopVoice();
+      stopCatch();
+      clearHint();
+      gameAudio.stopMusic();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const speakWord = async (text: string) => {
-    try {
-      const res = await fetchAudioTTS(text, language === 'Yoruba' ? 'yo' : 'en');
-      if (res.audioUrl) {
-        const audio = new Audio(res.audioUrl);
-        await audio.play();
-      }
-    } catch (_err) {
-      // Real voice failed — fail silently rather than falling back to
-      // the old browser speechSynthesis, matching the same standard
-      // used everywhere else in the app (see YorubaListenButton in
-      // NaijaLingoPage.tsx). The wrong field name here (audioBase64
-      // instead of audioUrl) previously meant this always silently
-      // failed and fell through to the deactivated browser voice.
+  useEffect(() => {
+    if (needsTap) return;
+    gameAudio.playMusic(screen === 'home' || screen === 'results' ? 'hub' : 'game');
+  }, [screen, needsTap]);
+
+  const handleTapToPlay = async () => {
+    const ok = await gameAudio.unlock();
+    if (!ok) return;
+    setNeedsTap(false);
+    gameAudio.sfx('go');
+  };
+
+  // The first tap anywhere starts the music if the browser held it back.
+  useEffect(() => {
+    if (!needsTap) return;
+    const onFirstTap = () => { handleTapToPlay(); };
+    document.addEventListener('pointerdown', onFirstTap, { once: true, capture: true });
+    return () => document.removeEventListener('pointerdown', onFirstTap, { capture: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsTap]);
+
+  const finishRound = (game: GameKey, got: number, total: number, perfect: boolean, learned: GameWord[]) => {
+    stopVoice();
+    setResult({ game, got, total, perfect, learned });
+    setScreen('results');
+    window.scrollTo({ top: 0 });
+    // Confetti and the fanfare only for a perfect round.
+    if (perfect) {
+      gameAudio.sfx('win');
+      bigConfetti();
     }
   };
 
-  const ageBand = getAgeBandForClassLevel(profile?.classLevel);
-  const hasContentForAgeBand = WORD_CRUSH_VOCABULARY.some(w => w.ageBand === ageBand);
-  const effectiveAgeBand = hasContentForAgeBand ? ageBand : 'primary';
+  const goHome = () => {
+    stopCatch();
+    clearHint();
+    stopVoice();
+    setScreen('home');
+    window.scrollTo({ top: 0 });
+  };
 
-  const filteredWords = useMemo(
-    () => WORD_CRUSH_VOCABULARY.filter(w => w.language === language && w.ageBand === effectiveAgeBand),
-    [language, effectiveAgeBand]
-  );
+  // =====================================================================
+  // 1. LETTER CRUSH (Candy Crush style)
+  // =====================================================================
+  const lcDeck = useRef(makeDeck(LC_WORDS));
+  const lc = useRef<LetterCrushModel | null>(null);
+  const grid = useRef<(Candy | null)[][]>([]);
+  const candies = useRef(new Map<number, Candy>());
+  const candyEls = useRef(new Map<number, HTMLDivElement>());
+  const candyId = useRef(0);
+  const touch = useRef<{ cd: Candy; x: number; y: number } | null>(null);
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [praise, setPraise] = useState<{ text: string; row: number; key: number } | null>(null);
 
-  const touchStartRef = useRef<{ r: number; c: number; x: number; y: number } | null>(null);
+  const neededLetters = () => (lc.current ? lc.current.goals.filter(g => g.got < NEED_PER_LETTER).map(g => g.l) : []);
 
-  const processGridCascades = useCallback((
-    gridToProcess: CandyCell[][],
-    currentScore: number,
-    targetWord: CrushWord | null
-  ) => {
-    const matches = findGridMatches(gridToProcess);
-    if (matches.length === 0) {
-      setIsProcessingMatch(false);
+  const pickLetter = () => {
+    const m = lc.current!;
+    const need = neededLetters();
+    if (need.length && Math.random() < 0.3) return need[Math.floor(Math.random() * need.length)];
+    return m.types[Math.floor(Math.random() * m.types.length)];
+  };
+
+  const makeCandy = (l: string, r: number, c: number, fromRow: number): Candy => {
+    const cd: Candy = { id: ++candyId.current, l, r, c, shownR: fromRow, boom: false, hint: false };
+    candies.current.set(cd.id, cd);
+    return cd;
+  };
+
+  // New candies start above the board, then slide down into place.
+  const landNewCandies = () => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      candies.current.forEach(cd => { cd.shownR = cd.r; });
+      bump();
+    }));
+  };
+
+  const findRuns = (): Candy[][] => {
+    const runs: Candy[][] = [];
+    const g = grid.current;
+    for (let r = 0; r < N; r++) {
+      let c = 0;
+      while (c < N) {
+        let e = c;
+        while (e + 1 < N && g[r][e + 1] && g[r][c] && g[r][e + 1]!.l === g[r][c]!.l) e++;
+        if (e - c + 1 >= 3) runs.push(Array.from({ length: e - c + 1 }, (_, k) => g[r][c + k]!));
+        c = e + 1;
+      }
+    }
+    for (let c = 0; c < N; c++) {
+      let r = 0;
+      while (r < N) {
+        let e = r;
+        while (e + 1 < N && g[e + 1][c] && g[r][c] && g[e + 1][c]!.l === g[r][c]!.l) e++;
+        if (e - r + 1 >= 3) runs.push(Array.from({ length: e - r + 1 }, (_, k) => g[r + k][c]!));
+        r = e + 1;
+      }
+    }
+    return runs;
+  };
+
+  const findMove = (): [Candy, Candy] | null => {
+    const g = grid.current.map(row => row.map(cd => (cd ? cd.l : '')));
+    const has3 = () => {
+      for (let r = 0; r < N; r++) for (let c = 0; c < N - 2; c++) if (g[r][c] && g[r][c] === g[r][c + 1] && g[r][c] === g[r][c + 2]) return true;
+      for (let c = 0; c < N; c++) for (let r = 0; r < N - 2; r++) if (g[r][c] && g[r][c] === g[r + 1][c] && g[r][c] === g[r + 2][c]) return true;
+      return false;
+    };
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) for (const [dr, dc] of [[0, 1], [1, 0]]) {
+      const r2 = r + dr, c2 = c + dc;
+      if (r2 >= N || c2 >= N) continue;
+      [g[r][c], g[r2][c2]] = [g[r2][c2], g[r][c]];
+      const ok = has3();
+      [g[r][c], g[r2][c2]] = [g[r2][c2], g[r][c]];
+      if (ok) return [grid.current[r][c]!, grid.current[r2][c2]!];
+    }
+    return null;
+  };
+
+  function clearHint() {
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    candies.current.forEach(cd => { cd.hint = false; });
+  }
+
+  // After a few seconds without a move, two candies wiggle to show a match.
+  const armHint = () => {
+    clearHint();
+    hintTimer.current = setTimeout(() => {
+      if (!lc.current || lc.current.busy) return;
+      const move = findMove();
+      if (!move) return;
+      move.forEach(cd => { cd.hint = true; });
+      bump();
+    }, 6000);
+  };
+
+  const buildBoard = () => {
+    candies.current.clear();
+    grid.current = [];
+    for (let r = 0; r < N; r++) {
+      grid.current.push([]);
+      for (let c = 0; c < N; c++) {
+        let l = '';
+        let tries = 0;
+        do {
+          l = pickLetter();
+          tries++;
+        } while (tries < 30 && (
+          (c >= 2 && grid.current[r][c - 1]!.l === l && grid.current[r][c - 2]!.l === l) ||
+          (r >= 2 && grid.current[r - 1][c]!.l === l && grid.current[r - 2][c]!.l === l)));
+        grid.current[r].push(makeCandy(l, r, c, r - N));
+      }
+    }
+    bump();
+    landNewCandies();
+    if (!findMove()) {
+      showToast('No moves! Shuffling... 🔄');
+      setTimeout(buildBoard, 600);
       return;
     }
+    armHint();
+  };
 
-    const newGrid = gridToProcess.map(row => row.map(cell => ({ ...cell })));
-    const matchedLetterNames = new Set<string>();
+  const nextLCWord = (round: number, perfect: boolean, learned: GameWord[]) => {
+    const w = lcDeck.current();
+    const unique = Array.from(new Set(lettersOf(w.word)));
+    const fillers = shuffle(FILLER_LETTERS.filter(l => !unique.includes(l)));
+    const types = [...unique];
+    while (types.length < 4) types.push(fillers.shift()!); // at least 4 kinds of candy = easy matches
+    lc.current = {
+      word: w,
+      types,
+      look: Object.fromEntries(types.map((l, i) => [l, CANDY_LOOKS[i % CANDY_LOOKS.length]])),
+      goals: unique.map(l => ({ l, got: 0 })),
+      moves: MOVES_PER_WORD,
+      busy: false,
+      sel: null,
+      round,
+      perfect,
+      learned,
+      overlay: null,
+      cascade: 0
+    };
+    buildBoard();
+    setTimeout(() => { if (screenRef.current === 'lc') speakYoruba(w.word); }, 400);
+  };
 
-    matches.forEach(({ r, c }) => {
-      newGrid[r][c].isCrushing = true;
-      if (newGrid[r][c].item?.letter) {
-        matchedLetterNames.add(newGrid[r][c].item.letter);
-      }
-    });
+  const startLC = () => {
+    stopVoice();
+    setScreen('lc');
+    window.scrollTo({ top: 0 });
+    nextLCWord(0, true, []);
+  };
 
-    setCandyGrid(newGrid);
-    playSynthSound('splash');
+  const setCandyPos = (cd: Candy, r: number, c: number) => {
+    cd.r = r;
+    cd.c = c;
+    cd.shownR = r;
+    grid.current[r][c] = cd;
+  };
 
-    // Visual splash burst on EVERY match now, not just 4+ combos —
-    // small for a simple 3-match, bigger for larger ones.
+  const swapCells = (a: Candy, b: Candy) => {
+    const ar = a.r, ac = a.c;
+    setCandyPos(a, b.r, b.c);
+    setCandyPos(b, ar, ac);
+    bump();
+  };
+
+  const splashAt = (run: Candy[]) => {
+    const rects = run.map(cd => candyEls.current.get(cd.id)?.getBoundingClientRect()).filter(Boolean) as DOMRect[];
+    if (rects.length === 0) return;
+    const x = rects.reduce((s, r) => s + r.left + r.width / 2, 0) / rects.length / window.innerWidth;
+    const y = rects.reduce((s, r) => s + r.top + r.height / 2, 0) / rects.length / window.innerHeight;
     confetti({
-      particleCount: matches.length >= 4 ? 50 : 22,
-      spread: matches.length >= 4 ? 60 : 40,
-      startVelocity: 28,
-      origin: { y: 0.55 },
-      colors: ['#00A651', '#FFC107', '#FF6B35', '#ffffff']
+      particleCount: run.length >= 5 ? 120 : run.length === 4 ? 70 : 35,
+      spread: run.length >= 4 ? 100 : 70,
+      startVelocity: run.length >= 4 ? 45 : 32,
+      origin: { x, y },
+      zIndex: 9999,
+      colors: CONFETTI_COLORS
     });
+  };
 
-    const firstLetter = Array.from(matchedLetterNames)[0];
-    if (firstLetter) {
-      speakWord(firstLetter);
+  const crush = () => {
+    const m = lc.current;
+    if (!m) return;
+    const runs = findRuns();
+    if (runs.length === 0) {
+      m.busy = false;
+      afterTurn();
+      return;
     }
-
-    const pointsEarned = matches.length * 10 + (matches.length >= 4 ? 30 : 0);
-    const updatedScore = currentScore + pointsEarned;
-    setScore(updatedScore);
-    if (updatedScore > highScore) {
-      setHighScore(updatedScore);
-      localStorage.setItem('naija_word_crush_highscore', updatedScore.toString());
+    m.cascade++;
+    const burst = new Set<Candy>();
+    runs.forEach(run => run.forEach(cd => burst.add(cd)));
+    // Every candy burst counts towards the word's letters.
+    burst.forEach(cd => {
+      const goal = m.goals.find(g => g.l === cd.l);
+      if (goal) goal.got = Math.min(NEED_PER_LETTER, goal.got + 1);
+    });
+    gameAudio.sfx('splash');
+    if (m.cascade > 1) gameAudio.sfx('combo');
+    runs.forEach(splashAt);
+    const biggest = Math.max(...runs.map(r => r.length));
+    if (biggest >= 4 || m.cascade > 1) {
+      setPraise({ text: PRAISE[Math.floor(Math.random() * PRAISE.length)], row: runs[0][0].r, key: Date.now() });
+      setTimeout(() => setPraise(null), 900);
     }
-
-    const comboPhrases = [
-      'LETTER CRUSH! 🍬', 'EXCELLENT! 🇳🇬', 'O SE DAADAA! 🎉', 'GENIUS! ✨', 'TASTY MATCH! 🌟'
-    ];
-    const phrase = comboPhrases[Math.floor(Math.random() * comboPhrases.length)];
-    setFeedbackMessage(`${phrase} ${firstLetter ? `'${firstLetter}'` : ''} +${pointsEarned} Pts!`);
+    burst.forEach(cd => { cd.boom = true; });
+    bump();
 
     setTimeout(() => {
-      const droppedGrid: CandyCell[][] = Array.from({ length: GRID_SIZE }, () => []);
-      const letterItems = getLetterItemsForWord(targetWord, language);
-
-      for (let c = 0; c < GRID_SIZE; c++) {
-        const remainingCells: CandyCell[] = [];
-        for (let r = GRID_SIZE - 1; r >= 0; r--) {
-          if (!newGrid[r][c].isCrushing) {
-            remainingCells.unshift(newGrid[r][c]);
-          }
-        }
-        const missingCount = GRID_SIZE - remainingCells.length;
-        const newCells: CandyCell[] = [];
-        for (let i = 0; i < missingCount; i++) {
-          const randItem = letterItems[Math.floor(Math.random() * letterItems.length)];
-          newCells.push({
-            gridKey: `cell-new-${Date.now()}-${c}-${i}-${Math.random()}`,
-            item: randItem,
-          });
-        }
-        const fullCol = [...newCells, ...remainingCells];
-        for (let r = 0; r < GRID_SIZE; r++) {
-          droppedGrid[r][c] = fullCol[r];
-        }
-      }
-
-      setCandyGrid(droppedGrid);
-
-      setTimeout(() => {
-        const cascadeMatches = findGridMatches(droppedGrid);
-        if (cascadeMatches.length > 0) {
-          processGridCascades(droppedGrid, updatedScore, targetWord);
-        } else {
-          setIsProcessingMatch(false);
-          if (updatedScore >= level * 60) {
-            setLevel(prev => prev + 1);
-            setShowLevelComplete(true);
-          }
-        }
-      }, 250);
-    }, 300);
-  }, [playSynthSound, highScore, level, language]);
-
-  const initFruitMatch = useCallback(() => {
-    if (filteredWords.length === 0) return;
-    const target = filteredWords[Math.floor(Math.random() * filteredWords.length)];
-    setFruitTargetWord(target);
-
-    const letterItems = getLetterItemsForWord(target, language);
-    const grid = createRandomCandyGrid(letterItems);
-    setCandyGrid(grid);
-    setSelectedCell(null);
-    setIsProcessingMatch(false);
-    setFeedbackMessage(`Swipe or tap adjacent letters to match '${target.word}'! 🍬`);
-  }, [filteredWords, language]);
-
-  const initLegoBuilder = useCallback(() => {
-    // Cap at 15 letters even on 'hard' — proverb-length entries (Igbo
-    // Wisdom words can run 40-50+ letters) would make Lego Builder
-    // generate an unplayable wall of blocks, so those are reserved for
-    // Letter Match and Speed Crush instead, not spelled letter-by-letter.
-    const MAX_BUILDER_LENGTH = 15;
-    const candidates = filteredWords.filter(w => {
-      const len = w.word.replace(/\s+/g, '').length;
-      if (len > MAX_BUILDER_LENGTH) return false;
-      if (builderDifficulty === 'easy') return len <= 4;
-      if (builderDifficulty === 'medium') return len > 4 && len <= 6;
-      return len > 6;
-    });
-
-    const shortFallbackPool = filteredWords.filter(
-      w => w.word.replace(/\s+/g, '').length <= MAX_BUILDER_LENGTH
-    );
-
-    if (candidates.length === 0 && shortFallbackPool.length === 0) {
-      // Every word in this pool (e.g. JSS Igbo Wisdom proverbs) is too
-      // long to spell letter-by-letter. Rather than force an unplayable
-      // 40+ block puzzle, be honest that this mode isn't suited to this
-      // content right now.
-      setBuilderWord(null);
-      setFeedbackMessage('These words are better for Letter Match or Speed Crush — try switching modes!');
-      return;
-    }
-
-    const target = candidates.length > 0
-      ? candidates[Math.floor(Math.random() * candidates.length)]
-      : shortFallbackPool[Math.floor(Math.random() * shortFallbackPool.length)];
-
-    setBuilderWord(target);
-
-    // Strip both tone-mark diacritics (Ó, Á, etc.) and underdot
-    // diacritics (Ẹ, Ọ, Ṣ, etc.) down to their base ASCII letter,
-    // rather than filtering non-ASCII characters out entirely — the
-    // previous [^A-Z] filter deleted accented letters completely
-    // instead of reducing them to their base letter, so a word like
-    // "Ó dára" (O, D, Á, R, A) lost both its accented letters and only
-    // produced 3 tiles (D, R, A) instead of the real 5.
-    const normalizedWord = target.word
-      .normalize('NFD')
-      .replace(/[\u0300\u0301\u0302\u0304\u0323]/g, '')
-      .normalize('NFC');
-    const letters = normalizedWord.toUpperCase().replace(/[^A-Z]/g, '').split('');
-    const jumbled = letters
-      .map((l, idx) => ({ id: `${l}-${idx}-${Math.random()}`, letter: l }))
-      .sort(() => 0.5 - Math.random());
-
-    setJumbledBlocks(jumbled);
-    setPlacedSlots(new Array(letters.length).fill(null));
-    setFeedbackMessage(`Spell "${target.word}" (${target.english}) in Lego blocks!`);
-    speakWord(target.word);
-  }, [filteredWords, builderDifficulty]);
-
-  const initSpeedCrush = useCallback(() => {
-    if (filteredWords.length === 0) return;
-    const target = filteredWords[Math.floor(Math.random() * filteredWords.length)];
-    setSpeedTarget(target);
-    setFallingItems([]);
-    setFeedbackMessage(`Tap the falling fruit that means "${target.english}"!`);
-  }, [filteredWords]);
-
-  useEffect(() => {
-    setLives(3);
-    setStreak(0);
-    setComboCount(0);
-    setShowGameOver(false);
-    setShowLevelComplete(false);
-
-    if (mode === 'fruit_match') {
-      initFruitMatch();
-    } else if (mode === 'lego_builder') {
-      initLegoBuilder();
-    } else if (mode === 'speed_crush') {
-      initSpeedCrush();
-    }
-  }, [mode, language, builderDifficulty, initFruitMatch, initLegoBuilder, initSpeedCrush]);
-
-  const executeSwap = useCallback((r1: number, c1: number, r2: number, c2: number) => {
-    if (isProcessingMatch || showGameOver || showLevelComplete) return;
-
-    setIsProcessingMatch(true);
-    setSelectedCell(null);
-
-    const swappedGrid = candyGrid.map(row => row.map(cell => ({ ...cell })));
-    const temp = swappedGrid[r1][c1];
-    swappedGrid[r1][c1] = swappedGrid[r2][c2];
-    swappedGrid[r2][c2] = temp;
-
-    const matches = findGridMatches(swappedGrid);
-
-    if (matches.length > 0) {
-      setCandyGrid(swappedGrid);
-      processGridCascades(swappedGrid, score, fruitTargetWord);
-    } else {
-      playSynthSound('wrong');
-      setShakingItemId(`${r1}-${c1}`);
-      setFeedbackMessage('No match! Swipe adjacent letters to match 3 in a row! 🍬');
-      setTimeout(() => setShakingItemId(null), 500);
-      setIsProcessingMatch(false);
-    }
-  }, [isProcessingMatch, showGameOver, showLevelComplete, candyGrid, score, fruitTargetWord, processGridCascades, playSynthSound]);
-
-  const handlePointerDown = (r: number, c: number, e: React.PointerEvent) => {
-    if (isProcessingMatch || showGameOver || showLevelComplete) return;
-    touchStartRef.current = { r, c, x: e.clientX, y: e.clientY };
-  };
-
-  const handlePointerMove = (r: number, c: number, e: React.PointerEvent) => {
-    if (!touchStartRef.current || isProcessingMatch || showGameOver || showLevelComplete) return;
-    const { r: rStart, c: cStart, x: xStart, y: yStart } = touchStartRef.current;
-
-    const dx = e.clientX - xStart;
-    const dy = e.clientY - yStart;
-    const dist = Math.hypot(dx, dy);
-
-    if (dist >= SWIPE_THRESHOLD) {
-      let targetR = rStart;
-      let targetC = cStart;
-
-      if (Math.abs(dx) > Math.abs(dy)) {
-        if (dx > SWIPE_THRESHOLD && cStart < GRID_SIZE - 1) targetC = cStart + 1;
-        else if (dx < -SWIPE_THRESHOLD && cStart > 0) targetC = cStart - 1;
-      } else {
-        if (dy > SWIPE_THRESHOLD && rStart < GRID_SIZE - 1) targetR = rStart + 1;
-        else if (dy < -SWIPE_THRESHOLD && rStart > 0) targetR = rStart - 1;
-      }
-
-      if (targetR !== rStart || targetC !== cStart) {
-        touchStartRef.current = null;
-        executeSwap(rStart, cStart, targetR, targetC);
-      }
-    }
-  };
-
-  const handlePointerUp = (r: number, c: number, e: React.PointerEvent) => {
-    if (!touchStartRef.current) return;
-    const { r: rStart, c: cStart, x: xStart, y: yStart } = touchStartRef.current;
-    touchStartRef.current = null;
-
-    const dx = e.clientX - xStart;
-    const dy = e.clientY - yStart;
-    const dist = Math.hypot(dx, dy);
-
-    if (dist < SWIPE_THRESHOLD) {
-      if (!selectedCell) {
-        setSelectedCell({ r: rStart, c: cStart });
-        playSynthSound('click');
-      } else {
-        const { r: r1, c: c1 } = selectedCell;
-        if (r1 === rStart && c1 === cStart) {
-          setSelectedCell(null);
-        } else if (Math.abs(r1 - rStart) + Math.abs(c1 - cStart) === 1) {
-          executeSwap(r1, c1, rStart, cStart);
-        } else {
-          setSelectedCell({ r: rStart, c: cStart });
-          playSynthSound('click');
-        }
-      }
-      return;
-    }
-
-    let targetR = rStart;
-    let targetC = cStart;
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > SWIPE_THRESHOLD && cStart < GRID_SIZE - 1) targetC = cStart + 1;
-      else if (dx < -SWIPE_THRESHOLD && cStart > 0) targetC = cStart - 1;
-    } else {
-      if (dy > SWIPE_THRESHOLD && rStart < GRID_SIZE - 1) targetR = rStart + 1;
-      else if (dy < -SWIPE_THRESHOLD && rStart > 0) targetR = rStart - 1;
-    }
-
-    if (targetR !== rStart || targetC !== cStart) {
-      executeSwap(rStart, cStart, targetR, targetC);
-    }
-  };
-
-  const handleShuffleCandyGrid = () => {
-    playSynthSound('pop');
-    const letterItems = getLetterItemsForWord(fruitTargetWord, language);
-    const newG = createRandomCandyGrid(letterItems);
-    setCandyGrid(newG);
-    setSelectedCell(null);
-    setFeedbackMessage('Board shuffled! Swipe letters to match 3 in a row! 🔄');
-  };
-
-  const handleLegoBlockTap = (block: { id: string; letter: string }) => {
-    if (!builderWord) return;
-
-    const emptyIdx = placedSlots.findIndex(s => s === null);
-    if (emptyIdx === -1) return;
-
-    playSynthSound('click');
-    const newPlaced = [...placedSlots];
-    newPlaced[emptyIdx] = block.letter;
-    setPlacedSlots(newPlaced);
-
-    setJumbledBlocks(prev => prev.filter(b => b.id !== block.id));
-
-    if (emptyIdx === placedSlots.length - 1) {
-      const spelledWord = newPlaced.join('');
-      const targetClean = builderWord.word
-        .normalize('NFD')
-        .replace(/[\u0300\u0301\u0302\u0304\u0323]/g, '')
-        .normalize('NFC')
-        .toUpperCase()
-        .replace(/[^A-Z]/g, '');
-
-      if (spelledWord === targetClean) {
-        playSynthSound('win');
-        confetti({ particleCount: 80, spread: 80, origin: { y: 0.6 } });
-        speakWord(builderWord.word);
-
-        const earned = 20;
-        const newScore = score + earned;
-        setScore(newScore);
-        setFeedbackMessage(`🧱 You built "${builderWord.word}"! O dara pupo! 🎉`);
-
-        if (newScore > highScore) {
-          setHighScore(newScore);
-          localStorage.setItem('naija_word_crush_highscore', newScore.toString());
-        }
-
-        setTimeout(() => {
-          if (newScore >= level * 50) {
-            setLevel(prev => prev + 1);
-            setShowLevelComplete(true);
-          } else {
-            initLegoBuilder();
-          }
-        }, 1500);
-      } else {
-        playSynthSound('wrong');
-        setFeedbackMessage('Oops! Let us try building again!');
-        setTimeout(() => {
-          initLegoBuilder();
-        }, 1200);
-      }
-    }
-  };
-
-  const handleRemovePlacedSlot = (index: number) => {
-    const letterToReturn = placedSlots[index];
-    if (!letterToReturn) return;
-
-    playSynthSound('click');
-    const newPlaced = [...placedSlots];
-    newPlaced[index] = null;
-    setPlacedSlots(newPlaced);
-
-    setJumbledBlocks(prev => [...prev, { id: `${letterToReturn}-${Date.now()}`, letter: letterToReturn }]);
-  };
-
-  useEffect(() => {
-    if (mode !== 'speed_crush' || showGameOver || showLevelComplete || !speedTarget) return;
-
-    const interval = setInterval(() => {
-      const randomWord = filteredWords[Math.floor(Math.random() * filteredWords.length)];
-      const newItem = {
-        id: `fall-${Date.now()}-${Math.random()}`,
-        word: randomWord,
-        top: 0,
-        left: Math.floor(Math.random() * 70) + 15,
-        speed: 3 + level * 0.5
-      };
-
-      setFallingItems(prev => [...prev, newItem]);
-    }, 2200);
-
-    return () => clearInterval(interval);
-  }, [mode, showGameOver, showLevelComplete, speedTarget, filteredWords, level]);
-
-  useEffect(() => {
-    if (mode !== 'speed_crush' || showGameOver || showLevelComplete) return;
-
-    let animId: number;
-    let lastTime = performance.now();
-
-    const update = (time: number) => {
-      if (time - lastTime > 40) {
-        lastTime = time;
-        setFallingItems(prev => {
-          if (prev.length === 0) return prev;
-          let missedTarget = false;
-          const nextItems: typeof prev = [];
-
-          for (const item of prev) {
-            const newTop = item.top + item.speed;
-            if (newTop > 85) {
-              if (speedTarget && item.word.id === speedTarget.id) {
-                missedTarget = true;
-              }
-            } else {
-              nextItems.push({ ...item, top: newTop });
-            }
-          }
-
-          if (missedTarget) {
-            setLives(l => {
-              const nextL = l - 1;
-              if (nextL <= 0) setShowGameOver(true);
-              return nextL;
-            });
-            playSynthSound('wrong');
-            if (speedTarget) {
-              setFeedbackMessage(`Eya! You missed "${speedTarget.word}"!`);
-            }
-          }
-
-          return nextItems;
-        });
-      }
-      animId = requestAnimationFrame(update);
-    };
-
-    animId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(animId);
-  }, [mode, showGameOver, showLevelComplete, speedTarget, playSynthSound]);
-
-  const handleTapFallingItem = (item: { id: string; word: CrushWord }) => {
-    if (!speedTarget) return;
-
-    if (item.word.id === speedTarget.id) {
-      playSynthSound('splash');
-      confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
-      speakWord(item.word.word);
-
-      const newScore = score + 15;
-      setScore(newScore);
-      setSpeedScore(s => s + 1);
-
-      if (newScore > highScore) {
-        setHighScore(newScore);
-        localStorage.setItem('naija_word_crush_highscore', newScore.toString());
-      }
-
-      setFallingItems(prev => prev.filter(i => i.id !== item.id));
-      setFeedbackMessage(`⚡ Great speed crush! "${item.word.word}" = ${item.word.english}!`);
-      setTimeout(initSpeedCrush, 800);
-    } else {
-      playSynthSound('wrong');
-      setLives(l => {
-        const nextL = l - 1;
-        if (nextL <= 0) setShowGameOver(true);
-        return nextL;
+      burst.forEach(cd => {
+        candies.current.delete(cd.id);
+        grid.current[cd.r][cd.c] = null;
       });
+      // Gravity: candies fall, new ones drop in from the top.
+      for (let c = 0; c < N; c++) {
+        const column: Candy[] = [];
+        for (let r = N - 1; r >= 0; r--) if (grid.current[r][c]) column.push(grid.current[r][c]!);
+        let r = N - 1;
+        column.forEach(cd => { setCandyPos(cd, r, c); r--; });
+        let k = 1;
+        for (; r >= 0; r--, k++) grid.current[r][c] = makeCandy(pickLetter(), r, c, -k);
+      }
+      bump();
+      landNewCandies();
+      setTimeout(crush, 320);
+    }, 230);
+  };
+
+  const trySwap = (a: Candy, b: Candy) => {
+    const m = lc.current;
+    if (!m || m.busy) return;
+    clearHint();
+    m.busy = true;
+    gameAudio.sfx('whoosh');
+    swapCells(a, b);
+    setTimeout(() => {
+      if (findRuns().length === 0) {
+        gameAudio.sfx('wrong');
+        swapCells(a, b); // not a match: the candies slide back
+        setTimeout(() => { m.busy = false; armHint(); }, 240);
+      } else {
+        m.moves--;
+        m.cascade = 0;
+        crush();
+      }
+    }, 240);
+  };
+
+  function afterTurn() {
+    const m = lc.current;
+    if (!m) return;
+    if (m.goals.every(g => g.got >= NEED_PER_LETTER)) {
+      m.busy = true;
+      m.overlay = 'done';
+      m.learned = [...m.learned, m.word];
+      clearHint();
+      gameAudio.sfx('win');
+      speakYoruba(m.word.word);
+      confetti({ particleCount: 160, spread: 100, origin: { y: 0.55 }, zIndex: 9999, colors: CONFETTI_COLORS });
+      award(10);
+    } else if (m.moves <= 0) {
+      m.busy = true;
+      m.overlay = 'out';
+      m.perfect = false;
+      clearHint();
+      gameAudio.sfx('wrong');
+    } else if (!findMove()) {
+      showToast('No moves left! Shuffling... 🔄');
+      gameAudio.sfx('whoosh');
+      setTimeout(buildBoard, 500);
+    } else {
+      armHint();
+    }
+    bump();
+  }
+
+  const lcNext = () => {
+    const m = lc.current!;
+    const round = m.round + 1;
+    if (round >= WORDS_PER_ROUND) {
+      finishRound('lc', round, WORDS_PER_ROUND, m.perfect, m.learned);
+      return;
+    }
+    nextLCWord(round, m.perfect, m.learned);
+  };
+
+  const lcRetry = () => {
+    const m = lc.current!;
+    m.moves = MOVES_PER_WORD;
+    m.busy = false;
+    m.sel = null;
+    m.overlay = null;
+    m.goals.forEach(g => { g.got = 0; });
+    buildBoard();
+  };
+
+  // Swipe, or tap one candy then the one next to it.
+  useEffect(() => {
+    if (screen !== 'lc') return;
+    const onUp = (e: PointerEvent) => {
+      const t = touch.current;
+      touch.current = null;
+      const m = lc.current;
+      if (!t || !m || m.busy) return;
+      const dx = e.clientX - t.x, dy = e.clientY - t.y;
+      if (Math.hypot(dx, dy) > 16) {
+        let r2 = t.cd.r, c2 = t.cd.c;
+        if (Math.abs(dx) > Math.abs(dy)) c2 += dx > 0 ? 1 : -1;
+        else r2 += dy > 0 ? 1 : -1;
+        if (r2 >= 0 && r2 < N && c2 >= 0 && c2 < N) {
+          m.sel = null;
+          trySwap(t.cd, grid.current[r2][c2]!);
+        }
+        return;
+      }
+      if (!m.sel) {
+        m.sel = t.cd;
+        gameAudio.sfx('tap');
+      } else {
+        const a = m.sel;
+        m.sel = null;
+        if (a !== t.cd) {
+          if (Math.abs(a.r - t.cd.r) + Math.abs(a.c - t.cd.c) === 1) trySwap(a, t.cd);
+          else { m.sel = t.cd; gameAudio.sfx('tap'); }
+        }
+      }
+      bump();
+    };
+    document.addEventListener('pointerup', onUp);
+    return () => document.removeEventListener('pointerup', onUp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
+
+  // =====================================================================
+  // 2. WORD BUILDER
+  // =====================================================================
+  const wbDecks = useRef<Record<BuilderLevel, () => GameWord>>({
+    easy: makeDeck(BUILDER_WORDS.filter(BUILDER_LEVELS.easy)),
+    medium: makeDeck(BUILDER_WORDS.filter(BUILDER_LEVELS.medium)),
+    hard: makeDeck(BUILDER_WORDS.filter(BUILDER_LEVELS.hard))
+  });
+  const wb = useRef<BuilderModel | null>(null);
+  const [wobble, setWobble] = useState<{ id: number; n: number } | null>(null);
+
+  const nextWBWord = (level: BuilderLevel, round: number, perfect: boolean, learned: GameWord[]) => {
+    const w = wbDecks.current[level]();
+    const units = lettersOf(w.word);
+    const decoys = level === 'easy'
+      ? []
+      : shuffle(DECOY_LETTERS.filter(l => !units.includes(l))).slice(0, level === 'hard' ? 3 : 2);
+    wb.current = {
+      level,
+      word: w,
+      units,
+      placed: [],
+      tiles: shuffle([...units, ...decoys].map((l, i) => ({ id: i, l, used: false }))),
+      busy: false,
+      round,
+      perfect,
+      learned
+    };
+    bump();
+    setTimeout(() => { if (screenRef.current === 'wb') speakYoruba(w.word); }, 400);
+  };
+
+  const startWB = (level?: BuilderLevel) => {
+    stopVoice();
+    setScreen('wb');
+    window.scrollTo({ top: 0 });
+    nextWBWord(level || wb.current?.level || 'easy', 0, true, []);
+  };
+
+  const wbComplete = () => {
+    const m = wb.current!;
+    m.busy = true;
+    m.learned = [...m.learned, m.word];
+    gameAudio.sfx('combo');
+    speakYoruba(m.word.word);
+    award(10);
+    bump();
+    setTimeout(() => {
+      const round = m.round + 1;
+      if (round >= WORDS_PER_ROUND) finishRound('wb', round, WORDS_PER_ROUND, m.perfect, m.learned);
+      else nextWBWord(m.level, round, m.perfect, m.learned);
+    }, 1900);
+  };
+
+  const wbTap = (id: number) => {
+    const m = wb.current;
+    if (!m || m.busy) return;
+    const tile = m.tiles.find(t => t.id === id);
+    if (!tile || tile.used) return;
+    if (tile.l !== m.units[m.placed.length]) {
+      // Wrong letter: it wobbles and stays, the child keeps going.
+      m.perfect = false;
+      gameAudio.sfx('wrong');
+      setWobble(prev => ({ id, n: (prev?.n || 0) + 1 }));
+      return;
+    }
+    tile.used = true;
+    m.placed.push(tile.l);
+    gameAudio.sfx('correct');
+    bump();
+    if (m.placed.length === m.units.length) wbComplete();
+  };
+
+  const wbHint = () => {
+    const m = wb.current;
+    if (!m || m.busy || m.placed.length >= m.units.length) return;
+    if (!spend(HINT_COST)) {
+      showToast(`You need ${HINT_COST} 🪙 for a hint`);
+      return;
+    }
+    m.perfect = false;
+    const tile = m.tiles.find(t => !t.used && t.l === m.units[m.placed.length])!;
+    tile.used = true;
+    m.placed.push(tile.l);
+    gameAudio.sfx('whoosh');
+    bump();
+    if (m.placed.length === m.units.length) wbComplete();
+  };
+
+  // =====================================================================
+  // 3. SPEED CATCH
+  // =====================================================================
+  const sc = useRef<CatchModel | null>(null);
+  const field = useRef<HTMLDivElement | null>(null);
+  const bubbleEls = useRef(new Map<number, HTMLButtonElement>());
+  const spawnTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const raf = useRef<number | null>(null);
+  const itemId = useRef(0);
+
+  function stopCatch() {
+    if (sc.current) sc.current.running = false;
+    if (spawnTimer.current) clearInterval(spawnTimer.current);
+    if (raf.current) cancelAnimationFrame(raf.current);
+    spawnTimer.current = null;
+    raf.current = null;
+  }
+
+  const newTarget = () => {
+    const m = sc.current!;
+    const pool = WORDS.filter(w => w.id !== m.target?.id);
+    m.target = pool[Math.floor(Math.random() * pool.length)];
+    m.sinceTarget = 0;
+  };
+
+  const endCatch = () => {
+    const m = sc.current!;
+    stopCatch();
+    setTimeout(() => finishRound('sc', m.catches, CATCH_GOAL, m.catches >= CATCH_GOAL && !m.lostLife, m.learned), 500);
+  };
+
+  const loseLife = (msg: string) => {
+    const m = sc.current!;
+    m.lives--;
+    m.lostLife = true;
+    gameAudio.sfx('wrong');
+    showToast(msg);
+    bump();
+    if (m.lives <= 0) endCatch();
+  };
+
+  const spawn = () => {
+    const m = sc.current;
+    if (!m || !m.running) return;
+    // The right word falls at least every third drop.
+    const isTarget = m.sinceTarget >= 2 || Math.random() < 0.35;
+    const others = WORDS.filter(w => w.id !== m.target.id);
+    const word = isTarget ? m.target : others[Math.floor(Math.random() * others.length)];
+    m.sinceTarget = isTarget ? 0 : m.sinceTarget + 1;
+    m.items.push({ id: ++itemId.current, word, x: 12 + Math.random() * 76, y: -60, speed: 1.6 + m.catches * 0.15, gone: false });
+    bump();
+  };
+
+  const startSC = () => {
+    stopCatch();
+    stopVoice();
+    const first = WORDS[Math.floor(Math.random() * WORDS.length)];
+    sc.current = { lives: 3, catches: 0, target: first, sinceTarget: 0, items: [], running: true, learned: [], lostLife: false };
+    setScreen('sc');
+    window.scrollTo({ top: 0 });
+    spawnTimer.current = setInterval(spawn, 1300);
+    let last = performance.now();
+    const step = (t: number) => {
+      const m = sc.current;
+      if (!m || !m.running) return;
+      const dt = Math.min(50, t - last);
+      last = t;
+      const height = (field.current && field.current.clientHeight) || 420;
+      let changed = false;
+      m.items.forEach(it => {
+        if (it.gone) return;
+        it.y += (it.speed * dt) / 16;
+        const el = bubbleEls.current.get(it.id);
+        if (el) el.style.top = `${it.y}px`;
+        if (it.y > height - 40) {
+          it.gone = true;
+          changed = true;
+          if (it.word.id === m.target.id) loseLife(`Oops! "${m.target.word}" got away`);
+        }
+      });
+      if (changed) {
+        m.items = m.items.filter(it => !it.gone);
+        bump();
+      }
+      raf.current = requestAnimationFrame(step);
+    };
+    raf.current = requestAnimationFrame(step);
+  };
+
+  const catchIt = (it: CatchItem) => {
+    const m = sc.current;
+    if (!m || !m.running || it.gone) return;
+    if (it.word.id === m.target.id) {
+      it.gone = true;
+      m.items = m.items.filter(x => !x.gone);
+      m.catches++;
+      m.learned = [...m.learned, it.word];
+      gameAudio.sfx('correct');
+      award(5);
+      speakYoruba(it.word.word);
+      if (m.catches > best) { setBest(m.catches); saveBest(m.catches); }
+      if (m.catches >= CATCH_GOAL) { bump(); endCatch(); return; }
+      newTarget();
+      bump();
+    } else {
+      setWobble(prev => ({ id: -it.id, n: (prev?.n || 0) + 1 }));
+      loseLife(`That's "${it.word.en}". Look for "${m.target.en}"!`);
     }
   };
 
-  const getBlockColor = (letter: string) => {
-    const l = letter.toUpperCase();
-    if (l === 'A') return 'bg-red-500 text-white border-red-700 shadow-red-700/50';
-    if (l === 'E') return 'bg-blue-500 text-white border-blue-700 shadow-blue-700/50';
-    if (l === 'I') return 'bg-emerald-500 text-white border-emerald-700 shadow-emerald-700/50';
-    if (l === 'O') return 'bg-amber-400 text-slate-950 border-amber-600 shadow-amber-600/50';
-    if (l === 'U') return 'bg-purple-600 text-white border-purple-800 shadow-purple-800/50';
-    return 'bg-slate-100 text-slate-900 border-slate-300 shadow-slate-300/50';
-  };
+  // =====================================================================
+  // RENDER
+  // =====================================================================
+  const TopBar = (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        {(screen !== 'home' || onBackToApp) && (
+          <button
+            onClick={() => (screen === 'home' ? onBackToApp?.() : goHome())}
+            aria-label={screen === 'home' ? 'Back to Game Zone' : 'Back to Word Crush games'}
+            className={`${PRESS} w-11 h-11 rounded-full bg-white/15 font-bold`}
+          >
+            ◀
+          </button>
+        )}
+        <span className="relative px-3 py-1.5 rounded-full bg-[#FFC83D] text-[#064E3B] font-extrabold text-sm">
+          🪙 {coins}
+          {coinsPop && (
+            <span className={`${FUN} absolute left-1/2 -translate-x-1/2 -top-8 text-2xl font-bold text-[#FFC83D] animate-bounce whitespace-nowrap`}>
+              {coinsPop}
+            </span>
+          )}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => gameAudio.setMusicEnabled(!musicOn)}
+          aria-label={musicOn ? 'Turn music off' : 'Turn music on'}
+          className={`${PRESS} px-3 py-1.5 rounded-full font-extrabold text-sm ${musicOn ? 'bg-white/20' : 'bg-white/5 text-white/50'}`}
+        >
+          🎵 {musicOn ? 'On' : 'Off'}
+        </button>
+        <button
+          onClick={() => gameAudio.setSfxEnabled(!sfxOn)}
+          aria-label={sfxOn ? 'Turn sound effects off' : 'Turn sound effects on'}
+          className={`${PRESS} px-3 py-1.5 rounded-full font-extrabold text-sm ${sfxOn ? 'bg-white/20' : 'bg-white/5 text-white/50'}`}
+        >
+          🔊 {sfxOn ? 'On' : 'Off'}
+        </button>
+      </div>
+    </div>
+  );
 
-  const handleShareWhatsApp = () => {
-    const text = `🏆 I scored ${score} Points in Naija Word Crush on Mama Titi AI! 🇳🇬 Can you beat my high score in Yoruba, Igbo & Hausa? Challenge me here: ${window.location.href}`;
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
-  };
+  const m1 = lc.current;
+  const m2 = wb.current;
+  const m3 = sc.current;
 
   return (
-    <div className="min-h-screen bg-[#FDF6EC] text-slate-900 font-jakarta flex flex-col relative overflow-hidden pb-12">
-      
-      {isStandalonePreview && (
-        <div className="bg-amber-400 text-slate-950 px-4 py-2 font-bold text-xs flex items-center justify-between border-b-2 border-amber-500 shadow-xs z-50">
-          <div className="flex items-center space-x-2">
-            <span className="px-2 py-0.5 rounded-md bg-slate-950 text-amber-300 font-extrabold uppercase text-[10px]">
-              Standalone Preview
-            </span>
-            <span>Naija Word Crush 🎮 (Testing Mode)</span>
-          </div>
-          {onBackToApp && (
-            <button
-              onClick={onBackToApp}
-              className="px-3 py-1 rounded-full bg-slate-950 hover:bg-slate-800 text-amber-300 text-[11px] font-bold transition-all"
-            >
-              ← Return to Main App
-            </button>
-          )}
-        </div>
-      )}
+    <div className={`max-w-2xl mx-auto p-3 sm:p-6 pb-28 ${READ}`}>
+      <style>{STYLES}</style>
+      <div className="relative rounded-[32px] overflow-hidden text-white text-[17px] p-4 sm:p-6 space-y-5 min-h-[80vh]" style={STARRY}>
+        {TopBar}
 
-      <header className="bg-[#0E8256] text-white p-3 sm:p-3.5 shadow-lg border-b-4 border-amber-400 shrink-0">
-        <div className="max-w-xl mx-auto flex items-center justify-between">
-          
-          <div className="flex items-center space-x-2">
-            {onBackToApp && (
-              <button
-                onClick={onBackToApp}
-                className="p-1.5 rounded-full bg-[#085C40] hover:bg-emerald-900 text-amber-300 transition-all"
-                title="Back to Naija Lingo"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            )}
-            <div className="flex items-center space-x-1 bg-[#085C40] px-2.5 py-1 rounded-full border border-amber-400/30">
-              {[...Array(3)].map((_, i) => (
-                <Heart
-                  key={i}
-                  className={`w-4 h-4 transition-all ${
-                    i < lives ? 'text-rose-500 fill-rose-500 scale-100' : 'text-slate-600 fill-slate-700 scale-90'
-                  }`}
-                />
-              ))}
-            </div>
-            {streak > 0 && (
-              <div className="flex items-center space-x-1 bg-amber-400 text-slate-950 font-bold px-2 py-0.5 rounded-full text-[11px]">
-                <Flame className="w-3.5 h-3.5 fill-amber-950" />
-                <span>x{streak}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="text-center">
-            <h1 className="font-serif font-extrabold text-base sm:text-lg text-amber-300 flex items-center space-x-1 justify-center">
-              <span>Naija Word Crush 🌍</span>
-            </h1>
-            <div className="flex items-center justify-center space-x-1.5 mt-0.5">
-              <span className="text-[10px] text-emerald-200 font-medium">Level {level}</span>
-              <span className="text-emerald-700">•</span>
-              <span className="text-[10px] text-amber-300 font-bold uppercase tracking-wide">
-                {ageBand === 'primary' ? 'Primary' : ageBand === 'jss' ? 'JSS' : 'SS'} Level
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-1 bg-[#085C40] px-3 py-1 rounded-full border border-amber-400/40 text-amber-300 font-extrabold text-xs">
-            <Sparkles className="w-3.5 h-3.5 fill-amber-400" />
-            <span>⭐ {score}</span>
-          </div>
-
-        </div>
-
-        <div className="max-w-xl mx-auto mt-2 flex items-center justify-between gap-2 border-t border-emerald-800/80 pt-1.5">
-          <div className="flex items-center space-x-1.5 bg-[#085C40] px-3 py-1 rounded-full border border-emerald-400/40">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="text-xs font-bold text-emerald-100">Yoruba</span>
-          </div>
-          <span className="text-[10px] text-emerald-400/70 italic">
-            Igbo &amp; Hausa coming soon
-          </span>
-        </div>
-      </header>
-
-      <div className="max-w-xl mx-auto w-full px-3 pt-3">
-        <div className="bg-amber-100/80 p-1 rounded-2xl border border-amber-300/80 grid grid-cols-3 gap-1 text-center font-bold text-xs">
-          <button
-            onClick={() => setMode('fruit_match')}
-            className={`py-2 rounded-xl transition-all ${
-              mode === 'fruit_match'
-                ? 'bg-[#0E8256] text-amber-300 shadow-md font-extrabold'
-                : 'text-slate-700 hover:bg-amber-200/60'
-            }`}
-          >
-            🔤 Letter Match
-          </button>
-          <button
-            onClick={() => setMode('lego_builder')}
-            className={`py-2 rounded-xl transition-all ${
-              mode === 'lego_builder'
-                ? 'bg-[#0E8256] text-amber-300 shadow-md font-extrabold'
-                : 'text-slate-700 hover:bg-amber-200/60'
-            }`}
-          >
-            🧱 Lego Builder
-          </button>
-          <button
-            onClick={() => setMode('speed_crush')}
-            className={`py-2 rounded-xl transition-all ${
-              mode === 'speed_crush'
-                ? 'bg-[#0E8256] text-amber-300 shadow-md font-extrabold'
-                : 'text-slate-700 hover:bg-amber-200/60'
-            }`}
-          >
-            ⚡ Speed Crush
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-xl mx-auto w-full px-3 mt-3">
-        <div className="p-3 rounded-2xl bg-white border-2 border-amber-300 shadow-soft text-center font-bold text-xs text-slate-800 flex items-center justify-center space-x-2 animate-fadeIn">
-          <Sparkles className="w-4 h-4 text-[#FF6B35] shrink-0" />
-          <span>{feedbackMessage}</span>
-        </div>
-        {!hasContentForAgeBand && (
-          <p className="text-center text-[11px] text-slate-400 italic mt-1.5">
-            Harder words for your class level are coming soon — playing with beginner vocabulary for now!
-          </p>
-        )}
-      </div>
-
-      <main className="max-w-xl mx-auto w-full px-3 mt-3 flex-1 flex flex-col justify-center">
-        
-        {mode === 'fruit_match' && (
-          <div className="space-y-3 animate-fadeIn">
-            <div className="bg-gradient-to-r from-[#0E8256] via-[#12A669] to-[#0E8256] p-3 sm:p-4 rounded-3xl border-2 border-amber-300 shadow-xl text-white text-center space-y-1 relative overflow-hidden">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-widest bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-400/40">
-                  {language} Alphabet Crush 🍬
+        {/* ================= HOME ================= */}
+        {screen === 'home' && (
+          <div className="space-y-5">
+            <div className="text-center pt-1 space-y-1">
+              <p className={`${FUN} text-5xl font-bold tracking-tight`}>
+                Word Crush <span className="inline-block animate-bounce">🍬</span>
+              </p>
+              <p className="text-white/70 font-semibold">Three Yorùbá word games. Pick one!</p>
+              <p className="pt-1">
+                <span className={`${FUN} inline-block px-4 py-1.5 rounded-full bg-white/10 font-semibold`}>
+                  📚 {WORDS.length} Yorùbá words · no repeats
                 </span>
-                <button
-                  onClick={handleShuffleCandyGrid}
-                  className="px-2.5 py-1 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] shadow-sm flex items-center space-x-1 active:scale-95 transition-transform"
-                  title="Shuffle Letter Grid"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>Shuffle</span>
-                </button>
-              </div>
-
-              <div className="flex items-center justify-center space-x-2 pt-0.5">
-                <h2 className="font-serif text-2xl sm:text-3xl font-extrabold text-amber-300 drop-shadow-sm">
-                  {language} Letter Match
-                </h2>
-                {fruitTargetWord && (
-                  <button
-                    onClick={() => speakWord(fruitTargetWord.word)}
-                    className="p-1.5 rounded-full bg-amber-400/30 text-amber-200 hover:bg-amber-400/50 transition-colors"
-                    title={`Listen to target word: ${fruitTargetWord.word}`}
-                  >
-                    <Volume2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              <p className="text-xs font-semibold text-emerald-100">
-                {fruitTargetWord ? `Word Goal: "${fruitTargetWord.word}" (${fruitTargetWord.english}) • ` : ''}
-                Swipe adjacent letters to match 3 in a row! 🍬
               </p>
             </div>
 
-            <div className="bg-slate-900/90 p-2 sm:p-3 rounded-3xl border-4 border-amber-400 shadow-2xl relative touch-none select-none">
-              <div className="grid grid-cols-6 gap-1 sm:gap-1.5 justify-center">
-                {candyGrid.map((row, rIdx) =>
-                  row.map((cell, cIdx) => {
-                    const isSelected = selectedCell?.r === rIdx && selectedCell?.c === cIdx;
-                    const isShaking = shakingItemId === `${rIdx}-${cIdx}`;
-                    const isCrushing = cell.isCrushing;
+            <div className="space-y-4">
+              <button
+                onClick={startLC}
+                className={`${PRESS} w-full text-left rounded-[28px] p-5 bg-gradient-to-br from-[#DB2777] to-[#7E22CE] border-b-[8px] border-[#4C1D95] flex items-center gap-4`}
+              >
+                <span className="text-6xl">🍬</span>
+                <span className="flex-1">
+                  <span className={`${FUN} block text-3xl font-bold`}>Letter Crush</span>
+                  <span className="block font-semibold text-white/85">Match 3 candies to collect the word's letters</span>
+                </span>
+                <span className={`${FUN} text-3xl font-bold`}>▶</span>
+              </button>
+              <button
+                onClick={() => startWB()}
+                className={`${PRESS} w-full text-left rounded-[28px] p-5 bg-gradient-to-br from-[#16A34A] to-[#0284C7] border-b-[8px] border-[#075985] flex items-center gap-4`}
+              >
+                <span className="text-6xl">🏗️</span>
+                <span className="flex-1">
+                  <span className={`${FUN} block text-3xl font-bold`}>Word Builder</span>
+                  <span className="block font-semibold text-white/85">Spell the Yorùbá word, letter by letter</span>
+                </span>
+                <span className={`${FUN} text-3xl font-bold`}>▶</span>
+              </button>
+              <button
+                onClick={startSC}
+                className={`${PRESS} w-full text-left rounded-[28px] p-5 bg-gradient-to-br from-[#FFC83D] to-[#FF6B35] border-b-[8px] border-[#D9480F] text-[#2E1065] flex items-center gap-4`}
+              >
+                <span className="text-6xl">⚡</span>
+                <span className="flex-1">
+                  <span className={`${FUN} block text-3xl font-bold`}>Speed Catch</span>
+                  <span className="block font-bold opacity-80">Catch the right word before it lands!</span>
+                </span>
+                <span className={`${FUN} text-3xl font-bold`}>▶</span>
+              </button>
+            </div>
 
-                    return (
-                      <button
-                        key={cell.gridKey || `${rIdx}-${cIdx}`}
-                        onPointerDown={(e) => handlePointerDown(rIdx, cIdx, e)}
-                        onPointerMove={(e) => handlePointerMove(rIdx, cIdx, e)}
-                        onPointerUp={(e) => handlePointerUp(rIdx, cIdx, e)}
-                        className={`h-13 sm:h-16 w-full rounded-2xl border-2 sm:border-3 flex flex-col items-center justify-center p-0.5 shadow-lg active:scale-95 transition-all relative overflow-hidden select-none touch-none ${
-                          cell.item.color
-                        } ${cell.item.borderColor} ${
-                          isSelected
-                            ? 'ring-4 ring-amber-300 ring-offset-2 ring-offset-slate-900 scale-105 z-10 animate-pulse border-white'
-                            : 'hover:scale-105'
-                        } ${isShaking ? 'animate-bounce border-rose-500' : ''} ${
-                          isCrushing ? 'scale-125 opacity-0 transition-all duration-300 rotate-12' : ''
-                        }`}
-                      >
-                        <span className="font-serif font-black text-xl sm:text-2xl leading-none drop-shadow-md tracking-tight">
-                          {cell.item.letter}
-                        </span>
-                        <span className="font-sans font-bold text-[9px] sm:text-[10px] leading-tight text-amber-100/90 drop-shadow-sm mt-0.5">
-                          {cell.item.phonetics}
-                        </span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-
-              <div className="mt-2 text-center text-[10px] sm:text-xs font-bold text-amber-200/90 flex items-center justify-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>Swipe finger/mouse on any letter block to swap & match 3 in a row! 🍬</span>
-              </div>
+            <div className="rounded-3xl bg-white/5 border-2 border-white/10 p-4 text-center space-y-1">
+              <p className="font-semibold text-white/70">🏆 Best Speed Catch: <b className="text-[#FFC83D]">{best}</b> catches</p>
+              <p className="text-xs font-bold text-white/40">Igbo &amp; Hausa coming soon</p>
             </div>
           </div>
         )}
 
-        {mode === 'lego_builder' && builderWord && (
-          <div className="space-y-4 animate-fadeIn">
-            
-            <div className="flex items-center justify-center space-x-2 text-xs font-bold">
-              <span className="text-slate-500">Difficulty:</span>
-              {(['easy', 'medium', 'hard'] as const).map(d => (
-                <button
-                  key={d}
-                  onClick={() => setBuilderDifficulty(d)}
-                  className={`px-3 py-1 rounded-full uppercase text-[10px] font-extrabold ${
-                    builderDifficulty === d
-                      ? 'bg-[#0E8256] text-amber-300'
-                      : 'bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  {d}
-                </button>
-              ))}
+        {/* ================= LETTER CRUSH ================= */}
+        {screen === 'lc' && m1 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className={`${FUN} text-2xl font-bold`}>🍬 Letter Crush</p>
+              <p className={`${FUN} font-semibold text-white/70`}>Word {m1.round + 1} of {WORDS_PER_ROUND}</p>
             </div>
 
-            <div className="bg-white p-4 rounded-3xl border-2 border-purple-300 shadow-md text-center space-y-1">
-              <div className="text-4xl mb-1">{builderWord.itemEmoji}</div>
-              <h3 className="font-serif font-bold text-lg text-slate-800">
-                "{builderWord.english}"
-              </h3>
-              <p className="text-xs text-slate-500">
-                Tap the chunky Lego blocks below to spell the word!
-              </p>
+            <div className="rounded-3xl bg-white/10 p-3 space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-5xl">{m1.word.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`${FUN} text-2xl font-bold text-[#FFC83D] leading-tight`}>{m1.word.word}</p>
+                  <p className="font-bold text-white/80">"{m1.word.en}"</p>
+                </div>
+                <ListenButton text={m1.word.word} label="" className="w-12 h-12 rounded-2xl bg-[#38BDF8] border-b-4 border-[#0284C7] text-2xl shrink-0" />
+              </div>
+              <p className="text-sm font-bold text-white/70">Crush these letters to finish the word:</p>
+              <div className="flex flex-wrap gap-2">
+                {m1.goals.map(goal => {
+                  const done = goal.got >= NEED_PER_LETTER;
+                  return (
+                    <span key={goal.l} className={`inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full ${done ? 'bg-[#16A34A]' : 'bg-white/15'}`}>
+                      <span className={`${FUN} w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold`} style={{ background: m1.look[goal.l].bg }}>
+                        {goal.l}
+                      </span>
+                      <span className={`${FUN} font-bold`}>{done ? '✓' : `${goal.got}/${NEED_PER_LETTER}`}</span>
+                    </span>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="p-4 rounded-3xl bg-slate-950 border-4 border-amber-400 shadow-inner flex flex-wrap items-center justify-center gap-2 min-h-[90px]">
-              {placedSlots.map((slot, idx) => (
-                <button
-                  key={`slot-${idx}`}
-                  onClick={() => handleRemovePlacedSlot(idx)}
-                  className={`w-12 h-14 rounded-2xl border-b-4 flex items-center justify-center font-extrabold text-xl font-mono shadow-lg transition-all ${
-                    slot
-                      ? getBlockColor(slot)
-                      : 'border-slate-800 bg-slate-900/80 text-slate-700'
-                  }`}
-                >
-                  {slot || '_'}
-                </button>
-              ))}
-            </div>
-
-            <div className="bg-white p-4 rounded-3xl border-2 border-slate-200 shadow-md">
-              <span className="block text-[11px] font-extrabold text-slate-400 uppercase text-center mb-2">
-                Available Lego Letters
+            <div className="flex items-center justify-between gap-2">
+              <span className={`${FUN} px-4 py-2 rounded-2xl font-bold ${m1.moves <= 5 ? 'bg-[#FF6B35] animate-pulse' : 'bg-white/15'}`}>
+                👟 {m1.moves} moves
               </span>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                {jumbledBlocks.map((b) => (
-                  <button
-                    key={b.id}
-                    onClick={() => handleLegoBlockTap(b)}
-                    className={`w-12 h-14 rounded-2xl border-b-4 flex items-center justify-center font-extrabold text-xl font-mono shadow-md hover:scale-110 active:scale-95 transition-all ${getBlockColor(
-                      b.letter
-                    )}`}
+              <span className="text-sm font-bold text-white/60">Swap 2 candies to make a line of 3!</span>
+            </div>
+
+            <div className="rounded-[28px] p-2 bg-gradient-to-b from-[#FFC83D] to-[#FF6B35] border-b-[6px] border-[#D9480F]">
+              <div className="relative w-full aspect-square rounded-[22px] bg-[#1E1B4B]/90 overflow-hidden touch-none select-none">
+                {Array.from(candies.current.values()).map(cd => {
+                  const look = m1.look[cd.l] || CANDY_LOOKS[0];
+                  return (
+                    <div
+                      key={cd.id}
+                      ref={el => {
+                        if (el) candyEls.current.set(cd.id, el);
+                        else candyEls.current.delete(cd.id);
+                      }}
+                      className={`wc-candy ${cd.boom ? 'boom' : ''} ${cd.hint ? 'hint' : ''} ${m1.sel === cd ? 'sel' : ''}`}
+                      style={{ top: `${(cd.shownR * 100) / N}%`, left: `${(cd.c * 100) / N}%` }}
+                      onPointerDown={e => {
+                        e.preventDefault();
+                        touch.current = { cd, x: e.clientX, y: e.clientY };
+                      }}
+                    >
+                      <span className={`shape ${look.shape}`} style={{ background: look.bg }}>
+                        <b>{cd.l}</b>
+                      </span>
+                    </div>
+                  );
+                })}
+                {praise && (
+                  <div
+                    key={praise.key}
+                    className={`${FUN} wc-praise absolute z-10 text-3xl sm:text-4xl font-bold text-white pointer-events-none`}
+                    style={{ top: `${(praise.row * 100) / N}%`, left: '50%' }}
                   >
-                    {b.letter}
+                    {praise.text}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {m1.overlay && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#2E1065]/80 p-6">
+                <div className="wc-pop rounded-[28px] bg-white text-[#2E1065] p-6 text-center space-y-3 max-w-sm w-full border-b-8 border-slate-300">
+                  {m1.overlay === 'done' ? (
+                    <>
+                      <p className="text-6xl">{m1.word.emoji}</p>
+                      <p className={`${FUN} text-4xl font-bold text-[#7E22CE]`}>{m1.word.word}</p>
+                      <p className={`${FUN} text-xl font-semibold`}>"{m1.word.en}"</p>
+                      <p className="font-bold text-[#16A34A]">Word complete! +10 🪙</p>
+                      <ListenButton
+                        text={m1.word.word}
+                        label="Hear it again"
+                        className="px-4 py-2 rounded-full bg-[#E0F4FF] text-[#0284C7] font-extrabold border-b-[3px] border-[#38BDF8]"
+                      />
+                      <button
+                        onClick={lcNext}
+                        className={`${PRESS} ${FUN} w-full py-3.5 rounded-2xl bg-[#FFC83D] text-[#064E3B] text-xl font-bold border-b-[6px] border-[#E0A800]`}
+                      >
+                        {m1.round + 1 >= WORDS_PER_ROUND ? 'See my score 🏆' : 'Next word ▶'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-6xl">💪</p>
+                      <p className={`${FUN} text-3xl font-bold`}>Out of moves!</p>
+                      <p className="font-semibold">So close! Let's try "{m1.word.word}" again.</p>
+                      <button
+                        onClick={lcRetry}
+                        className={`${PRESS} ${FUN} w-full py-3.5 rounded-2xl bg-[#FF6B35] text-white text-xl font-bold border-b-[6px] border-[#D9480F]`}
+                      >
+                        🔁 Try again
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================= WORD BUILDER ================= */}
+        {screen === 'wb' && m2 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className={`${FUN} text-2xl font-bold`}>🏗️ Word Builder</p>
+              <p className={`${FUN} font-semibold text-white/70`}>Word {m2.round + 1} of {WORDS_PER_ROUND}</p>
+            </div>
+            <div className="flex justify-center gap-2">
+              {(['easy', 'medium', 'hard'] as BuilderLevel[]).map(level => (
+                <button
+                  key={level}
+                  onClick={() => startWB(level)}
+                  className={`${PRESS} px-4 py-2 rounded-full text-sm font-extrabold ${m2.level === level ? 'bg-[#FFC83D] text-[#064E3B]' : 'bg-white/10'}`}
+                >
+                  {level === 'easy' ? '🌱 Easy' : level === 'medium' ? '🌿 Medium' : '🌳 Hard'}
+                </button>
+              ))}
+            </div>
+
+            <div className="rounded-3xl bg-white text-slate-800 p-5 text-center space-y-2 border-b-[6px] border-slate-300">
+              <p className="text-6xl">{m2.word.emoji}</p>
+              <p className={`${FUN} text-2xl font-bold`}>"{m2.word.en}"</p>
+              {m2.placed.length === m2.units.length ? (
+                <p className={`${FUN} text-4xl font-bold text-[#7E22CE] wc-pop`}>{m2.word.word}</p>
+              ) : (
+                <p className="text-sm font-bold text-slate-500">Build the Yorùbá word</p>
+              )}
+              <div className="flex justify-center">
+                <ListenButton
+                  text={m2.word.word}
+                  className="px-4 py-2 rounded-full bg-[#E0F4FF] text-[#0284C7] font-extrabold border-b-[3px] border-[#38BDF8]"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-center gap-2 min-h-[4rem]">
+              {m2.units.map((_, i) => {
+                const letter = m2.placed[i];
+                return (
+                  <span
+                    key={i}
+                    className={`${FUN} w-14 h-16 rounded-2xl flex items-center justify-center text-3xl font-bold ${
+                      letter ? `${TILE_COLORS[i % TILE_COLORS.length]} border-b-[5px] wc-pop` : 'bg-white/10 border-2 border-dashed border-white/25'
+                    }`}
+                  >
+                    {letter || ''}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="rounded-3xl bg-black/25 p-4">
+              <div className="flex flex-wrap justify-center gap-3">
+                {m2.tiles.map(tile => (
+                  <button
+                    key={wobble && wobble.id === tile.id ? `${tile.id}-${wobble.n}` : tile.id}
+                    onClick={() => wbTap(tile.id)}
+                    disabled={tile.used}
+                    className={`${PRESS} ${FUN} w-14 h-16 rounded-2xl border-b-[6px] text-3xl font-bold ${
+                      tile.used ? 'opacity-0' : 'bg-white text-[#2E1065] border-slate-300'
+                    } ${wobble && wobble.id === tile.id ? 'wc-wobble' : ''}`}
+                  >
+                    {tile.l}
                   </button>
                 ))}
               </div>
             </div>
 
+            <div className="flex justify-center">
+              <button onClick={wbHint} className={`${PRESS} ${FUN} px-5 py-2.5 rounded-2xl bg-white/15 font-semibold`}>
+                💡 Hint ({HINT_COST} 🪙)
+              </button>
+            </div>
           </div>
         )}
 
-        {mode === 'speed_crush' && speedTarget && (
-          <div className="relative h-96 bg-gradient-to-b from-slate-900 via-slate-950 to-emerald-950 rounded-3xl border-4 border-amber-400 overflow-hidden shadow-2xl flex flex-col justify-between p-4">
-            
-            <div className="bg-amber-400 text-slate-950 p-2.5 px-4 rounded-2xl text-center font-extrabold text-xs shadow-md z-10">
-              ⚡ Tap falling fruit that means: <span className="text-base font-serif uppercase block text-emerald-950">"{speedTarget.english}"</span>
+        {/* ================= SPEED CATCH ================= */}
+        {screen === 'sc' && m3 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className={`${FUN} text-2xl font-bold`}>⚡ Speed Catch</p>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl" aria-label={`${m3.lives} lives left`}>
+                  {'❤️'.repeat(Math.max(0, m3.lives))}
+                  <span className="opacity-25">{'❤️'.repeat(3 - Math.max(0, m3.lives))}</span>
+                </span>
+                <span className={`${FUN} px-4 py-2 rounded-2xl bg-white/15 font-bold`}>⚡ {m3.catches} / {CATCH_GOAL}</span>
+              </div>
             </div>
-
-            <div className="relative flex-1">
-              {fallingItems.map((item) => (
+            <div className="rounded-3xl bg-[#FFC83D] text-[#2E1065] p-4 text-center border-b-[6px] border-[#E0A800]">
+              <p className="font-bold text-sm">Catch the Yorùbá word for</p>
+              <p key={m3.target.id} className={`${FUN} text-3xl font-bold wc-pop`}>{m3.target.emoji} "{m3.target.en}"</p>
+            </div>
+            <div
+              ref={field}
+              className="relative h-[420px] rounded-3xl bg-gradient-to-b from-[#1E1B4B] to-[#064E3B] border-4 border-white/10 overflow-hidden"
+            >
+              {m3.items.filter(it => !it.gone).map(it => (
                 <button
-                  key={item.id}
-                  onClick={() => handleTapFallingItem(item)}
-                  style={{ top: `${item.top}%`, left: `${item.left}%` }}
-                  className="absolute transform -translate-x-1/2 p-2 px-3.5 rounded-2xl bg-white/95 border-2 border-amber-400 shadow-xl flex items-center space-x-1.5 font-bold text-xs text-slate-900 active:scale-125 transition-transform animate-pulse"
+                  key={wobble && wobble.id === -it.id ? `${it.id}-${wobble.n}` : it.id}
+                  ref={el => {
+                    if (el) bubbleEls.current.set(it.id, el);
+                    else bubbleEls.current.delete(it.id);
+                  }}
+                  onPointerDown={() => catchIt(it)}
+                  className={`wc-bubble ${FUN} px-4 py-3 rounded-full bg-white text-[#2E1065] font-bold text-xl border-b-[5px] border-slate-300 shadow-xl whitespace-nowrap ${
+                    wobble && wobble.id === -it.id ? 'wc-wobble' : ''
+                  }`}
+                  style={{ left: `${it.x}%`, top: `${it.y}px` }}
                 >
-                  <span className="text-2xl">{item.word.itemEmoji}</span>
-                  <span className="font-serif font-extrabold text-[#0E8256]">{item.word.word}</span>
+                  {it.word.emoji} {it.word.word}
                 </button>
               ))}
+              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-r from-[#16A34A] via-[#FFC83D] to-[#16A34A] opacity-70" />
             </div>
-
-            <div className="w-full h-3 bg-gradient-to-r from-rose-500 via-amber-400 to-rose-500 rounded-full animate-pulse shadow-rose-500/50 shadow-lg z-10" />
+            <p className="text-center text-white/60 text-sm font-semibold">Tap the right word before it hits the grass! 🌿</p>
           </div>
         )}
 
-      </main>
-
-      <footer className="max-w-xl mx-auto w-full px-3 mt-4">
-        <div className="bg-[#0E8256] text-white p-3 rounded-2xl shadow-md border border-amber-400/40 flex items-center justify-between">
-          
-          <div className="flex items-center space-x-2.5">
-            <div className="w-10 h-10 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-xl shadow-xs border-2 border-white">
-              🇳🇬
-            </div>
-            <div>
-              <span className="font-serif font-bold text-xs text-amber-300 block">Mama Titi Says:</span>
-              <p className="text-[11px] text-emerald-100 font-medium">
-                "{comboCount >= 2 ? 'Ehhh! O se daadaa!' : 'Keep crushing those Nigerian words!'}"
+        {/* ================= RESULTS ================= */}
+        {screen === 'results' && result && (() => {
+          const ratio = result.total ? result.got / result.total : 0;
+          const stars = Math.max(1, Math.round(ratio * 5));
+          const seen = new Set<string>();
+          const learned = result.learned.filter(w => !seen.has(w.id) && seen.add(w.id));
+          return (
+            <div className="space-y-4 text-center wc-pop">
+              <p className="text-8xl pt-2">{result.perfect ? '🏆' : ratio >= 0.5 ? '🌟' : '💪'}</p>
+              <p className={`${FUN} text-4xl font-bold text-[#FFC83D]`}>
+                {result.perfect ? 'Ẹ kú iṣẹ́! Perfect!' : ratio >= 0.5 ? 'Ó dára! Well done!' : 'Kò burú! Nice try!'}
               </p>
-            </div>
-          </div>
-
-          <div className="text-right shrink-0">
-            <span className="text-[10px] text-emerald-200 block">High Score</span>
-            <span className="font-extrabold text-sm text-amber-300">🏆 {highScore}</span>
-          </div>
-
-        </div>
-      </footer>
-
-      {showLevelComplete && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-sm rounded-3xl border-4 border-amber-400 shadow-2xl p-6 text-center space-y-4 animate-scaleUp">
-            <div className="w-16 h-16 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center mx-auto text-3xl shadow-lg">
-              🎉
-            </div>
-            <div>
-              <h2 className="font-serif font-extrabold text-2xl text-[#0E8256]">
-                Level {level - 1} Complete!
-              </h2>
-              <p className="text-xs text-slate-600 mt-1">
-                O dara pupo! You are mastering Nigerian vocabulary!
+              <p className="font-semibold text-white/80">
+                {GAME_NAMES[result.game]} · {result.got} of {result.total} {result.game === 'sc' ? 'catches' : 'words'}
               </p>
-            </div>
-
-            <div className="flex justify-center space-x-2 text-3xl text-amber-400">
-              ⭐⭐⭐
-            </div>
-
-            <button
-              onClick={() => {
-                setShowLevelComplete(false);
-                if (mode === 'fruit_match') initFruitMatch();
-                if (mode === 'lego_builder') initLegoBuilder();
-                if (mode === 'speed_crush') initSpeedCrush();
-              }}
-              className="w-full py-3 rounded-2xl bg-[#0E8256] hover:bg-[#085C40] text-amber-300 font-extrabold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
-            >
-              <span>Continue to Level {level}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showGameOver && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-sm rounded-3xl border-4 border-rose-500 shadow-2xl p-6 text-center space-y-4 animate-scaleUp">
-            <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto text-3xl">
-              💪
-            </div>
-            <div>
-              <h2 className="font-serif font-extrabold text-xl text-slate-900">
-                Eya! Let us try again!
-              </h2>
-              <p className="text-xs text-slate-600 mt-1">
-                "Tun gbiyanju! You can do it!" — Mama Titi 🌟
+              <p className="text-4xl tracking-wider" aria-label={`${stars} out of 5 stars`}>
+                {'⭐'.repeat(stars)}<span className="opacity-25">{'⭐'.repeat(5 - stars)}</span>
               </p>
-            </div>
-
-            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs font-bold text-slate-800">
-              Total Score Earned: <span className="text-[#0E8256] font-extrabold text-base">⭐ {score}</span>
-            </div>
-
-            <div className="space-y-2">
+              <div className="rounded-3xl bg-white/5 border-2 border-white/10 p-4 text-left space-y-2">
+                <p className={`${FUN} text-xl font-bold`}>📚 Words you played</p>
+                <div className="flex flex-wrap gap-2">
+                  {learned.length === 0 ? (
+                    <span className="text-white/60">No words this time. Try again!</span>
+                  ) : (
+                    learned.map(w => (
+                      <span key={w.id} className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/10">
+                        {w.emoji} <b className="text-[#FFC83D]">{w.word}</b>
+                        <span className="text-white/80">{w.en}</span>
+                        <ListenButton text={w.word} label="" className="text-sm" />
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => (result.game === 'lc' ? startLC() : result.game === 'wb' ? startWB() : startSC())}
+                  className={`${PRESS} ${FUN} py-4 rounded-2xl bg-[#FF6B35] text-xl font-bold border-b-[6px] border-[#D9480F]`}
+                >
+                  🔁 Play again
+                </button>
+                <button
+                  onClick={goHome}
+                  className={`${PRESS} ${FUN} py-4 rounded-2xl bg-white text-[#7E22CE] text-xl font-bold border-b-[6px] border-slate-300`}
+                >
+                  🍬 All games
+                </button>
+              </div>
               <button
                 onClick={() => {
-                  setLives(3);
-                  setScore(0);
-                  setShowGameOver(false);
-                  if (mode === 'fruit_match') initFruitMatch();
-                  if (mode === 'lego_builder') initLegoBuilder();
-                  if (mode === 'speed_crush') initSpeedCrush();
+                  const text = `🍬 I got ${result.got}/${result.total} in ${GAME_NAMES[result.game].slice(3)} on FunlyLearn Naija Word Crush! Can you beat me? ${window.location.origin}`;
+                  window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
                 }}
-                className="w-full py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
+                className={`${PRESS} ${FUN} w-full py-4 rounded-2xl bg-[#16A34A] text-xl font-semibold border-b-[6px] border-[#064E3B]`}
               >
-                <RotateCcw className="w-4 h-4" />
-                <span>Play Again</span>
-              </button>
-
-              <button
-                onClick={handleShareWhatsApp}
-                className="w-full py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center space-x-2"
-              >
-                <Share2 className="w-4 h-4" />
-                <span>Share Score on WhatsApp</span>
+                📲 Challenge a friend
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          );
+        })()}
 
+        {needsTap && (
+          <button
+            onClick={handleTapToPlay}
+            className={`${PRESS} ${FUN} fixed top-3 left-1/2 -translate-x-1/2 z-40 px-5 py-2.5 rounded-full bg-[#FFC83D] text-[#064E3B] font-bold shadow-xl animate-pulse`}
+          >
+            🎵 Tap anywhere for music
+          </button>
+        )}
+
+        {toast && (
+          <div className={`${FUN} fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-white text-[#7E22CE] font-semibold px-5 py-3 rounded-2xl shadow-xl max-w-xs text-center`}>
+            {toast}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
