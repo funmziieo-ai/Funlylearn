@@ -15,7 +15,7 @@
 export type MusicTrack = 'hub' | 'game';
 export type SoundEffect =
   | 'correct' | 'wrong' | 'coin' | 'tap' | 'count' | 'go'
-  | 'combo' | 'win' | 'unlock' | 'whoosh';
+  | 'combo' | 'win' | 'unlock' | 'whoosh' | 'splash';
 
 const MUSIC_FILES: Partial<Record<MusicTrack, string>> = {
   // hub: '/audio/lingo-hub.mp3',
@@ -335,6 +335,26 @@ class GameAudio {
         this.note(t, 300, 'sine', 0.08, 0.12, bus);
         this.note(t + 0.05, 600, 'sine', 0.08, 0.12, bus);
         break;
+      case 'splash': {
+        // Candy burst: a quick watery "pssh" plus a bright ping.
+        const length = Math.floor(ctx.sampleRate * 0.25);
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / length);
+        const src = ctx.createBufferSource(), filter = ctx.createBiquadFilter(), gain = ctx.createGain();
+        src.buffer = buffer;
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1400, t);
+        filter.frequency.exponentialRampToValueAtTime(300, t + 0.2);
+        gain.gain.setValueAtTime(0.45, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.22);
+        src.connect(filter).connect(gain).connect(bus);
+        src.start(t);
+        src.stop(t + 0.25);
+        this.note(t, 880, 'sine', 0.25, 0.12, bus);
+        this.note(t + 0.06, 1320, 'sine', 0.2, 0.16, bus);
+        break;
+      }
       case 'win':
         [523, 659, 784, 1047, 784, 1047].forEach((f, i) => this.note(t + i * 0.13, f, 'triangle', 0.3, 0.3, bus));
         break;
