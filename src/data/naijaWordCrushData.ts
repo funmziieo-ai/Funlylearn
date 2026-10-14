@@ -3,7 +3,7 @@ export interface CrushWord {
   word: string;
   english: string;
   language: 'Yoruba' | 'Igbo' | 'Hausa';
-  category: 'Greetings' | 'Family' | 'Food' | 'Animals' | 'School';
+  category: 'Greetings' | 'Family' | 'Food' | 'Animals' | 'School' | 'Home' | 'Nature' | 'Numbers' | 'Wisdom';
   itemEmoji: string; // Fruit/food/item icon
   itemName: string;  // Nigerian item label
   difficulty: 'easy' | 'medium' | 'hard';
@@ -64,7 +64,53 @@ export const WORD_CRUSH_VOCABULARY: CrushWord[] = [
   { id: 'yo-19', word: 'Ọlọ́gbò', english: 'Cat', language: 'Yoruba', category: 'Animals', itemEmoji: '🐈', itemName: 'Cat', difficulty: 'medium', ageBand: 'primary' },
   { id: 'yo-20', word: 'Ẹyẹ', english: 'Bird', language: 'Yoruba', category: 'Animals', itemEmoji: '🐦', itemName: 'Bird', difficulty: 'easy', ageBand: 'primary' },
   { id: 'yo-21', word: 'Ẹja', english: 'Fish', language: 'Yoruba', category: 'Animals', itemEmoji: '🐟', itemName: 'Fish', difficulty: 'easy', ageBand: 'primary' },
-  { id: 'yo-22', word: 'Ẹkurẹ́', english: 'Rat', language: 'Yoruba', category: 'Animals', itemEmoji: '🐀', itemName: 'Rat', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-22', word: 'Eku', english: 'Rat', language: 'Yoruba', category: 'Animals', itemEmoji: '🐀', itemName: 'Rat', difficulty: 'easy', ageBand: 'primary' },
+  // More everyday words (added for Word Crush; check spelling and tone marks with a Yorùbá speaker)
+  { id: 'yo-23', word: 'Ọmọ', english: 'Child', language: 'Yoruba', category: 'Family', itemEmoji: '🧒', itemName: 'Child', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-24', word: 'Ọ̀rẹ́', english: 'Friend', language: 'Yoruba', category: 'Family', itemEmoji: '🤝', itemName: 'Friend', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-25', word: 'Ìwé', english: 'Book', language: 'Yoruba', category: 'School', itemEmoji: '📖', itemName: 'Book', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-26', word: 'Olùkọ́', english: 'Teacher', language: 'Yoruba', category: 'School', itemEmoji: '🧑🏾‍🏫', itemName: 'Teacher', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-27', word: 'Ìdánwò', english: 'Exam', language: 'Yoruba', category: 'School', itemEmoji: '📝', itemName: 'Exam', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-28', word: 'Ìṣirò', english: 'Mathematics', language: 'Yoruba', category: 'School', itemEmoji: '🔢', itemName: 'Mathematics', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-29', word: 'Ilé', english: 'House', language: 'Yoruba', category: 'Home', itemEmoji: '🏠', itemName: 'House', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-30', word: 'Ilẹ̀kùn', english: 'Door', language: 'Yoruba', category: 'Home', itemEmoji: '🚪', itemName: 'Door', difficulty: 'hard', ageBand: 'primary' },
+  { id: 'yo-31', word: 'Fèrèsé', english: 'Window', language: 'Yoruba', category: 'Home', itemEmoji: '🪟', itemName: 'Window', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-32', word: 'Bàtà', english: 'Shoe', language: 'Yoruba', category: 'Home', itemEmoji: '👟', itemName: 'Shoe', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-33', word: 'Aṣọ', english: 'Cloth', language: 'Yoruba', category: 'Home', itemEmoji: '👕', itemName: 'Cloth', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-34', word: 'Ọjà', english: 'Market', language: 'Yoruba', category: 'Food', itemEmoji: '🛒', itemName: 'Market', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-35', word: 'Owó', english: 'Money', language: 'Yoruba', category: 'Food', itemEmoji: '💰', itemName: 'Money', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-36', word: 'Oúnjẹ', english: 'Food', language: 'Yoruba', category: 'Food', itemEmoji: '🍛', itemName: 'Food', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-37', word: 'Àkàrà', english: 'Bean cake', language: 'Yoruba', category: 'Food', itemEmoji: '🟤', itemName: 'Bean cake', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-38', word: 'Ẹ̀gúsí', english: 'Melon seed soup', language: 'Yoruba', category: 'Food', itemEmoji: '🍲', itemName: 'Melon seed soup', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-39', word: 'Iyán', english: 'Pounded yam', language: 'Yoruba', category: 'Food', itemEmoji: '🥣', itemName: 'Pounded yam', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-40', word: 'Ìrẹsì', english: 'Rice', language: 'Yoruba', category: 'Food', itemEmoji: '🍚', itemName: 'Rice', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-41', word: 'Ọsàn', english: 'Orange', language: 'Yoruba', category: 'Food', itemEmoji: '🍊', itemName: 'Orange', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-42', word: 'Adìẹ', english: 'Chicken', language: 'Yoruba', category: 'Animals', itemEmoji: '🐔', itemName: 'Chicken', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-43', word: 'Ewúrẹ́', english: 'Goat', language: 'Yoruba', category: 'Animals', itemEmoji: '🐐', itemName: 'Goat', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-44', word: 'Àgùntàn', english: 'Sheep', language: 'Yoruba', category: 'Animals', itemEmoji: '🐑', itemName: 'Sheep', difficulty: 'hard', ageBand: 'primary' },
+  { id: 'yo-45', word: 'Ẹṣin', english: 'Horse', language: 'Yoruba', category: 'Animals', itemEmoji: '🐎', itemName: 'Horse', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-46', word: 'Erin', english: 'Elephant', language: 'Yoruba', category: 'Animals', itemEmoji: '🐘', itemName: 'Elephant', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-47', word: 'Kìnnìún', english: 'Lion', language: 'Yoruba', category: 'Animals', itemEmoji: '🦁', itemName: 'Lion', difficulty: 'hard', ageBand: 'primary' },
+  { id: 'yo-48', word: 'Ọ̀bọ', english: 'Monkey', language: 'Yoruba', category: 'Animals', itemEmoji: '🐒', itemName: 'Monkey', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-49', word: 'Oòrùn', english: 'Sun', language: 'Yoruba', category: 'Nature', itemEmoji: '☀️', itemName: 'Sun', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-50', word: 'Òjò', english: 'Rain', language: 'Yoruba', category: 'Nature', itemEmoji: '🌧️', itemName: 'Rain', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-51', word: 'Igi', english: 'Tree', language: 'Yoruba', category: 'Nature', itemEmoji: '🌳', itemName: 'Tree', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-52', word: 'Ewé', english: 'Leaf', language: 'Yoruba', category: 'Nature', itemEmoji: '🍃', itemName: 'Leaf', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-53', word: 'Ẹ ṣé', english: 'Thank you', language: 'Yoruba', category: 'Greetings', itemEmoji: '🙏🏾', itemName: 'Thank you', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-54', word: 'Ẹ káàbọ̀', english: 'Welcome', language: 'Yoruba', category: 'Greetings', itemEmoji: '🤗', itemName: 'Welcome', difficulty: 'hard', ageBand: 'primary' },
+  { id: 'yo-55', word: 'Sùúrù', english: 'Patience', language: 'Yoruba', category: 'Wisdom', itemEmoji: '⏳', itemName: 'Patience', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-56', word: 'Àlàáfíà', english: 'Peace and good health', language: 'Yoruba', category: 'Wisdom', itemEmoji: '🕊️', itemName: 'Peace and good health', difficulty: 'hard', ageBand: 'primary' },
+  { id: 'yo-57', word: 'Ọ̀kan', english: 'One', language: 'Yoruba', category: 'Numbers', itemEmoji: '1️⃣', itemName: 'One', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-58', word: 'Èjì', english: 'Two', language: 'Yoruba', category: 'Numbers', itemEmoji: '2️⃣', itemName: 'Two', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-59', word: 'Ẹ̀ta', english: 'Three', language: 'Yoruba', category: 'Numbers', itemEmoji: '3️⃣', itemName: 'Three', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-60', word: 'Ẹ̀rin', english: 'Four', language: 'Yoruba', category: 'Numbers', itemEmoji: '4️⃣', itemName: 'Four', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-61', word: 'Àrún', english: 'Five', language: 'Yoruba', category: 'Numbers', itemEmoji: '5️⃣', itemName: 'Five', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-62', word: 'Ẹ̀fà', english: 'Six', language: 'Yoruba', category: 'Numbers', itemEmoji: '6️⃣', itemName: 'Six', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-63', word: 'Èje', english: 'Seven', language: 'Yoruba', category: 'Numbers', itemEmoji: '7️⃣', itemName: 'Seven', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-64', word: 'Ẹ̀jọ', english: 'Eight', language: 'Yoruba', category: 'Numbers', itemEmoji: '8️⃣', itemName: 'Eight', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-65', word: 'Ẹ̀sán', english: 'Nine', language: 'Yoruba', category: 'Numbers', itemEmoji: '9️⃣', itemName: 'Nine', difficulty: 'medium', ageBand: 'primary' },
+  { id: 'yo-66', word: 'Ẹ̀wá', english: 'Ten', language: 'Yoruba', category: 'Numbers', itemEmoji: '🔟', itemName: 'Ten', difficulty: 'easy', ageBand: 'primary' },
+  { id: 'yo-67', word: 'Ẹyin', english: 'Egg', language: 'Yoruba', category: 'Food', itemEmoji: '🥚', itemName: 'Egg', difficulty: 'easy', ageBand: 'primary' },
 
   // --- IGBO WORDS ---
   // Greetings
