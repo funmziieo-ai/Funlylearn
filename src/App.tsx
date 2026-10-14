@@ -351,6 +351,7 @@ export default function App() {
                 profile={profile}
                 onBackToApp={() => setActiveTab('lingo')}
                 isStandalonePreview={false}
+                onProfileUpdate={handleProfileUpdate}
               />
             )}
 
