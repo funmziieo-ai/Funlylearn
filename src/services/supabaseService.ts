@@ -21,80 +21,167 @@ export function getOrCreateGuestSessionId(): string {
   return id;
 }
 
+// ---------- Daily free uses (5 a day) ----------
+// Free users get 5 Mama Titi chats, 5 notebook opens and 5 Exam Prep
+// attempts per day (Lagos time). The real count lives on the server
+// (use_daily_credit in daily-usage-migration.sql), so clearing the
+// browser doesn't reset it. A copy is kept on the phone so the app can
+// show the count instantly, and so it still works if the internet drops.
+export const FREE_DAILY_LIMITS = { chat: 5, notebook: 5, exam: 5 } as const;
+export type UsageFeature = keyof typeof FREE_DAILY_LIMITS;
+
+const USAGE_KEY = 'funlylearn_daily_usage_v2';
+let usageUserKey: string | null = null;
+
+// Called by App.tsx once it knows who is using the app (account id, or
+// this device's guest id).
+export function setUsageUserKey(key: string | null): void {
+  usageUserKey = key;
+}
+
+function lagosToday(): string {
+  // Nigeria is UTC+1 all year.
+  return new Date(Date.now() + 60 * 60 * 1000).toISOString().split('T')[0];
+}
+
+function readUsage(): { date: string; counts: Record<string, number> } {
+  const today = lagosToday();
+  try {
+    const saved = localStorage.getItem(USAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.date === today && parsed.counts) return parsed;
+    }
+  } catch (_e) {}
+  return { date: today, counts: {} };
+}
+
+export function getLocalUsage(feature: UsageFeature): number {
+  return readUsage().counts[feature] || 0;
+}
+
+function setLocalUsage(feature: UsageFeature, used: number): void {
+  const usage = readUsage();
+  usage.counts[feature] = used;
+  try {
+    localStorage.setItem(USAGE_KEY, JSON.stringify(usage));
+  } catch (_e) {}
+}
+
+// Uses one free credit and says whether it was allowed.
+export async function useDailyCredit(feature: UsageFeature): Promise<{ allowed: boolean; used: number; limit: number }> {
+  const limit = FREE_DAILY_LIMITS[feature];
+  const local = getLocalUsage(feature);
+  if (supabase && usageUserKey) {
+    try {
+      const { data, error } = await supabase.rpc('use_daily_credit', { p_user_key: usageUserKey, p_feature: feature });
+      if (!error && data) {
+        const used = Number((data as any).used) || 0;
+        const allowed = Boolean((data as any).allowed);
+        setLocalUsage(feature, allowed ? used : Math.max(used, limit));
+        return { allowed, used: allowed ? used : Math.max(used, limit), limit };
+      }
+    } catch (e) {
+      console.warn('Daily credit check failed, using this device\'s count:', e);
+    }
+  }
+  // Offline or not set up yet: count on this device only.
+  if (local >= limit) return { allowed: false, used: local, limit };
+  setLocalUsage(feature, local + 1);
+  return { allowed: true, used: local + 1, limit };
+}
+
+// Brings this device's counts up to date with the server (e.g. after
+// the browser was cleared, or on a second device).
+export async function syncDailyUsage(): Promise<void> {
+  if (!supabase || !usageUserKey) return;
+  try {
+    const { data, error } = await supabase.rpc('get_daily_usage', { p_user_key: usageUserKey });
+    if (error || !data) return;
+    (Object.keys(FREE_DAILY_LIMITS) as UsageFeature[]).forEach(feature => {
+      const server = Number((data as any)[feature]) || 0;
+      if (server > getLocalUsage(feature)) setLocalUsage(feature, server);
+    });
+  } catch (_e) {}
+}
+
+// Counts one use in the background (used by the notebook and Exam Prep,
+// which check the limit on the phone before calling this).
+function recordUse(feature: UsageFeature): number {
+  const next = getLocalUsage(feature) + 1;
+  setLocalUsage(feature, next);
+  if (supabase && usageUserKey) {
+    supabase
+      .rpc('use_daily_credit', { p_user_key: usageUserKey, p_feature: feature })
+      .then(({ data, error }) => {
+        if (!error && data) {
+          const used = Number((data as any).used) || 0;
+          if (used > getLocalUsage(feature)) setLocalUsage(feature, used);
+        }
+      }, () => {});
+  }
+  return next;
+}
+
 export function getGuestDailyMessageCount(): { count: number; date: string } {
-  return { count: 0, date: new Date().toISOString().split('T')[0] };
+  return { count: getLocalUsage('chat'), date: lagosToday() };
 }
 
 export function incrementGuestDailyMessageCount(): number {
-  return 0;
+  return recordUse('chat');
 }
 
 export function isGuestLimitReached(): boolean {
-  return false;
+  return getLocalUsage('chat') >= FREE_DAILY_LIMITS.chat;
 }
 
-// NOTEBOOK VIEW COUNT — mirrors the exact same daily-reset pattern as
-// the chat message counter above. Free users get 5 notebook views per
-// day before being prompted to upgrade, same rhythm as chat's 5 free
-// messages. Same known limitation as the chat counter: stored in
-// localStorage, so it won't sync across a registered user's devices —
-// consistent with how the existing chat limit already works, not a
-// new gap introduced here.
-const NOTEBOOK_VIEW_KEY = 'funlylearn_notebook_view_count';
-
 export function getNotebookDailyViewCount(): { count: number; date: string } {
-  try {
-    const saved = localStorage.getItem(NOTEBOOK_VIEW_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const today = new Date().toISOString().split('T')[0];
-      if (parsed.date === today) return parsed;
-    }
-  } catch (e) {
-    console.warn('Error reading notebook view count:', e);
-  }
-  return { count: 0, date: new Date().toISOString().split('T')[0] };
+  return { count: getLocalUsage('notebook'), date: lagosToday() };
 }
 
 export function incrementNotebookDailyViewCount(): number {
-  const current = getNotebookDailyViewCount();
-  const updated = { count: current.count + 1, date: current.date };
-  try {
-    localStorage.setItem(NOTEBOOK_VIEW_KEY, JSON.stringify(updated));
-  } catch (e) {
-    console.warn('Error saving notebook view count:', e);
-  }
-  return updated.count;
+  return recordUse('notebook');
 }
 
-// EXAM PREP ATTEMPT COUNT — same daily-reset pattern again. Free users
-// get 5 quiz-submission attempts per day before being prompted to
-// upgrade, matching the same rhythm as chat and the notebook.
-const EXAM_PREP_ATTEMPT_KEY = 'funlylearn_exam_prep_attempt_count';
-
 export function getExamPrepDailyAttemptCount(): { count: number; date: string } {
-  try {
-    const saved = localStorage.getItem(EXAM_PREP_ATTEMPT_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const today = new Date().toISOString().split('T')[0];
-      if (parsed.date === today) return parsed;
-    }
-  } catch (e) {
-    console.warn('Error reading exam prep attempt count:', e);
-  }
-  return { count: 0, date: new Date().toISOString().split('T')[0] };
+  return { count: getLocalUsage('exam'), date: lagosToday() };
 }
 
 export function incrementExamPrepDailyAttemptCount(): number {
-  const current = getExamPrepDailyAttemptCount();
-  const updated = { count: current.count + 1, date: current.date };
+  return recordUse('exam');
+}
+
+// ---------- Free trial ----------
+// Everyone gets 7 days of full access, counted from when their profile
+// was first created. Before, the trial restarted on every page load, so
+// it never ended and the free limits never applied.
+const TRIAL_DAYS = 7;
+const TRIAL_START_KEY = 'funlylearn_trial_started_at';
+
+export function trialSubscription(startedAt: string): UserSubscription {
+  const start = new Date(startedAt);
+  const safeStart = isNaN(start.getTime()) ? new Date() : start;
+  return {
+    plan: 'free',
+    status: 'trial',
+    startedAt: safeStart.toISOString(),
+    expiresAt: new Date(safeStart.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+    currency: 'NGN'
+  };
+}
+
+// A paid plan saved on this device (from Paystack), if any.
+export function hasPaidSubscription(sub: UserSubscription): boolean {
+  return sub.plan !== 'free' && sub.status === 'active';
+}
+
+// Starts a new guest on this device (used when a different child taps
+// "I'm someone new" on the welcome-back screen).
+export function resetGuestSessionId(): string {
   try {
-    localStorage.setItem(EXAM_PREP_ATTEMPT_KEY, JSON.stringify(updated));
-  } catch (e) {
-    console.warn('Error saving exam prep attempt count:', e);
-  }
-  return updated.count;
+    localStorage.removeItem(GUEST_SESSION_KEY);
+  } catch (_e) {}
+  return getOrCreateGuestSessionId();
 }
 
 export function getStoredSubscription(): UserSubscription {
@@ -104,15 +191,15 @@ export function getStoredSubscription(): UserSubscription {
   } catch (e) {
     console.warn('Error reading stored subscription:', e);
   }
-  const now = new Date();
-  const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  return {
-    plan: 'free',
-    status: 'trial',
-    startedAt: now.toISOString(),
-    expiresAt: trialEnd.toISOString(),
-    currency: 'NGN'
-  };
+  // No paid plan saved: free trial, counted from the first day this
+  // device used FunlyLearn (saved once, so it can't restart on reload).
+  let startedAt = new Date().toISOString();
+  try {
+    const savedStart = localStorage.getItem(TRIAL_START_KEY);
+    if (savedStart) startedAt = savedStart;
+    else localStorage.setItem(TRIAL_START_KEY, startedAt);
+  } catch (_e) {}
+  return trialSubscription(startedAt);
 }
 
 export function saveStoredSubscription(sub: UserSubscription): void {
