@@ -10,7 +10,13 @@ import {
   fetchChildProfile,
   saveChildProfileToSupabase,
   fetchSubscriptionFromSupabase,
-  signOutUser
+  signOutUser,
+  setUsageUserKey,
+  syncDailyUsage,
+  useDailyCredit,
+  trialSubscription,
+  hasPaidSubscription,
+  resetGuestSessionId
 } from './services/supabaseService';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
@@ -45,7 +51,10 @@ function hasRealName(p: UserProfile): boolean {
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile>(() => getStoredProfile());
-  const [view, setView] = useState<'landing' | 'auth' | 'onboarding' | 'app' | 'reset-password'>('landing');
+  const [view, setView] = useState<'landing' | 'auth' | 'onboarding' | 'app' | 'reset-password' | 'welcome-back'>('landing');
+  // A guest's saved profile found online after they signed out, waiting
+  // for them to confirm it's them.
+  const [returningGuest, setReturningGuest] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState<string>('home');
 
   // If someone opened the app via an invite link (e.g. ?invite=word_crush),
@@ -73,6 +82,23 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isVoiceKeyModalOpen, setIsVoiceKeyModalOpen] = useState<boolean>(false);
   const [dailyMessagesCount, setDailyMessagesCount] = useState<number>(() => getGuestDailyMessageCount().count);
+
+  // Daily free uses are counted per child: their account id when signed
+  // in, otherwise this device's guest id. Re-sync whenever that changes.
+  useEffect(() => {
+    const key = user?.id || (isGuest || hasRealName(profile) ? getOrCreateGuestSessionId() : null);
+    setUsageUserKey(key);
+    if (key) {
+      syncDailyUsage().then(() => setDailyMessagesCount(getGuestDailyMessageCount().count));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isGuest]);
+
+  // Free trial: 7 days from when the child's profile was created. A paid
+  // plan always wins.
+  const applyTrialIfUnpaid = (p: UserProfile) => {
+    setSubscription(current => (hasPaidSubscription(current) ? current : trialSubscription(p.createdAt)));
+  };
 
   // Initialize Supabase Auth Session listener
   useEffect(() => {
@@ -160,10 +186,12 @@ export default function App() {
       setView('onboarding');
     }
 
-    // 2. Fetch subscription
+    // 2. Fetch subscription (no paid plan = 7-day trial from profile creation)
     const dbSub = await fetchSubscriptionFromSupabase(userId);
-    if (dbSub) {
+    if (dbSub && hasPaidSubscription(dbSub)) {
       setSubscription(dbSub);
+    } else if (dbProfile) {
+      setSubscription(trialSubscription(dbProfile.createdAt));
     }
   };
 
@@ -206,17 +234,46 @@ export default function App() {
     await handlePostAuthFlow(authUser);
   };
 
-  const handleContinueAsGuest = () => {
+  const handleContinueAsGuest = async () => {
     setIsGuest(true);
     setUser(null);
-    getOrCreateGuestSessionId();
-    // This was the actual reported bug: onboarding was forced
-    // unconditionally here, every time, even for a returning guest on
-    // the same device who already has a real saved profile (name,
-    // class level) sitting in local storage. Onboarding should only
-    // ever run once per profile — a returning guest goes straight into
-    // the app instead.
-    setView(hasRealName(profile) ? 'app' : 'onboarding');
+    const guestId = getOrCreateGuestSessionId();
+    // Onboarding only ever runs once per profile — a returning guest
+    // goes straight into the app.
+    if (hasRealName(profile)) {
+      applyTrialIfUnpaid(profile);
+      setView('app');
+      return;
+    }
+    // Signing out clears the profile from this phone, but a guest's
+    // profile is still saved online under this device's guest id. Look
+    // for it so they don't have to type their name again.
+    const saved = await fetchChildProfile(guestId);
+    if (saved && hasRealName(saved)) {
+      setReturningGuest(saved);
+      setView('welcome-back');
+    } else {
+      setView('onboarding');
+    }
+  };
+
+  const handleWelcomeBackYes = () => {
+    if (!returningGuest) return;
+    setProfile(returningGuest);
+    saveStoredProfile(returningGuest);
+    applyTrialIfUnpaid(returningGuest);
+    setReturningGuest(null);
+    setView('app');
+    setActiveTab(inviteTarget || 'home');
+  };
+
+  // A different child on the same phone: give them their own guest id
+  // and a fresh start, without touching the other child's saved profile.
+  const handleWelcomeBackNew = () => {
+    resetGuestSessionId();
+    setUsageUserKey(getOrCreateGuestSessionId());
+    setReturningGuest(null);
+    setView('onboarding');
   };
 
 
@@ -245,6 +302,7 @@ export default function App() {
 
   const handleOnboardingComplete = (updatedProfile: UserProfile) => {
     handleProfileUpdate(updatedProfile);
+    applyTrialIfUnpaid(updatedProfile);
     setView('app');
     setActiveTab(inviteTarget || 'chat');
   };
@@ -253,6 +311,13 @@ export default function App() {
     const newCount = incrementGuestDailyMessageCount();
     setDailyMessagesCount(newCount);
     return newCount;
+  };
+
+  // Uses one of today's free Mama Titi chats, checked on the server.
+  const handleUseDailyMessage = async (): Promise<boolean> => {
+    const result = await useDailyCredit('chat');
+    setDailyMessagesCount(result.used);
+    return result.allowed;
   };
 
   // Feedback form bypasses the entire normal flow — no sign-in needed.
@@ -296,6 +361,32 @@ export default function App() {
           />
         )}
 
+        {view === 'welcome-back' && returningGuest && (
+          <div className="min-h-[80vh] flex items-center justify-center p-6">
+            <div className="max-w-sm w-full rounded-[28px] bg-white border-2 border-slate-200 border-b-8 p-6 text-center space-y-4 shadow-xl">
+              <div className="w-20 h-20 mx-auto rounded-3xl bg-[#FFC83D] text-[#064E3B] flex items-center justify-center text-4xl font-bold border-b-4 border-[#E0A800]">
+                {returningGuest.name.trim().charAt(0).toUpperCase()}
+              </div>
+              <p className="font-serif text-3xl font-bold text-[#064E3B]">Welcome back, {returningGuest.name}! 👋</p>
+              <p className="text-slate-600 font-semibold">
+                {returningGuest.classLevel} · ⭐ {returningGuest.stars} stars · 🪙 {returningGuest.coins || 0} coins
+              </p>
+              <button
+                onClick={handleWelcomeBackYes}
+                className="w-full py-4 rounded-2xl bg-[#16A34A] text-white text-lg font-bold border-b-[5px] border-[#064E3B] transition-transform active:translate-y-[3px]"
+              >
+                ▶ Continue as {returningGuest.name}
+              </button>
+              <button
+                onClick={handleWelcomeBackNew}
+                className="w-full py-3 rounded-2xl bg-white text-slate-700 font-bold border-2 border-b-[5px] border-slate-300 transition-transform active:translate-y-[3px]"
+              >
+                I'm someone new
+              </button>
+            </div>
+          </div>
+        )}
+
         {view === 'onboarding' && (
           <OnboardingPage
             initialProfile={profile}
@@ -329,6 +420,7 @@ export default function App() {
                 subscription={subscription}
                 dailyMessagesCount={dailyMessagesCount}
                 onIncrementDailyMessages={handleIncrementDailyMessages}
+                onUseDailyMessage={handleUseDailyMessage}
                 onProfileUpdate={handleProfileUpdate}
                 onOpenPricingModal={() => setIsPricingOpen(true)}
                 isGuest={isGuest}
