@@ -13,7 +13,7 @@ import {
   clearStoredChat,
   getWelcomeMessage
 } from '../services/apiClient';
-import { saveHomeworkRecord, saveAppPollResponse, prepareNotesForSession } from '../services/supabaseService';
+import { saveHomeworkRecord, saveAppPollResponse, prepareNotesForSession, getPlanStage, dailyLimitFor } from '../services/supabaseService';
 import { getUnlockedLevels } from '../utils/coinsSystem';
 
 interface ChatPageProps {
@@ -21,6 +21,9 @@ interface ChatPageProps {
   subscription?: UserSubscription;
   dailyMessagesCount: number;
   onIncrementDailyMessages: () => number;
+  // Uses one of today's free chats, checked on the server. Returns false
+  // when today's free chats are used up.
+  onUseDailyMessage?: () => Promise<boolean>;
   onProfileUpdate: (profile: UserProfile) => void;
   onOpenPricingModal: () => void;
   onGoToLingo?: () => void;
@@ -32,7 +35,6 @@ interface ChatPageProps {
   activeTab?: string;
 }
 
-const FREE_DAILY_MESSAGE_LIMIT = 3;
 
 // Quick multiple-choice app polls -- shown one at a time as the child
 // uses the app, never all at once and never repeating a question
@@ -63,15 +65,10 @@ const POLL_STORAGE_KEY = 'funlylearn_answered_polls';
 // plan, OR are still inside a valid trial period. Everyone else is
 // on the real Free tier limits -- this was previously never checked
 // anywhere, so every user had unrestricted access regardless of plan.
+// Only a paid plan is unlimited. The 7-day trial and the free plan
+// after it have a daily chat allowance (5, then 2).
 function isPremiumActive(subscription?: UserSubscription): boolean {
-  if (!subscription) return false;
-  if (subscription.status === 'active' && subscription.plan !== 'free') {
-    return true;
-  }
-  if (subscription.status === 'trial' && subscription.expiresAt) {
-    return new Date(subscription.expiresAt).getTime() > Date.now();
-  }
-  return false;
+  return getPlanStage(subscription) === 'paid';
 }
 
 const FUN_LOADING_MESSAGES_EN = [
@@ -158,6 +155,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   subscription,
   dailyMessagesCount,
   onIncrementDailyMessages,
+  onUseDailyMessage,
   onProfileUpdate,
   onOpenPricingModal,
   onGoToLingo,
@@ -233,7 +231,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     link.href = 'https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap';
     document.head.appendChild(link);
   }, []);
-  const dailyLimitReached = !isPremium && dailyMessagesCount >= FREE_DAILY_MESSAGE_LIMIT;
+  const planStage = getPlanStage(subscription);
+  const dailyChatLimit = dailyLimitFor('chat', planStage);
+  const dailyLimitReached = !isPremium && dailyMessagesCount >= dailyChatLimit;
   const loadingMessages = isYoruba ? FUN_LOADING_MESSAGES_YO : FUN_LOADING_MESSAGES_EN;
   const celebrationMessages = isYoruba ? CELEBRATION_MESSAGES_YO : CELEBRATION_MESSAGES_EN;
 
@@ -328,9 +328,18 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     const imgToSend = imagePayload || croppedImage;
     if (!textToSend.trim() && !imgToSend) return;
 
-    if (dailyLimitReached) {
-      onOpenPricingModal();
-      return;
+    if (!isPremium) {
+      if (dailyLimitReached) {
+        onOpenPricingModal();
+        return;
+      }
+      if (onUseDailyMessage) {
+        const allowed = await onUseDailyMessage();
+        if (!allowed) {
+          onOpenPricingModal();
+          return;
+        }
+      }
     }
 
     const defaultImageText = isYoruba
@@ -409,7 +418,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         setTimeout(() => setCoinsEarnedToast(null), 2500);
       }
 
-      if (!isPremium) {
+      // Counted before sending when onUseDailyMessage is available.
+      if (!isPremium && !onUseDailyMessage) {
         onIncrementDailyMessages();
       }
 
@@ -904,8 +914,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             className="w-full mb-2 py-2.5 px-4 rounded-2xl bg-amber-100 border-2 border-amber-300 text-amber-900 text-xs font-bold text-center shadow-md"
           >
             {isYoruba
-              ? `Ẹ ti lo ìtàn ọ̀fẹ́ mẹta (${FREE_DAILY_MESSAGE_LIMIT}) fun oni. Ṣe igbesoke!`
-              : `You've used ${FREE_DAILY_MESSAGE_LIMIT} free stories today. Upgrade!`}
+              ? `Ẹ ti lo ìtàn ọ̀fẹ́ ${dailyChatLimit} fún òní. Ṣe ìgbéga fún ìtàn àìlópin!`
+              : planStage === 'trial'
+              ? `You've used today's ${dailyChatLimit} free chats. Come back tomorrow, or upgrade for unlimited!`
+              : `Free plan: ${dailyChatLimit} chats a day (your 7-day trial has ended). Upgrade for unlimited!`}
           </button>
         )}
         <div className="bg-white/95 backdrop-blur-md rounded-full border-2 border-slate-300 shadow-2xl p-1.5 flex items-center space-x-2">
