@@ -16,13 +16,16 @@ import {
   BarChart3
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { UserProfile, ParentReward, LanguageCode } from '../types';
-import { fetchHomeworkRecords, HomeworkRecord, sendWelcomeEmail } from '../services/supabaseService';
+import { UserProfile, UserSubscription, ParentReward, LanguageCode } from '../types';
+import { fetchHomeworkRecords, HomeworkRecord, sendWelcomeEmail, getPlanStage } from '../services/supabaseService';
 
 interface ParentDashboardPageProps {
   profile: UserProfile;
   onProfileUpdate: (updated: UserProfile) => void;
   userId: string;
+  // Reports (the Performance tab) are part of the paid plans.
+  subscription?: UserSubscription;
+  onOpenPricingModal?: () => void;
 }
 
 // How far back the "weekly performance" view and the automatic weekly
@@ -54,8 +57,13 @@ function groupRecordsBySubjectWeekly(records: HomeworkRecord[]): SubjectWeeklySt
 export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
   profile,
   onProfileUpdate,
-  userId
+  userId,
+  subscription,
+  onOpenPricingModal
 }) => {
+  // Parent reports are a paid feature. Contact details (WhatsApp/email)
+  // stay free, so every parent still gets homework updates.
+  const reportsLocked = getPlanStage(subscription) !== 'paid';
   const [activeSubTab, setActiveSubTab] = useState<'notifications' | 'performance' | 'rewards'>('notifications');
 
   // Parent WhatsApp State
@@ -453,7 +461,25 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
           covers JSS 1-3, matching what's been ingested so far — a real,
           known coverage limit, honestly reflected below rather than
           hidden. */}
-      {activeSubTab === 'performance' && (
+      {activeSubTab === 'performance' && reportsLocked && (
+        <div className="max-w-xl mx-auto px-4 py-8">
+          <div className="rounded-[28px] bg-white border-2 border-slate-200 border-b-8 p-6 text-center space-y-3">
+            <p className="text-5xl">🔒</p>
+            <p className="font-serif text-2xl font-bold text-[#064E3B]">Unlock {profile.name}'s reports</p>
+            <p className="text-slate-600">
+              See how {profile.name} is doing in every subject, week by week, and which topics need more practice. Included in the Basic and Family plans.
+            </p>
+            <button
+              onClick={onOpenPricingModal}
+              className="px-8 py-3.5 rounded-2xl bg-[#FF6B35] text-white text-lg font-bold border-b-[5px] border-[#D9480F] transition-transform active:translate-y-[3px]"
+            >
+              See plans
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'performance' && !reportsLocked && (
         <div className="space-y-5 animate-fadeIn">
           <div className="bg-white p-5 sm:p-6 rounded-3xl border-2 border-emerald-200 shadow-soft space-y-4">
             <div className="flex items-center space-x-2">
