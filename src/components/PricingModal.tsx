@@ -232,22 +232,23 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     <h3 className="font-serif text-xl font-bold text-slate-800">Free</h3>
                     <div className="text-2xl font-bold text-slate-900 mt-1 font-serif">
                       ₦0
-                      <span className="text-xs text-slate-500 font-normal"> / month</span>
+                      <span className="text-xs text-slate-500 font-normal"> forever</span>
                     </div>
+                    <p className="text-xs font-bold text-emerald-700 mt-1">Starts with a 7-day free trial</p>
                   </div>
 
                   <div className="border-t border-slate-100 pt-3 space-y-2 text-xs text-slate-700 font-sans">
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>5 messages or homework snaps per day</span>
+                      <span>7-day trial: 5 Mama Titi chats, 5 notebook views and 5 Exam Prep attempts a day</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>5 notebook views per day</span>
+                      <span>After the trial: 2 Mama Titi chats a day</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>5 Exam Prep attempts per day</span>
+                      <span>Game Zone: Homework Game, Naija Lingo and Word Crush</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -255,7 +256,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Naija Lingo — unlock levels by earning coins</span>
+                      <span>Unlock new Naija Lingo levels with coins</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -327,6 +328,10 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>My Week: weekly revision and Weekly Challenge</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>All subjects Primary 3 to SS3</span>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -336,10 +341,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>Parent dashboard and reports</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Grandma conversation scripts</span>
                     </div>
 
                     <div className="flex items-center space-x-2 text-slate-400">
@@ -396,10 +397,6 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>Up to 3 children</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>Friend and cousin battles</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Check className="w-4 h-4 text-emerald-400 shrink-0" />
