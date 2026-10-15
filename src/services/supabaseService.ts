@@ -21,14 +21,44 @@ export function getOrCreateGuestSessionId(): string {
   return id;
 }
 
-// ---------- Daily free uses (5 a day) ----------
-// Free users get 5 Mama Titi chats, 5 notebook opens and 5 Exam Prep
-// attempts per day (Lagos time). The real count lives on the server
-// (use_daily_credit in daily-usage-migration.sql), so clearing the
-// browser doesn't reset it. A copy is kept on the phone so the app can
-// show the count instantly, and so it still works if the internet drops.
-export const FREE_DAILY_LIMITS = { chat: 5, notebook: 5, exam: 5 } as const;
-export type UsageFeature = keyof typeof FREE_DAILY_LIMITS;
+// ---------- Plans and daily free uses ----------
+//   Days 1-7 (free trial): 5 Mama Titi chats, 5 notebook opens and
+//                          5 Exam Prep attempts a day.
+//   Day 8 onwards (free):  2 Mama Titi chats a day. Notebook, Exam Prep
+//                          and other paid features locked. Games free.
+//   Paid (Basic/Family):   unlimited.
+// The real count lives on the server (use_daily_credit in
+// daily-usage-migration.sql), so clearing the browser doesn't reset it.
+// A copy is kept on the phone so the app shows the count instantly and
+// still works if the internet drops.
+export type UsageFeature = 'chat' | 'notebook' | 'exam';
+export type PlanStage = 'paid' | 'trial' | 'free';
+
+export const DAILY_LIMITS: Record<'trial' | 'free', Record<UsageFeature, number>> = {
+  trial: { chat: 5, notebook: 5, exam: 5 },
+  free: { chat: 2, notebook: 0, exam: 0 }
+};
+
+// Which stage a child is in, from their subscription.
+export function getPlanStage(sub?: UserSubscription): PlanStage {
+  if (!sub) return 'free';
+  const notExpired = !sub.expiresAt || new Date(sub.expiresAt).getTime() > Date.now();
+  if (sub.plan !== 'free' && sub.status === 'active' && notExpired) return 'paid';
+  if (sub.status === 'trial' && sub.expiresAt && new Date(sub.expiresAt).getTime() > Date.now()) return 'trial';
+  return 'free';
+}
+
+// Today's allowance for a feature (Infinity for paid plans).
+export function dailyLimitFor(feature: UsageFeature, stage: PlanStage): number {
+  if (stage === 'paid') return Infinity;
+  return DAILY_LIMITS[stage][feature];
+}
+
+let usageStage: 'trial' | 'free' = 'trial';
+// Called by App.tsx whenever the subscription changes.
+export function setUsageStage(stage: PlanStage): void {
+  usageStage = stage === 'free' ? 'free' : 'trial';
+}
 
 const USAGE_KEY = 'funlylearn_daily_usage_v2';
 let usageUserKey: string | null = null;
@@ -70,7 +100,7 @@ function setLocalUsage(feature: UsageFeature, used: number): void {
 
 // Uses one free credit and says whether it was allowed.
 export async function useDailyCredit(feature: UsageFeature): Promise<{ allowed: boolean; used: number; limit: number }> {
-  const limit = FREE_DAILY_LIMITS[feature];
+  const limit = DAILY_LIMITS[usageStage][feature];
   const local = getLocalUsage(feature);
   if (supabase && usageUserKey) {
     try {
@@ -78,6 +108,7 @@ export async function useDailyCredit(feature: UsageFeature): Promise<{ allowed: 
       if (!error && data) {
         const used = Number((data as any).used) || 0;
         const allowed = Boolean((data as any).allowed);
+        if (Number((data as any).limit) === -1) return { allowed: true, used: 0, limit: Infinity }; // paid plan
         setLocalUsage(feature, allowed ? used : Math.max(used, limit));
         return { allowed, used: allowed ? used : Math.max(used, limit), limit };
       }
@@ -98,7 +129,7 @@ export async function syncDailyUsage(): Promise<void> {
   try {
     const { data, error } = await supabase.rpc('get_daily_usage', { p_user_key: usageUserKey });
     if (error || !data) return;
-    (Object.keys(FREE_DAILY_LIMITS) as UsageFeature[]).forEach(feature => {
+    (['chat', 'notebook', 'exam'] as UsageFeature[]).forEach(feature => {
       const server = Number((data as any)[feature]) || 0;
       if (server > getLocalUsage(feature)) setLocalUsage(feature, server);
     });
@@ -132,7 +163,7 @@ export function incrementGuestDailyMessageCount(): number {
 }
 
 export function isGuestLimitReached(): boolean {
-  return getLocalUsage('chat') >= FREE_DAILY_LIMITS.chat;
+  return getLocalUsage('chat') >= DAILY_LIMITS[usageStage].chat;
 }
 
 export function getNotebookDailyViewCount(): { count: number; date: string } {
@@ -172,7 +203,7 @@ export function trialSubscription(startedAt: string): UserSubscription {
 
 // A paid plan saved on this device (from Paystack), if any.
 export function hasPaidSubscription(sub: UserSubscription): boolean {
-  return sub.plan !== 'free' && sub.status === 'active';
+  return getPlanStage(sub) === 'paid';
 }
 
 // Starts a new guest on this device (used when a different child taps
