@@ -31,7 +31,9 @@ import {
   getLatestWeeklyTestResult,
   getClassNotesForSession,
   ClassNotesResult,
-  ClassNotesOutcome
+  ClassNotesOutcome,
+  getPlanStage,
+  dailyLimitFor
 } from '../services/supabaseService';
 
 export interface ExamQuestion {
@@ -133,15 +135,11 @@ interface SmartStudyNotebookAndRevisionProps {
   onOpenPricingModal: () => void;
 }
 
+// Only a paid plan is unlimited. During the 7-day trial: 5 notebook
+// opens and 5 Exam Prep attempts a day. After the trial, these need a
+// paid plan.
 function isPremiumActive(subscription?: UserSubscription): boolean {
-  if (!subscription) return false;
-  if (subscription.status === 'active' && subscription.plan !== 'free') {
-    return true;
-  }
-  if (subscription.status === 'trial' && subscription.expiresAt) {
-    return new Date(subscription.expiresAt).getTime() > Date.now();
-  }
-  return false;
+  return getPlanStage(subscription) === 'paid';
 }
 
 const COMING_SOON_SUBJECTS: Record<string, { name: string; icon: string }[]> = {
@@ -171,8 +169,6 @@ const COMING_SOON_SUBJECTS: Record<string, { name: string; icon: string }[]> = {
 };
 
 const QUESTIONS_PER_ROUND = 8;
-const FREE_DAILY_NOTEBOOK_VIEWS = 5;
-const FREE_DAILY_EXAM_ATTEMPTS = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Derives which JSS grade(s) a topic's questions come from, based on
@@ -1088,12 +1084,16 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
   const [notebookViewCount, setNotebookViewCount] = useState<number>(
     () => getNotebookDailyViewCount().count
   );
-  const notebookLimitReached = !isPremium && notebookViewCount >= FREE_DAILY_NOTEBOOK_VIEWS;
+  const planStage = getPlanStage(subscription);
+  const trialEnded = planStage === 'free';
+  const notebookDailyLimit = dailyLimitFor('notebook', planStage);
+  const examDailyLimit = dailyLimitFor('exam', planStage);
+  const notebookLimitReached = !isPremium && notebookViewCount >= notebookDailyLimit;
 
   const [examAttemptCount, setExamAttemptCount] = useState<number>(
     () => getExamPrepDailyAttemptCount().count
   );
-  const examPrepLimitReached = !isPremium && examAttemptCount >= FREE_DAILY_EXAM_ATTEMPTS;
+  const examPrepLimitReached = !isPremium && examAttemptCount >= examDailyLimit;
 
   const [activeView, setActiveView] = useState<'hub' | 'notebook' | 'revision'>('hub');
 
@@ -1487,7 +1487,7 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
         <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${READ} print:hidden`}>
           <button
             onClick={() => {
-              if (!isPremium) {
+              if (!isPremium && !notebookLimitReached) {
                 setNotebookViewCount(incrementNotebookDailyViewCount());
               }
               setActiveView('notebook');
@@ -1636,10 +1636,14 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   </div>
                 ) : notebookLimitReached ? (
                   <div className="rounded-[28px] bg-white border-2 border-slate-200 p-6 text-center space-y-3 print:hidden" style={DOTS}>
-                    <p className="text-5xl">📒</p>
-                    <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>That's today's {FREE_DAILY_NOTEBOOK_VIEWS} free looks!</p>
+                    <p className="text-5xl">{trialEnded ? '🔒' : '📒'}</p>
+                    <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>
+                      {trialEnded ? `Unlock ${profile.name}'s notebook` : `That's today's ${notebookDailyLimit} free looks!`}
+                    </p>
                     <p className="text-slate-600 max-w-sm mx-auto">
-                      Come back tomorrow, or upgrade to Basic or Family to open and print {profile.name}'s notebook anytime.
+                      {trialEnded
+                        ? `The 7-day free trial has ended. Every homework page is still saved. Upgrade to Basic or Family to open, revise and print ${profile.name}'s notebook anytime.`
+                        : `Come back tomorrow, or upgrade to Basic or Family to open and print ${profile.name}'s notebook anytime.`}
                     </p>
                     <button
                       onClick={onOpenPricingModal}
@@ -1861,10 +1865,14 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
             {/* Daily free limit */}
             {selectedExam && selectedTopic && examPrepLimitReached ? (
               <div className="rounded-[28px] bg-white border-2 border-slate-200 p-6 text-center space-y-3" style={DOTS}>
-                <p className="text-5xl">🎓</p>
-                <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>That's today's {FREE_DAILY_EXAM_ATTEMPTS} free practices!</p>
+                <p className="text-5xl">{trialEnded ? '🔒' : '🎓'}</p>
+                <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>
+                  {trialEnded ? 'Unlock Exam Prep' : `That's today's ${examDailyLimit} free practices!`}
+                </p>
                 <p className="text-slate-600 max-w-sm mx-auto">
-                  Come back tomorrow, or upgrade to Basic or Family for unlimited exam practice.
+                  {trialEnded
+                    ? 'The 7-day free trial has ended. Upgrade to Basic or Family for unlimited Common Entrance, BECE and WAEC practice.'
+                    : 'Come back tomorrow, or upgrade to Basic or Family for unlimited exam practice.'}
                 </p>
                 <button
                   onClick={onOpenPricingModal}
