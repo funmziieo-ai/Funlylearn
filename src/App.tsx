@@ -16,7 +16,9 @@ import {
   useDailyCredit,
   trialSubscription,
   hasPaidSubscription,
-  resetGuestSessionId
+  resetGuestSessionId,
+  getPlanStage,
+  setUsageStage
 } from './services/supabaseService';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
@@ -93,6 +95,12 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isGuest]);
+
+  // Tell the usage counter which allowance applies today: trial (5 a day)
+  // or free (2 chats a day).
+  useEffect(() => {
+    setUsageStage(getPlanStage(subscription));
+  }, [subscription]);
 
   // Free trial: 7 days from when the child's profile was created. A paid
   // plan always wins.
@@ -483,6 +491,8 @@ export default function App() {
                 profile={profile}
                 onProfileUpdate={handleProfileUpdate}
                 userId={user?.id || getOrCreateGuestSessionId()}
+                subscription={subscription}
+                onOpenPricingModal={() => setIsPricingOpen(true)}
               />
             )}
 
