@@ -4,6 +4,7 @@ import { WORD_CRUSH_VOCABULARY } from '../data/naijaWordCrushData';
 import { fetchAudioTTS } from '../services/apiClient';
 import { UserProfile } from '../types';
 import { gameAudio } from '../utils/gameAudio';
+import { Emoji3D } from './Emoji3D';
 
 export interface NaijaWordCrushProps {
   profile?: UserProfile;
@@ -946,7 +947,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
           </button>
         )}
         <span className="relative px-3 py-1.5 rounded-full bg-[#FFC83D] text-[#064E3B] font-extrabold text-sm">
-          🪙 {coins}
+          <span className="inline-flex items-center gap-1"><Emoji3D emoji="🪙" className="w-5 h-5" /> {coins}</span>
           {coinsPop && (
             <span className={`${FUN} absolute left-1/2 -translate-x-1/2 -top-8 text-2xl font-bold text-[#FFC83D] animate-bounce whitespace-nowrap`}>
               {coinsPop}
@@ -988,7 +989,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
           <div className="space-y-5">
             <div className="text-center pt-1 space-y-1">
               <p className={`${FUN} text-5xl font-bold tracking-tight`}>
-                Word Crush <span className="inline-block animate-bounce">🍬</span>
+                Word Crush <Emoji3D emoji="🍬" className="inline-block w-12 h-12 align-middle animate-bounce" />
               </p>
               <p className="text-white/70 font-semibold">Three Yorùbá word games. Pick one!</p>
               <p className="pt-1">
@@ -1003,7 +1004,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
                 onClick={startLC}
                 className={`${PRESS} w-full text-left rounded-[28px] p-5 bg-gradient-to-br from-[#DB2777] to-[#7E22CE] border-b-[8px] border-[#4C1D95] flex items-center gap-4`}
               >
-                <span className="text-6xl">🍬</span>
+                <Emoji3D emoji="🍬" className="w-16 h-16 shrink-0" />
                 <span className="flex-1">
                   <span className={`${FUN} block text-3xl font-bold`}>Letter Crush</span>
                   <span className="block font-semibold text-white/85">Match 3 candies to collect the word's letters</span>
@@ -1014,7 +1015,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
                 onClick={() => startWB()}
                 className={`${PRESS} w-full text-left rounded-[28px] p-5 bg-gradient-to-br from-[#16A34A] to-[#0284C7] border-b-[8px] border-[#075985] flex items-center gap-4`}
               >
-                <span className="text-6xl">🏗️</span>
+                <Emoji3D emoji="🏗️" className="w-16 h-16 shrink-0" />
                 <span className="flex-1">
                   <span className={`${FUN} block text-3xl font-bold`}>Word Builder</span>
                   <span className="block font-semibold text-white/85">Spell the Yorùbá word, letter by letter</span>
@@ -1025,7 +1026,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
                 onClick={startSC}
                 className={`${PRESS} w-full text-left rounded-[28px] p-5 bg-gradient-to-br from-[#FFC83D] to-[#FF6B35] border-b-[8px] border-[#D9480F] text-[#2E1065] flex items-center gap-4`}
               >
-                <span className="text-6xl">⚡</span>
+                <Emoji3D emoji="⚡" className="w-16 h-16 shrink-0" />
                 <span className="flex-1">
                   <span className={`${FUN} block text-3xl font-bold`}>Speed Catch</span>
                   <span className="block font-bold opacity-80">Catch the right word before it lands!</span>
@@ -1035,7 +1036,9 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
             </div>
 
             <div className="rounded-3xl bg-white/5 border-2 border-white/10 p-4 text-center space-y-1">
-              <p className="font-semibold text-white/70">🏆 Best Speed Catch: <b className="text-[#FFC83D]">{best}</b> catches</p>
+              <p className="font-semibold text-white/70 inline-flex items-center gap-2 justify-center">
+                <Emoji3D emoji="🏆" className="w-7 h-7" /> Best Speed Catch: <b className="text-[#FFC83D]">{best}</b> catches
+              </p>
               <p className="text-xs font-bold text-white/40">Igbo &amp; Hausa coming soon</p>
             </div>
           </div>
@@ -1051,7 +1054,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
 
             <div className="rounded-3xl bg-white/10 p-3 space-y-3">
               <div className="flex items-center gap-3">
-                <span className="text-5xl">{m1.word.emoji}</span>
+                <Emoji3D emoji={m1.word.emoji} className="w-14 h-14 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className={`${FUN} text-2xl font-bold text-[#FFC83D] leading-tight`}>{m1.word.word}</p>
                   <p className="font-bold text-white/80">"{m1.word.en}"</p>
@@ -1122,7 +1125,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
                 <div className="wc-pop rounded-[28px] bg-white text-[#2E1065] p-6 text-center space-y-3 max-w-sm w-full border-b-8 border-slate-300">
                   {m1.overlay === 'done' ? (
                     <>
-                      <p className="text-6xl">{m1.word.emoji}</p>
+                      <Emoji3D emoji={m1.word.emoji} className="w-20 h-20 mx-auto" />
                       <p className={`${FUN} text-4xl font-bold text-[#7E22CE]`}>{m1.word.word}</p>
                       <p className={`${FUN} text-xl font-semibold`}>"{m1.word.en}"</p>
                       <p className="font-bold text-[#16A34A]">Word complete! +10 🪙</p>
@@ -1140,7 +1143,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
                     </>
                   ) : (
                     <>
-                      <p className="text-6xl">💪</p>
+                      <Emoji3D emoji="💪" className="w-20 h-20 mx-auto" />
                       <p className={`${FUN} text-3xl font-bold`}>Out of moves!</p>
                       <p className="font-semibold">So close! Let's try "{m1.word.word}" again.</p>
                       <button
@@ -1177,7 +1180,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
             </div>
 
             <div className="rounded-3xl bg-white text-slate-800 p-5 text-center space-y-2 border-b-[6px] border-slate-300">
-              <p className="text-6xl">{m2.word.emoji}</p>
+              <Emoji3D emoji={m2.word.emoji} className="w-20 h-20 mx-auto" />
               <p className={`${FUN} text-2xl font-bold`}>"{m2.word.en}"</p>
               {m2.placed.length === m2.units.length ? (
                 <p className={`${FUN} text-4xl font-bold text-[#7E22CE] wc-pop`}>{m2.word.word}</p>
@@ -1240,15 +1243,20 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
               <p className={`${FUN} text-2xl font-bold`}>⚡ Speed Catch</p>
               <div className="flex items-center gap-3">
                 <span className="text-2xl" aria-label={`${m3.lives} lives left`}>
-                  {'❤️'.repeat(Math.max(0, m3.lives))}
-                  <span className="opacity-25">{'❤️'.repeat(3 - Math.max(0, m3.lives))}</span>
+                  <span className="inline-flex gap-0.5">
+                    {[0, 1, 2].map(i => (
+                      <Emoji3D key={i} emoji="❤️" className={`w-7 h-7 ${i < m3.lives ? '' : 'opacity-25 grayscale'}`} />
+                    ))}
+                  </span>
                 </span>
                 <span className={`${FUN} px-4 py-2 rounded-2xl bg-white/15 font-bold`}>⚡ {m3.catches} / {CATCH_GOAL}</span>
               </div>
             </div>
             <div className="rounded-3xl bg-[#FFC83D] text-[#2E1065] p-4 text-center border-b-[6px] border-[#E0A800]">
               <p className="font-bold text-sm">Catch the Yorùbá word for</p>
-              <p key={m3.target.id} className={`${FUN} text-3xl font-bold wc-pop`}>{m3.target.emoji} "{m3.target.en}"</p>
+              <p key={m3.target.id} className={`${FUN} text-3xl font-bold wc-pop inline-flex items-center gap-2 justify-center`}>
+                <Emoji3D emoji={m3.target.emoji} className="w-10 h-10" /> "{m3.target.en}"
+              </p>
             </div>
             <div
               ref={field}
@@ -1267,7 +1275,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
                   }`}
                   style={{ left: `${it.x}%`, top: `${it.y}px` }}
                 >
-                  {it.word.emoji} {it.word.word}
+                  <span className="inline-flex items-center gap-2"><Emoji3D emoji={it.word.emoji} className="w-8 h-8" /> {it.word.word}</span>
                 </button>
               ))}
               <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-r from-[#16A34A] via-[#FFC83D] to-[#16A34A] opacity-70" />
@@ -1284,15 +1292,18 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
           const learned = result.learned.filter(w => !seen.has(w.id) && seen.add(w.id));
           return (
             <div className="space-y-4 text-center wc-pop">
-              <p className="text-8xl pt-2">{result.perfect ? '🏆' : ratio >= 0.5 ? '🌟' : '💪'}</p>
-              <p className={`${FUN} text-4xl font-bold text-[#FFC83D]`}>
+              <p className={`${FUN} text-4xl font-bold text-[#FFC83D] pt-4`}>
                 {result.perfect ? 'Ẹ kú iṣẹ́! Perfect!' : ratio >= 0.5 ? 'Ó dára! Well done!' : 'Kò burú! Nice try!'}
               </p>
               <p className="font-semibold text-white/80">
                 {GAME_NAMES[result.game]} · {result.got} of {result.total} {result.game === 'sc' ? 'catches' : 'words'}
               </p>
               <p className="text-4xl tracking-wider" aria-label={`${stars} out of 5 stars`}>
-                {'⭐'.repeat(stars)}<span className="opacity-25">{'⭐'.repeat(5 - stars)}</span>
+                <span className="inline-flex gap-1 justify-center">
+                  {[0, 1, 2, 3, 4].map(i => (
+                    <Emoji3D key={i} emoji="⭐" className={`w-11 h-11 ${i < stars ? '' : 'opacity-25 grayscale'}`} />
+                  ))}
+                </span>
               </p>
               <div className="rounded-3xl bg-white/5 border-2 border-white/10 p-4 text-left space-y-2">
                 <p className={`${FUN} text-xl font-bold`}>📚 Words you played</p>
@@ -1302,7 +1313,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
                   ) : (
                     learned.map(w => (
                       <span key={w.id} className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/10">
-                        {w.emoji} <b className="text-[#FFC83D]">{w.word}</b>
+                        <Emoji3D emoji={w.emoji} className="w-7 h-7" /> <b className="text-[#FFC83D]">{w.word}</b>
                         <span className="text-white/80">{w.en}</span>
                         <ListenButton text={w.word} label="" className="text-sm" />
                       </span>
