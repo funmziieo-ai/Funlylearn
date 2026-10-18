@@ -121,7 +121,23 @@ export const PricingModal: React.FC<PricingModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto font-['Nunito']">
+    <div
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 pt-16 sm:pt-16 bg-slate-950/80 backdrop-blur-sm overflow-y-auto font-['Nunito']"
+      onClick={e => {
+        // Tapping the dark area outside the plans closes them.
+        if (e.target === e.currentTarget && !isConfirmingPayment) onClose();
+      }}
+    >
+      {/* Always on screen, even after scrolling down to the plans. */}
+      {!isConfirmingPayment && (
+        <button
+          onClick={onClose}
+          aria-label="Go back"
+          className="fixed top-3 left-3 z-[60] px-4 py-2.5 rounded-2xl bg-white text-[#064E3B] font-bold shadow-xl transition-transform active:translate-y-[3px]"
+        >
+          ◀ Back
+        </button>
+      )}
       <div className="relative w-full max-w-5xl rounded-[32px] overflow-hidden bg-white shadow-2xl my-6 animate-fadeIn">
         <button
           onClick={onClose}
@@ -339,10 +355,16 @@ export const PricingModal: React.FC<PricingModalProps> = ({
               <div className="rounded-3xl bg-white border-2 border-slate-200 p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm font-bold text-slate-600">
                 <p className="flex items-center gap-2"><Emoji3D emoji="🔒" className="w-8 h-8" /> Secure payment with Paystack</p>
                 <p className="flex items-center gap-2"><Emoji3D emoji="💳" className="w-8 h-8" /> Card, bank transfer or USSD</p>
-                <button onClick={handleWhatsAppSupport} className="flex items-center gap-2 text-[#16A34A] text-left">
+                <button onClick={handleWhatsAppSupport} className="flex items-center gap-2 text-[#15803D] text-left">
                   <Emoji3D emoji="💬" className="w-8 h-8" /> Questions? Chat with us on WhatsApp
                 </button>
               </div>
+              <button
+                onClick={onClose}
+                className="w-full mt-4 py-3 rounded-2xl text-slate-600 font-bold underline"
+              >
+                Maybe later
+              </button>
             </div>
           </div>
         )}
