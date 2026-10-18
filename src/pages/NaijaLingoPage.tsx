@@ -7,6 +7,7 @@ import { fetchAudioTTS } from '../services/apiClient';
 import { fetchHomeworkRecords, getClassNotesForSession, getWeeklyTest } from '../services/supabaseService';
 import { LINGO_LEVELS, getNextLockedLevel, getCoinsToNextLevel } from '../utils/coinsSystem';
 import { gameAudio } from '../utils/gameAudio';
+import { Emoji3D } from '../components/Emoji3D';
 
 interface NaijaLingoPageProps {
   profile: UserProfile;
@@ -601,8 +602,8 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
         {/* Top bar */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1.5 rounded-full bg-[#FF6B35] font-extrabold text-sm">🔥 {profile.streakDays}</span>
-            <span className="px-3 py-1.5 rounded-full bg-[#FFC83D] text-[#064E3B] font-extrabold text-sm">🪙 {userCoins}</span>
+            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#FF6B35] font-extrabold text-sm"><Emoji3D emoji="🔥" className="w-5 h-5" /> {profile.streakDays}</span>
+            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#FFC83D] text-[#064E3B] font-extrabold text-sm"><Emoji3D emoji="🪙" className="w-5 h-5" /> {userCoins}</span>
           </div>
           {SoundToggles}
         </div>
@@ -612,7 +613,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
           <div className="space-y-6">
             <div className="text-center pt-1">
               <p className={`${FUN} text-5xl font-bold tracking-tight`}>
-                Game Zone <span className="inline-block animate-bounce">🎮</span>
+                Game Zone <Emoji3D emoji="🎮" className="inline-block w-14 h-14 align-middle animate-bounce" />
               </p>
               <p className="text-white/70 font-semibold mt-1">Play, learn and win coins, {profile.name}!</p>
             </div>
@@ -622,7 +623,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <span className={`${FUN} inline-block px-3 py-1 rounded-full bg-[#2E1065] text-[#FFC83D] text-sm font-bold`}>1 · From your homework</span>
-                  <p className={`${FUN} text-3xl font-bold mt-2 leading-tight`}>Homework Game 🎒</p>
+                  <p className={`${FUN} text-3xl font-bold mt-2 leading-tight inline-flex items-center gap-2`}>Homework Game <Emoji3D emoji="🎒" className="w-9 h-9" /></p>
                   <p className="font-bold opacity-80">
                     {homeworkTopics === null
                       ? 'Checking your homework...'
@@ -635,7 +636,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                         }`}
                   </p>
                 </div>
-                <span className="text-6xl animate-bounce shrink-0">🏆</span>
+                <Emoji3D emoji="🏆" className="w-20 h-20 animate-bounce shrink-0" />
               </div>
 
               {homeworkTopics && homeworkTopics.length > 0 && (
@@ -668,7 +669,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <span className={`${FUN} inline-block px-3 py-1 rounded-full bg-[#7E22CE] text-white text-sm font-bold`}>2 · Learn Yorùbá</span>
-                  <p className={`${FUN} text-3xl font-bold mt-2`}>Naija Lingo 🥁</p>
+                  <p className={`${FUN} text-3xl font-bold mt-2 inline-flex items-center gap-2`}>Naija Lingo <Emoji3D emoji="🥁" className="w-9 h-9" /></p>
                 </div>
                 <button
                   onClick={() => {
@@ -685,7 +686,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                 onClick={() => startQuiz(continueLevel.id)}
                 className={`${PRESS} w-full flex items-center gap-4 rounded-3xl bg-[#16A34A] border-b-[6px] border-[#064E3B] px-4 py-3 text-left`}
               >
-                <span className="w-14 h-14 rounded-2xl bg-white/20 text-3xl flex items-center justify-center shrink-0">{continueLevel.emoji}</span>
+                <span className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center shrink-0"><Emoji3D emoji={continueLevel.emoji} className="w-10 h-10" /></span>
                 <span className="flex-1">
                   <span className={`${FUN} block text-2xl font-bold`}>▶ Quiz Battle</span>
                   <span className="block text-white/85 font-semibold text-sm">Level {continueLevel.id}: {continueLevel.name}</span>
@@ -697,7 +698,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                   onClick={() => openLevel(continueLevel.id)}
                   className={`${PRESS} text-left rounded-3xl p-4 bg-[#0284C7] border-b-[6px] border-[#075985]`}
                 >
-                  <span className="text-3xl block">🃏</span>
+                  <Emoji3D emoji="🃏" className="w-10 h-10 block" />
                   <span className={`${FUN} block text-lg font-bold mt-1`}>Word Cards</span>
                   <span className="block text-xs text-white/85 font-semibold">Learn and listen</span>
                 </button>
@@ -715,7 +716,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                     isWordCrushUnlocked ? 'bg-[#FF6B35] border-[#D9480F]' : 'bg-white/10 border-white/10'
                   }`}
                 >
-                  <span className="text-3xl block">{isWordCrushUnlocked ? '🍬' : '🔒'}</span>
+                  <Emoji3D emoji={isWordCrushUnlocked ? '🍬' : '🔒'} className="w-10 h-10 block" />
                   <span className={`${FUN} block text-lg font-bold mt-1`}>Word Crush</span>
                   <span className="block text-xs text-white/85 font-semibold">
                     {isWordCrushUnlocked ? 'Match and build words' : `${WORD_CRUSH_UNLOCK_COINS} coins to unlock`}
@@ -776,7 +777,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                       aria-label={`Level ${level.id}: ${level.name}`}
                       className={`${PRESS} w-20 h-20 rounded-full border-b-[7px] text-4xl flex items-center justify-center ${look}`}
                     >
-                      {unlocked ? level.emoji : '🔒'}
+                      <Emoji3D emoji={unlocked ? level.emoji : '🔒'} className={`w-11 h-11 ${unlocked ? '' : 'opacity-60'}`} />
                     </button>
                     <span className={`${FUN} font-bold mt-1 ${unlocked ? '' : 'text-white/40'}`}>{level.name}</span>
                     <span className={`text-xs font-bold ${unlocked ? 'text-white/60' : 'text-white/35'}`}>
@@ -905,7 +906,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
 
             {gameLoading && (
               <div className="py-16 text-center space-y-3">
-                <p className="text-6xl animate-bounce">🎒</p>
+                <Emoji3D emoji="🎒" className="w-20 h-20 mx-auto animate-bounce" />
                 <p className={`${FUN} text-2xl font-bold`}>Building your Homework Game...</p>
                 <p className="text-white/70 font-semibold">Using what you learned with Mama Titi</p>
               </div>
@@ -913,7 +914,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
 
             {gameError && (
               <div className="py-12 text-center space-y-3">
-                <p className="text-5xl">😕</p>
+                <Emoji3D emoji="😕" className="w-16 h-16 mx-auto" />
                 <p className="font-semibold text-white/90">{gameError}</p>
                 <button
                   onClick={startHomework}
@@ -1030,8 +1031,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
           const stars = Math.max(1, Math.round(ratio * 5));
           return (
             <div className="space-y-4 text-center">
-              <p className="text-8xl pt-2">{perfect ? '🏆' : ratio >= 0.5 ? '🌟' : '💪'}</p>
-              <p className={`${FUN} text-4xl font-bold text-[#FFC83D]`}>
+              <p className={`${FUN} text-4xl font-bold text-[#FFC83D] pt-4`}>
                 {perfect ? 'Ẹ kú iṣẹ́! Perfect!' : ratio >= 0.5 ? 'Ó dára! Well done!' : 'Kò burú! Nice try!'}
               </p>
               <p className="font-semibold text-white/80">
@@ -1042,12 +1042,16 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                   : 'Play again to win more coins 🪙'}
               </p>
               <p className="text-4xl tracking-wider" aria-label={`${stars} out of 5 stars`}>
-                {'⭐'.repeat(stars)}<span className="opacity-25">{'⭐'.repeat(5 - stars)}</span>
+                <span className="inline-flex gap-1 justify-center">
+                  {[0, 1, 2, 3, 4].map(i => (
+                    <Emoji3D key={i} emoji="⭐" className={`w-11 h-11 ${i < stars ? '' : 'opacity-25 grayscale'}`} />
+                  ))}
+                </span>
               </p>
               <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-2xl bg-white/10 p-3"><p className="text-2xl">✅</p><p className={`${FUN} text-2xl font-bold`}>{correctCount}/{total}</p><p className="text-xs font-bold text-white/60">correct</p></div>
-                <div className="rounded-2xl bg-white/10 p-3"><p className="text-2xl">🪙</p><p className={`${FUN} text-2xl font-bold text-[#FFC83D]`}>+{coinsWon}</p><p className="text-xs font-bold text-white/60">coins</p></div>
-                <div className="rounded-2xl bg-white/10 p-3"><p className="text-2xl">🔥</p><p className={`${FUN} text-2xl font-bold text-[#FF6B35]`}>{bestStreak}</p><p className="text-xs font-bold text-white/60">best streak</p></div>
+                <div className="rounded-2xl bg-white/10 p-3"><Emoji3D emoji="✅" className="w-9 h-9 mx-auto" /><p className={`${FUN} text-2xl font-bold`}>{correctCount}/{total}</p><p className="text-xs font-bold text-white/60">correct</p></div>
+                <div className="rounded-2xl bg-white/10 p-3"><Emoji3D emoji="🪙" className="w-9 h-9 mx-auto" /><p className={`${FUN} text-2xl font-bold text-[#FFC83D]`}>+{coinsWon}</p><p className="text-xs font-bold text-white/60">coins</p></div>
+                <div className="rounded-2xl bg-white/10 p-3"><Emoji3D emoji="🔥" className="w-9 h-9 mx-auto" /><p className={`${FUN} text-2xl font-bold text-[#FF6B35]`}>{bestStreak}</p><p className="text-xs font-bold text-white/60">best streak</p></div>
               </div>
               <div className="rounded-3xl bg-white/5 border-2 border-white/10 p-4 text-left space-y-2">
                 <p className={`${FUN} text-xl font-bold`}>{mode === 'homework' ? '🎒 Topics in this game' : '📚 Words in this game'}</p>
