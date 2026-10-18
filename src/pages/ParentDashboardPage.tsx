@@ -16,6 +16,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { Emoji3D } from '../components/Emoji3D';
 import { UserProfile, UserSubscription, ParentReward, LanguageCode } from '../types';
 import { fetchHomeworkRecords, HomeworkRecord, sendWelcomeEmail, getPlanStage, fetchLeaderboardV2, setLeaderboardHidden } from '../services/supabaseService';
 
@@ -147,10 +148,6 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
     { id: 'r3', title: 'Extra Football Time', description: 'Unlocked after scoring 500 stars in Naija Lingo', requiredStars: 500, requiredHomeworks: 8, isUnlocked: false, icon: 'trophy' }
   ]);
 
-  const toggleLanguage = () => {
-    const newLang: LanguageCode = profile.language === 'en' ? 'yo' : 'en';
-    onProfileUpdate({ ...profile, language: newLang });
-  };
 
   // Converts a Nigerian number typed the normal local way (e.g.
   // "08012345678", how virtually everyone actually types their number)
@@ -171,32 +168,36 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
     return '234' + digitsOnly;
   };
 
-  const handleSavePhone = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleaned = normalizeNigerianPhone(phoneNumber);
-    onProfileUpdate({
-      ...profile,
-      parentWhatsApp: cleaned
-    });
-    setSaveStatus('WhatsApp number saved successfully!');
-    setTimeout(() => setSaveStatus(null), 3000);
-  };
+  // The WhatsApp box shows the number without the +234 part (that is
+  // shown beside the box), e.g. "8031234567".
+  const [phoneLocal, setPhoneLocal] = useState<string>(
+    (profile.parentWhatsApp || '').replace(/^234/, '')
+  );
+  const [contactStatus, setContactStatus] = useState<string | null>(null);
 
-  const handleSaveEmail = (e: React.FormEvent) => {
+  // Saves email and WhatsApp together in one update.
+  const handleSaveContacts = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = parentEmail.trim();
+    const trimmedEmail = parentEmail.trim();
+    const digits = phoneLocal.replace(/\D/g, '');
+    const cleanedPhone = digits ? normalizeNigerianPhone(digits) : '';
     onProfileUpdate({
       ...profile,
-      parentEmail: trimmed
+      parentEmail: trimmedEmail,
+      parentWhatsApp: cleanedPhone
     });
-    // Only send the welcome email if this is a genuinely new address
-    // being saved — avoids re-sending it every time the parent visits
-    // this tab with the same email already filled in.
-    if (trimmed && trimmed !== profile.parentEmail) {
-      sendWelcomeEmail(trimmed, profile.name);
+    // A welcome email only for a genuinely new address.
+    if (trimmedEmail && trimmedEmail !== profile.parentEmail) {
+      sendWelcomeEmail(trimmedEmail, profile.name);
     }
-    setEmailSaveStatus('Email saved — check your inbox for a welcome message!');
-    setTimeout(() => setEmailSaveStatus(null), 3000);
+    setPhoneNumber(cleanedPhone);
+    if (cleanedPhone) setPhoneLocal(cleanedPhone.replace(/^234/, ''));
+    const parts = [
+      trimmedEmail ? trimmedEmail : null,
+      cleanedPhone ? `+234 ${cleanedPhone.replace(/^234/, '')}` : null
+    ].filter(Boolean);
+    setContactStatus(parts.length ? `Saved! Updates will go to ${parts.join(' and ')}.` : 'Saved.');
+    setTimeout(() => setContactStatus(null), 5000);
   };
 
   const handleApproveReward = (id: string) => {
@@ -220,99 +221,28 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 pb-28 font-sans">
       
-      {/* Primary Top Header (Mama Titi Design Language) */}
-      <div className="bg-[#064E3B] text-white p-5 sm:p-6 rounded-3xl border-2 border-amber-400/40 shadow-xl space-y-4 relative overflow-hidden">
-        <div className="absolute -right-8 -bottom-8 w-40 h-40 rounded-full bg-emerald-800/40 blur-2xl pointer-events-none" />
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-          <div className="flex items-center space-x-3">
-            <div className="p-3 bg-amber-400/20 text-amber-300 rounded-2xl border border-amber-300/30 shrink-0">
-              <Smartphone className="w-7 h-7 text-amber-300" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-jakarta font-bold uppercase tracking-wider bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full">
-                  Parent Portal
-                </span>
-              </div>
-              <h1 className="font-serif text-2xl sm:text-3xl font-bold text-white mt-0.5">
-                {activeSubTab === 'notifications' && 'Parent Notifications'}
-                {activeSubTab === 'performance' && 'Child Performance Dashboard'}
-                {activeSubTab === 'rewards' && 'Reward & Approvals Hub'}
-              </h1>
-            </div>
-          </div>
-
-          <button
-            onClick={toggleLanguage}
-            className="self-start sm:self-center flex items-center bg-[#022C22] p-1 rounded-full border border-amber-400/30 text-xs font-jakarta font-bold text-white shadow-inner"
-            title="Switch Language (English / Yoruba)"
-          >
-            <span
-              className={`px-3 py-1 rounded-full transition-all flex items-center space-x-1 ${
-                profile.language === 'en'
-                  ? 'bg-white text-[#064E3B] shadow-xs font-extrabold'
-                  : 'text-emerald-200 hover:text-white'
-              }`}
-            >
-              <span>🇬🇧</span>
-              <span>EN</span>
-            </span>
-            <span
-              className={`px-3 py-1 rounded-full transition-all flex items-center space-x-1 ${
-                profile.language === 'yo'
-                  ? 'bg-[#FF6B35] text-white shadow-xs font-extrabold'
-                  : 'text-emerald-200 hover:text-white'
-              }`}
-            >
-              <span>🇳🇬</span>
-              <span>YO</span>
-            </span>
-          </button>
-        </div>
-
-        <p className="text-xs sm:text-sm text-emerald-100 font-sans leading-relaxed max-w-xl">
-          {activeSubTab === 'notifications' && 'When homework is completed, parents get an automatic email — no action needed here.'}
-          {activeSubTab === 'performance' && `Track ${profile.name}'s learning milestones.`}
-          {activeSubTab === 'rewards' && `Approve reward requests with a thumbs-up to motivate ${profile.name}'s study habits!`}
+      {/* Header */}
+      <div className="rounded-3xl bg-[#064E3B] text-white p-5 space-y-3 font-['Nunito']">
+        <p className="font-['Fredoka'] text-3xl font-bold flex items-center gap-2">
+          <Emoji3D emoji="👨‍👩‍👧" className="w-10 h-10" /> Parents
         </p>
-
-        <div className="flex items-center space-x-2 pt-2 border-t border-emerald-800/80 overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setActiveSubTab('notifications')}
-            className={`px-4 py-2 rounded-2xl text-xs font-jakarta font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap ${
-              activeSubTab === 'notifications'
-                ? 'bg-amber-400 text-slate-950 shadow-md'
-                : 'bg-emerald-800/60 text-emerald-100 hover:bg-emerald-800'
-            }`}
-          >
-            <Mail className="w-3.5 h-3.5" />
-            <span>Notifications</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('performance')}
-            className={`px-4 py-2 rounded-2xl text-xs font-jakarta font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap ${
-              activeSubTab === 'performance'
-                ? 'bg-amber-400 text-slate-950 shadow-md'
-                : 'bg-emerald-800/60 text-emerald-100 hover:bg-emerald-800'
-            }`}
-          >
-            <Trophy className="w-3.5 h-3.5" />
-            <span>📊 Progress</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('rewards')}
-            className={`px-4 py-2 rounded-2xl text-xs font-jakarta font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap ${
-              activeSubTab === 'rewards'
-                ? 'bg-amber-400 text-slate-950 shadow-md'
-                : 'bg-emerald-800/60 text-emerald-100 hover:bg-emerald-800'
-            }`}
-          >
-            <Gift className="w-3.5 h-3.5" />
-            <span>🎁 Rewards ({rewards.filter(r => !r.isUnlocked).length} Pending)</span>
-          </button>
+        <p className="font-semibold text-emerald-100">Get {profile.name}'s progress on email and WhatsApp.</p>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            ['notifications', 'Updates'],
+            ['performance', reportsLocked ? 'Reports 🔒' : 'Reports'],
+            ['rewards', 'Rewards']
+          ] as const).map(([tab, label]) => (
+            <button
+              key={tab}
+              onClick={() => setActiveSubTab(tab)}
+              className={`font-['Fredoka'] py-2.5 rounded-xl font-semibold transition-transform active:translate-y-[3px] ${
+                activeSubTab === tab ? 'bg-[#FFC83D] text-[#064E3B]' : 'bg-white/10 text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -323,13 +253,98 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
           now sent automatically by Edge Functions, not triggered by a
           button here. */}
       {activeSubTab === 'notifications' && (
-        <div className="space-y-5 animate-fadeIn">
+        <div className="space-y-4 animate-fadeIn font-['Nunito']">
 
-          {/* Card: Leaderboard privacy */}
-          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-soft flex items-center justify-between gap-4">
+          {/* Where to send updates */}
+          <form onSubmit={handleSaveContacts} className="rounded-3xl bg-white border-2 border-slate-200 border-b-[6px] p-5 space-y-4">
+            <p className="font-['Fredoka'] text-xl font-bold flex items-center gap-2 text-slate-900">
+              <Emoji3D emoji="📬" className="w-8 h-8" /> Where should we send updates?
+            </p>
+            <label className="block">
+              <span className="text-sm font-bold text-slate-700">Email</span>
+              <input
+                type="email"
+                autoComplete="email"
+                value={parentEmail}
+                onChange={e => setParentEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="mt-1 w-full px-4 py-3.5 rounded-2xl bg-slate-50 border-2 border-slate-200 focus:border-[#15803D] outline-none text-base text-slate-800"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-bold text-slate-700">WhatsApp number</span>
+              <div className="mt-1 flex rounded-2xl border-2 border-slate-200 bg-slate-50 overflow-hidden focus-within:border-[#15803D]">
+                <span className="px-3 py-3.5 bg-slate-100 font-bold text-slate-700 border-r-2 border-slate-200 whitespace-nowrap">🇳🇬 +234</span>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  value={phoneLocal}
+                  onChange={e => setPhoneLocal(e.target.value)}
+                  placeholder="803 123 4567"
+                  className="flex-1 min-w-0 px-3 py-3.5 bg-transparent outline-none text-base text-slate-800"
+                />
+              </div>
+              <span className="text-xs font-semibold text-slate-600">You can type it as 0803 123 4567. We'll fix the format.</span>
+            </label>
+            <button
+              type="submit"
+              className="font-['Fredoka'] w-full py-3.5 rounded-2xl bg-[#15803D] text-white text-lg font-bold border-b-[5px] border-[#064E3B] transition-transform active:translate-y-[3px]"
+            >
+              Save
+            </button>
+            {contactStatus && <p className="text-center font-bold text-[#15803D]">✓ {contactStatus}</p>}
+          </form>
+
+          {/* What parents get */}
+          <div className="rounded-3xl bg-white border-2 border-slate-200 border-b-[6px] p-5 space-y-3 text-slate-800">
+            <p className="font-['Fredoka'] text-xl font-bold flex items-center gap-2 text-slate-900">
+              <Emoji3D emoji="🔔" className="w-8 h-8" /> What you'll get
+            </p>
+            <p className="flex items-start gap-3 font-semibold">
+              <Emoji3D emoji="📧" className="w-8 h-8 shrink-0" />
+              <span>An <b>email</b> each time {profile.name} finishes a homework question correctly</span>
+            </p>
+            <p className="flex items-start gap-3 font-semibold">
+              <Emoji3D emoji="📅" className="w-8 h-8 shrink-0" />
+              <span>A <b>weekly summary email</b> of what {profile.name} worked on</span>
+            </p>
+            <p className="flex items-start gap-3 font-semibold">
+              <Emoji3D emoji="📱" className="w-8 h-8 shrink-0" />
+              <span>A <b>WhatsApp message</b> when {profile.name} sends you a Weekly Challenge result</span>
+            </p>
+          </div>
+
+          {/* This week: a free taste of the reports */}
+          <div className="rounded-3xl bg-gradient-to-br from-[#FFC83D] to-[#FF6B35] text-[#2E1065] p-5 border-b-[6px] border-[#D9480F] space-y-3">
+            <p className="font-['Fredoka'] text-xl font-bold flex items-center gap-2">
+              <Emoji3D emoji="📈" className="w-8 h-8" /> This week
+            </p>
+            <p className="font-['Fredoka'] text-3xl font-bold">
+              {isLoadingWeeklyRecords
+                ? 'Counting...'
+                : `${weeklyRecords.length} ${weeklyRecords.length === 1 ? 'question' : 'questions'} answered`}
+            </p>
+            <p className="font-bold opacity-80">
+              {reportsLocked
+                ? 'See every subject, scores and the topics to practise with parent reports.'
+                : 'See every subject and score in Reports.'}
+            </p>
+            <button
+              onClick={() => (reportsLocked ? onOpenPricingModal?.() : setActiveSubTab('performance'))}
+              className="font-['Fredoka'] w-full py-3 rounded-2xl bg-[#2E1065] text-[#FFC83D] text-lg font-bold border-b-[5px] border-black/40 transition-transform active:translate-y-[3px]"
+            >
+              {reportsLocked ? '🔒 Unlock reports' : 'See reports ▶'}
+            </button>
+          </div>
+
+          {/* Leaderboard privacy */}
+          <div className="rounded-3xl bg-white border-2 border-slate-200 border-b-[6px] p-5 flex items-center justify-between gap-4">
             <div>
-              <p className="font-serif font-bold text-slate-900">🏆 Show {profile.name} on the leaderboard</p>
-              <p className="text-xs text-slate-500 mt-1">Other children only see first name and surname initial, never full names or schools.</p>
+              <p className="font-['Fredoka'] text-lg font-bold flex items-center gap-2 text-slate-900">
+                <Emoji3D emoji="🏆" className="w-7 h-7" /> Show {profile.name} on the leaderboard
+              </p>
+              <p className="text-sm font-semibold text-slate-600 mt-1">Other children only see first name and surname initial, never full names or schools.</p>
             </div>
             <button
               onClick={toggleLeaderboard}
@@ -337,93 +352,40 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
               role="switch"
               aria-checked={hiddenFromBoard === false}
               aria-label={`Show ${profile.name} on the leaderboard`}
-              className={`relative w-14 h-8 rounded-full shrink-0 transition-colors disabled:opacity-50 ${hiddenFromBoard === false ? 'bg-emerald-600' : 'bg-slate-300'}`}
+              className={`relative w-14 h-8 rounded-full shrink-0 transition-colors disabled:opacity-50 ${hiddenFromBoard === false ? 'bg-[#15803D]' : 'bg-slate-300'}`}
             >
               <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all ${hiddenFromBoard === false ? 'left-7' : 'left-1'}`} />
             </button>
           </div>
+        </div>
+      )}
 
-          {/* Card: Parent's Email — powers the automatic emails */}
-          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-soft space-y-4">
-            <div className="flex items-center space-x-2">
-              <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
-                <Mail className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="font-serif text-lg font-bold text-slate-900">
-                  Parent's email
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Homework-completed alerts and a weekly summary are sent here automatically.
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveEmail} className="space-y-3">
-              <input
-                type="email"
-                value={parentEmail}
-                onChange={(e) => setParentEmail(e.target.value)}
-                placeholder="parent@example.com"
-                className="w-full px-4 py-3 bg-slate-50 rounded-2xl border border-slate-200 focus:border-[#064E3B] focus:ring-2 focus:ring-emerald-200 text-slate-800 text-sm outline-none transition-all placeholder:text-slate-400"
-              />
-
-              {emailSaveStatus && (
-                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-medium flex items-center space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{emailSaveStatus}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="w-full py-3.5 px-6 rounded-2xl bg-[#064E3B] hover:bg-[#022C22] text-white font-jakarta font-bold text-sm shadow-xs transition-all text-center flex items-center justify-center space-x-2"
-              >
-                <span>Save email</span>
-              </button>
-            </form>
+      {/* SUB-TAB 1.5: MATHEMATICS PROGRESS — real data, sourced from
+          genuine RAG-verified Math sessions (not a guess or fake chart
+          like the previous version of this section). Currently only
+          covers JSS 1-3, matching what's been ingested so far — a real,
+          known coverage limit, honestly reflected below rather than
+          hidden. */}
+      {activeSubTab === 'performance' && reportsLocked && (
+        <div className="max-w-xl mx-auto px-4 py-8">
+          <div className="rounded-[28px] bg-white border-2 border-slate-200 border-b-8 p-6 text-center space-y-3">
+            <p className="text-5xl">🔒</p>
+            <p className="font-serif text-2xl font-bold text-[#064E3B]">Unlock {profile.name}'s reports</p>
+            <p className="text-slate-600">
+              See how {profile.name} is doing in every subject, week by week, and which topics need more practice. Included in the Basic and Family plans.
+            </p>
+            <button
+              onClick={onOpenPricingModal}
+              className="px-8 py-3.5 rounded-2xl bg-[#FF6B35] text-white text-lg font-bold border-b-[5px] border-[#D9480F] transition-transform active:translate-y-[3px]"
+            >
+              See plans
+            </button>
           </div>
+        </div>
+      )}
 
-          {/* Card: Parent's WhatsApp Number — kept for the existing
-              automatic every-3rd-correct-answer WhatsApp ping from
-              ChatPage.tsx, unrelated to this email feature. */}
-          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-soft space-y-4">
-            <div>
-              <h3 className="font-serif text-lg font-bold text-slate-900">
-                Parent's WhatsApp number
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Include country code, no spaces. E.g. 2348012345678
-              </p>
-            </div>
-
-            <form onSubmit={handleSavePhone} className="space-y-3">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="2348012345678"
-                  className="w-full px-4 py-3 bg-slate-50 rounded-2xl border border-slate-200 focus:border-[#064E3B] focus:ring-2 focus:ring-emerald-200 text-slate-800 font-mono text-sm outline-none transition-all placeholder:text-slate-400"
-                />
-              </div>
-
-              {saveStatus && (
-                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-medium flex items-center space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{saveStatus}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="w-full py-3.5 px-6 rounded-2xl bg-[#FFB088] hover:bg-[#FF9B68] text-slate-900 font-jakarta font-bold text-sm shadow-xs transition-all text-center flex items-center justify-center space-x-2"
-              >
-                <span>Save number</span>
-              </button>
-            </form>
-          </div>
-
+      {activeSubTab === 'performance' && !reportsLocked && (
+        <div className="space-y-5 animate-fadeIn">
           {/* Card: Weekly Performance by Subject — replaces the old
               manual "Send a ping right now" list. Same data the
               automatic weekly email sends, shown here too. */}
@@ -491,35 +453,6 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
             )}
           </div>
 
-        </div>
-      )}
-
-      {/* SUB-TAB 1.5: MATHEMATICS PROGRESS — real data, sourced from
-          genuine RAG-verified Math sessions (not a guess or fake chart
-          like the previous version of this section). Currently only
-          covers JSS 1-3, matching what's been ingested so far — a real,
-          known coverage limit, honestly reflected below rather than
-          hidden. */}
-      {activeSubTab === 'performance' && reportsLocked && (
-        <div className="max-w-xl mx-auto px-4 py-8">
-          <div className="rounded-[28px] bg-white border-2 border-slate-200 border-b-8 p-6 text-center space-y-3">
-            <p className="text-5xl">🔒</p>
-            <p className="font-serif text-2xl font-bold text-[#064E3B]">Unlock {profile.name}'s reports</p>
-            <p className="text-slate-600">
-              See how {profile.name} is doing in every subject, week by week, and which topics need more practice. Included in the Basic and Family plans.
-            </p>
-            <button
-              onClick={onOpenPricingModal}
-              className="px-8 py-3.5 rounded-2xl bg-[#FF6B35] text-white text-lg font-bold border-b-[5px] border-[#D9480F] transition-transform active:translate-y-[3px]"
-            >
-              See plans
-            </button>
-          </div>
-        </div>
-      )}
-
-      {activeSubTab === 'performance' && !reportsLocked && (
-        <div className="space-y-5 animate-fadeIn">
           <div className="bg-white p-5 sm:p-6 rounded-3xl border-2 border-emerald-200 shadow-soft space-y-4">
             <div className="flex items-center space-x-2">
               <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
