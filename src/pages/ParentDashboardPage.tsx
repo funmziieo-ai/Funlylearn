@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile, UserSubscription, ParentReward, LanguageCode } from '../types';
-import { fetchHomeworkRecords, HomeworkRecord, sendWelcomeEmail, getPlanStage } from '../services/supabaseService';
+import { fetchHomeworkRecords, HomeworkRecord, sendWelcomeEmail, getPlanStage, fetchLeaderboardV2, setLeaderboardHidden } from '../services/supabaseService';
 
 interface ParentDashboardPageProps {
   profile: UserProfile;
@@ -64,6 +64,27 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
   // Parent reports are a paid feature. Contact details (WhatsApp/email)
   // stay free, so every parent still gets homework updates.
   const reportsLocked = getPlanStage(subscription) !== 'paid';
+
+  // Parents can hide their child from the leaderboard (other children
+  // only ever see first name + surname initial).
+  const [hiddenFromBoard, setHiddenFromBoard] = useState<boolean | null>(null);
+  const [savingBoard, setSavingBoard] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetchLeaderboardV2(userId, profile.classLevel, 'week', 1).then(result => {
+      if (!cancelled) setHiddenFromBoard(result ? result.hidden : false);
+    });
+    return () => { cancelled = true; };
+  }, [userId, profile.classLevel]);
+
+  const toggleLeaderboard = async () => {
+    if (hiddenFromBoard === null) return;
+    const next = !hiddenFromBoard;
+    setSavingBoard(true);
+    const ok = await setLeaderboardHidden(userId, next);
+    if (ok) setHiddenFromBoard(next);
+    setSavingBoard(false);
+  };
   const [activeSubTab, setActiveSubTab] = useState<'notifications' | 'performance' | 'rewards'>('notifications');
 
   // Parent WhatsApp State
@@ -303,6 +324,24 @@ export const ParentDashboardPage: React.FC<ParentDashboardPageProps> = ({
           button here. */}
       {activeSubTab === 'notifications' && (
         <div className="space-y-5 animate-fadeIn">
+
+          {/* Card: Leaderboard privacy */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-soft flex items-center justify-between gap-4">
+            <div>
+              <p className="font-serif font-bold text-slate-900">🏆 Show {profile.name} on the leaderboard</p>
+              <p className="text-xs text-slate-500 mt-1">Other children only see first name and surname initial, never full names or schools.</p>
+            </div>
+            <button
+              onClick={toggleLeaderboard}
+              disabled={hiddenFromBoard === null || savingBoard}
+              role="switch"
+              aria-checked={hiddenFromBoard === false}
+              aria-label={`Show ${profile.name} on the leaderboard`}
+              className={`relative w-14 h-8 rounded-full shrink-0 transition-colors disabled:opacity-50 ${hiddenFromBoard === false ? 'bg-emerald-600' : 'bg-slate-300'}`}
+            >
+              <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all ${hiddenFromBoard === false ? 'left-7' : 'left-1'}`} />
+            </button>
+          </div>
 
           {/* Card: Parent's Email — powers the automatic emails */}
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-soft space-y-4">
