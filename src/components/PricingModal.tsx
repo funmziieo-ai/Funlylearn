@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Check, X, Sparkles, MessageCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserProfile, UserSubscription, SubscriptionPlan } from '../types';
 import { openPaystackCheckout } from '../services/paystackService';
-import { checkSubscriptionStatus } from '../services/supabaseService';
+import { checkSubscriptionStatus, getPlanStage, dailyLimitFor, getLocalUsage } from '../services/supabaseService';
+import { Emoji3D } from './Emoji3D';
 
 interface PricingModalProps {
   isOpen: boolean;
@@ -82,7 +83,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
         setIsConfirmingPayment(false);
         onSubscriptionUpdated(confirmedSub);
         setSuccessPlan(plan);
-        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+        confetti({ particleCount: 140, spread: 80, origin: { y: 0.6 }, zIndex: 9999, colors: ['#16A34A', '#FFC83D', '#FF6B35', '#38BDF8', '#A855F7'] });
         return;
       }
     }
@@ -98,355 +99,253 @@ export const PricingModal: React.FC<PricingModalProps> = ({
     window.open(`https://wa.me/2347033267197?text=${message}`, '_blank');
   };
 
+  // Where the child is right now: free trial (with days left), free
+  // plan, or paid -- shown at the top so parents know exactly what's
+  // happening today.
+  const stage = getPlanStage(currentSubscription);
+  const trialDaysLeft = stage === 'trial' && currentSubscription?.expiresAt
+    ? Math.max(1, Math.ceil((new Date(currentSubscription.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : 0;
+  const chatLimit = dailyLimitFor('chat', stage);
+  const chatsUsed = Math.min(getLocalUsage('chat'), Number.isFinite(chatLimit) ? chatLimit : Infinity);
+  const yearly = billingInterval === 'yearly';
+  const FUN = "font-['Fredoka']";
+  const PRESS = 'transition-transform active:translate-y-[4px]';
+  const currentPlan = currentSubscription?.plan || 'free';
+
+  const Feature: React.FC<{ emoji: string; children: React.ReactNode }> = ({ emoji, children }) => (
+    <li className="flex items-center gap-3">
+      <Emoji3D emoji={emoji} className="w-8 h-8 shrink-0" />
+      <span>{children}</span>
+    </li>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto font-sans">
-      
-      <div className="relative w-full max-w-4xl bg-white rounded-3xl border-2 border-amber-400/50 shadow-2xl overflow-hidden my-auto animate-fadeIn">
-        
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto font-['Nunito']">
+      <div className="relative w-full max-w-5xl rounded-[32px] overflow-hidden bg-white shadow-2xl my-6 animate-fadeIn">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors"
+          aria-label="Close"
+          className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-black/20 hover:bg-black/30 text-white font-bold"
         >
-          <X className="w-5 h-5" />
+          ✕
         </button>
 
         {isConfirmingPayment ? (
-          <div className="bg-[#0E8256] text-white p-8 sm:p-12 text-center space-y-6">
-            <div className="w-20 h-20 rounded-full bg-amber-400/20 border-2 border-amber-400 flex items-center justify-center mx-auto">
-              <Loader2 className="w-10 h-10 text-amber-300 animate-spin" />
+          <div className="bg-gradient-to-br from-[#16A34A] via-[#0E8256] to-[#064E3B] text-white p-8 sm:p-12 text-center space-y-5">
+            <div className="w-24 h-24 rounded-full bg-white/15 flex items-center justify-center mx-auto">
+              <Loader2 className="w-12 h-12 text-[#FFC83D] animate-spin" />
             </div>
-            <div className="space-y-2 max-w-md mx-auto">
-              <h2 className="font-serif text-2xl font-bold text-amber-300">
-                Confirming your payment...
-              </h2>
-              <p className="text-sm text-emerald-100 font-sans">
-                This usually only takes a few seconds. Please don't close this window.
-              </p>
-            </div>
+            <h2 className={`${FUN} text-3xl font-bold`}>Confirming your payment...</h2>
+            <p className="text-emerald-100 font-semibold max-w-md mx-auto">
+              This usually only takes a few seconds. Please don't close this window.
+            </p>
           </div>
         ) : pendingConfirmation ? (
-          <div className="bg-[#0E8256] text-white p-8 sm:p-12 text-center space-y-6">
-            <div className="space-y-2 max-w-md mx-auto">
-              <h2 className="font-serif text-2xl font-bold text-amber-300">
-                Still confirming...
-              </h2>
-              <p className="text-sm text-emerald-100 font-sans">
-                Your payment may still be processing. If it went through, your access will unlock automatically within a few minutes — no need to pay again. If you're unsure, our team can check for you on WhatsApp.
-              </p>
-            </div>
+          <div className="bg-gradient-to-br from-[#16A34A] via-[#0E8256] to-[#064E3B] text-white p-8 sm:p-12 text-center space-y-5">
+            <Emoji3D emoji="⏳" className="w-24 h-24 mx-auto" />
+            <h2 className={`${FUN} text-3xl font-bold`}>Still confirming...</h2>
+            <p className="text-emerald-100 font-semibold max-w-md mx-auto">
+              Your payment may still be processing. If it went through, your access will unlock automatically within a few minutes, so there's no need to pay again. If you're unsure, our team can check for you on WhatsApp.
+            </p>
             <button
               onClick={handleWhatsAppSupport}
-              className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-jakarta font-bold text-sm shadow-xl transition-all flex items-center space-x-2 mx-auto"
+              className={`${FUN} ${PRESS} inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-[#FFC83D] text-[#064E3B] text-lg font-bold border-b-[5px] border-[#E0A800]`}
             >
-              <MessageCircle className="w-4 h-4" />
-              <span>Check on WhatsApp</span>
+              <Emoji3D emoji="💬" className="w-7 h-7" /> Check on WhatsApp
             </button>
-            <button
-              onClick={() => {
-                setPendingConfirmation(false);
-                onClose();
-              }}
-              className="text-xs text-emerald-300 underline"
-            >
-              Close for now
-            </button>
+            <div>
+              <button
+                onClick={() => {
+                  setPendingConfirmation(false);
+                  onClose();
+                }}
+                className="text-sm text-emerald-200 underline font-semibold"
+              >
+                Close for now
+              </button>
+            </div>
           </div>
         ) : successPlan ? (
-          <div className="bg-[#0E8256] text-white p-8 sm:p-12 text-center space-y-6 animate-scaleUp">
-            <div className="w-20 h-20 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center mx-auto shadow-xl">
-              <Sparkles className="w-10 h-10 text-slate-950 animate-bounce" />
-            </div>
-
-            <div className="space-y-2 max-w-md mx-auto">
-              <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/40 text-xs font-jakarta font-bold uppercase">
-                Payment Successful
-              </span>
-              <h2 className="font-serif text-3xl font-bold text-amber-300">
-                🎉 Welcome to FunlyLearn {successPlan.toUpperCase()} Plan!
-              </h2>
-              <p className="text-sm text-emerald-100 font-sans">
-                Mama Titi is ready for <strong>{profile.name}</strong>! All homework features and unlimited questions are unlocked.
-              </p>
-            </div>
-
+          <div className="bg-gradient-to-br from-[#16A34A] via-[#0E8256] to-[#064E3B] text-white p-8 sm:p-12 text-center space-y-4 animate-scaleUp">
+            <Emoji3D emoji="🎉" className="w-28 h-28 mx-auto animate-bounce" />
+            <span className={`${FUN} inline-block px-4 py-1 rounded-full bg-[#FFC83D] text-[#064E3B] font-bold`}>Payment successful</span>
+            <h2 className={`${FUN} text-4xl font-bold`}>Welcome to {successPlan === 'family' ? 'Family' : 'Basic'}!</h2>
+            <p className="text-emerald-100 font-semibold max-w-md mx-auto">
+              Everything is unlocked for <strong>{profile.name}</strong>: unlimited Mama Titi, the full notebook, Exam Prep and My Week.
+            </p>
             <button
               onClick={() => {
                 setSuccessPlan(null);
                 onClose();
               }}
-              className="px-8 py-3.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-jakarta font-bold text-sm shadow-xl transition-all flex items-center space-x-2 mx-auto"
+              className={`${FUN} ${PRESS} px-8 py-4 rounded-2xl bg-[#FFC83D] text-[#064E3B] text-xl font-bold border-b-[6px] border-[#E0A800]`}
             >
-              <span>Start Learning Now 🌟</span>
-              <ArrowRight className="w-4 h-4" />
+              Start learning ▶
             </button>
           </div>
         ) : (
           <div>
-            <div className="bg-[#0E8256] text-white p-6 sm:p-7 text-center space-y-4 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
-
-              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-white">
-                Choose your plan
+            {/* Header */}
+            <div className="bg-gradient-to-br from-[#16A34A] via-[#0E8256] to-[#064E3B] text-white px-5 pt-7 pb-10 text-center space-y-3">
+              <Emoji3D emoji="🚀" className="w-24 h-24 mx-auto animate-bounce" />
+              <h2 className={`${FUN} text-3xl sm:text-4xl font-bold leading-tight`}>
+                {stage === 'paid' ? `${profile.name} has full access` : `Unlock everything for ${profile.name}`}
               </h2>
+              <p className="text-emerald-100 font-semibold max-w-md mx-auto">
+                Unlimited Mama Titi, the full notebook, Exam Prep and weekly revision.
+              </p>
 
-              <div className="flex items-center justify-center gap-1.5">
-                <div className="bg-[#085C40] p-1 rounded-2xl border border-amber-400/30 flex items-center text-xs font-jakarta font-bold">
+              {stage !== 'paid' && (
+                <div className="inline-flex items-center gap-3 rounded-2xl bg-white/15 px-4 py-2.5 text-left">
+                  <Emoji3D emoji={stage === 'trial' ? '🎁' : '⏳'} className="w-10 h-10" />
+                  <div>
+                    <p className={`${FUN} font-bold text-[#FFC83D]`}>
+                      {stage === 'trial'
+                        ? `Free trial: ${trialDaysLeft} ${trialDaysLeft === 1 ? 'day' : 'days'} left`
+                        : 'Your 7-day free trial has ended'}
+                    </p>
+                    <p className="text-sm text-emerald-100 font-semibold">
+                      Today: {chatsUsed} of {chatLimit} free Mama Titi chats used
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-center pt-1">
+                <div className="inline-flex bg-black/25 p-1.5 rounded-2xl">
                   <button
                     onClick={() => setBillingInterval('monthly')}
-                    className={`px-3.5 py-1.5 rounded-xl transition-all ${
-                      billingInterval === 'monthly'
-                        ? 'bg-amber-400 text-slate-950 shadow-xs'
-                        : 'text-emerald-200 hover:text-white'
-                    }`}
+                    className={`${FUN} ${PRESS} px-5 py-2.5 rounded-xl font-bold ${!yearly ? 'bg-[#FFC83D] text-[#064E3B]' : 'text-white'}`}
                   >
                     Monthly
                   </button>
                   <button
                     onClick={() => setBillingInterval('yearly')}
-                    className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center space-x-1 ${
-                      billingInterval === 'yearly'
-                        ? 'bg-amber-400 text-slate-950 shadow-xs'
-                        : 'text-emerald-200 hover:text-white'
-                    }`}
+                    className={`${FUN} ${PRESS} px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-1.5 ${yearly ? 'bg-[#FFC83D] text-[#064E3B]' : 'text-white'}`}
                   >
-                    <span>Yearly</span>
-                    <span className="bg-[#FF6B35] text-white text-[9px] px-1.5 py-0.5 rounded-full">
-                      Save 40%
-                    </span>
+                    Yearly <span className="text-xs px-2 py-0.5 rounded-full bg-[#FF6B35] text-white">Save 40%</span>
                   </button>
                 </div>
               </div>
             </div>
 
             {paymentError && (
-              <div className="mx-5 sm:mx-8 mt-4 p-3.5 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-800 text-xs font-medium text-center">
+              <div className="mx-4 sm:mx-6 mt-4 p-3.5 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-800 text-sm font-semibold text-center">
                 {paymentError}
               </div>
             )}
 
-            <div className="p-5 sm:p-8 bg-[#FFFDF5] grid grid-cols-1 md:grid-cols-3 gap-5">
-              
-              <div className="bg-white rounded-3xl border border-slate-200 p-5 space-y-4 flex flex-col justify-between shadow-soft">
-                <div className="space-y-3">
+            {/* Plans: Basic first on phones */}
+            <div className="bg-[#FFF8EC] p-4 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-4 -mt-4 rounded-t-[28px] relative">
+
+              <div className="md:order-2 relative rounded-[28px] bg-white border-4 border-[#FFC83D] border-b-[8px] p-5 space-y-4 shadow-xl">
+                <span className={`${FUN} absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-[#FF6B35] text-white text-sm font-bold whitespace-nowrap`}>
+                  ⭐ Most popular
+                </span>
+                <div className="flex items-center gap-3">
+                  <Emoji3D emoji="👑" className="w-16 h-16" />
                   <div>
-                    <h3 className="font-serif text-xl font-bold text-slate-800">Free</h3>
-                    <div className="text-2xl font-bold text-slate-900 mt-1 font-serif">
-                      ₦0
-                      <span className="text-xs text-slate-500 font-normal"> forever</span>
-                    </div>
-                    <p className="text-xs font-bold text-emerald-700 mt-1">Starts with a 7-day free trial</p>
-                  </div>
-
-                  <div className="border-t border-slate-100 pt-3 space-y-2 text-xs text-slate-700 font-sans">
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>7-day trial: 5 Mama Titi chats, 5 notebook views and 5 Exam Prep attempts a day</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>After the trial: 2 Mama Titi chats a day</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Game Zone: Homework Game, Naija Lingo and Word Crush</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Unlimited Mama Titi voice</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Unlock new Naija Lingo levels with coins</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Leaderboard and star system</span>
-                    </div>
-
-                    <div className="flex items-center space-x-2 text-slate-400">
-                      <X className="w-4 h-4 shrink-0" />
-                      <span className="line-through">Unlimited messages & snaps</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-slate-400">
-                      <X className="w-4 h-4 shrink-0" />
-                      <span className="line-through">Unlimited notebook & Exam Prep</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-slate-400">
-                      <X className="w-4 h-4 shrink-0" />
-                      <span className="line-through">Priority support</span>
-                    </div>
+                    <p className={`${FUN} text-2xl font-bold text-[#064E3B]`}>Basic</p>
+                    <p className="text-sm font-bold text-slate-500">For 1 child</p>
                   </div>
                 </div>
-
-                <button
-                  disabled
-                  className="w-full py-3 rounded-2xl bg-slate-100 text-slate-400 font-jakarta font-bold text-xs cursor-not-allowed"
-                >
-                  Current Plan
-                </button>
+                <div>
+                  <p className={`${FUN} text-4xl font-bold text-slate-900`}>
+                    {yearly ? '₦3,600' : '₦6,000'}
+                    <span className="text-base text-slate-500 font-semibold"> / month</span>
+                  </p>
+                  <p className="text-sm font-bold text-[#16A34A]">{yearly ? '₦43,200 a year (save 40%)' : 'Pay monthly'}</p>
+                </div>
+                <ul className="space-y-2.5 text-[15px] font-semibold text-slate-700">
+                  <Feature emoji="💬">Unlimited Mama Titi chats &amp; homework snaps</Feature>
+                  <Feature emoji="📒">Full notebook: view, print &amp; download</Feature>
+                  <Feature emoji="🎓">Unlimited Exam Prep (Common Entrance, BECE, WAEC)</Feature>
+                  <Feature emoji="🗓️">My Week revision &amp; Weekly Challenge</Feature>
+                  <Feature emoji="📈">Parent reports</Feature>
+                  <Feature emoji="📚">All subjects, Primary 3 to SS3</Feature>
+                </ul>
+                {currentPlan === 'basic' && stage === 'paid' ? (
+                  <div className={`${FUN} w-full py-4 rounded-2xl bg-slate-100 text-slate-500 text-xl font-bold text-center`}>Current plan</div>
+                ) : (
+                  <button
+                    onClick={() => handleSubscribe('basic')}
+                    disabled={isLoadingPlan !== null}
+                    className={`${FUN} ${PRESS} w-full py-4 rounded-2xl bg-[#16A34A] text-white text-xl font-bold border-b-[6px] border-[#064E3B] disabled:opacity-60 inline-flex items-center justify-center gap-2`}
+                  >
+                    {isLoadingPlan === 'basic' ? <><Loader2 className="w-5 h-5 animate-spin" /> Opening checkout...</> : 'Get Basic ▶'}
+                  </button>
+                )}
               </div>
 
-              <div className="bg-white rounded-3xl border-2 border-amber-400 p-5 space-y-4 flex flex-col justify-between shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-amber-400 text-slate-950 font-jakarta font-bold text-[10px] uppercase px-3 py-1 rounded-bl-xl shadow-xs">
-                  Recommended
-                </div>
-
-                <div className="space-y-3">
+              <div className="md:order-3 rounded-[28px] bg-gradient-to-br from-[#7E22CE] to-[#4C1D95] text-white border-b-[8px] border-[#2E1065] p-5 space-y-4 shadow-xl">
+                <div className="flex items-center gap-3">
+                  <Emoji3D emoji="👨‍👩‍👧‍👦" className="w-16 h-16" />
                   <div>
-                    <h3 className="font-serif text-xl font-bold text-[#0E8256]">Basic</h3>
-                    <div className="text-2xl font-bold text-slate-900 mt-1 font-serif flex items-baseline flex-wrap gap-1.5">
-                      {billingInterval === 'monthly' ? (
-                        <>
-                          <span>₦6,000</span>
-                          <span className="text-xs text-slate-500 font-normal ml-1"> / month</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>₦3,600</span>
-                          <span className="text-xs text-slate-500 font-normal ml-1"> / mo, billed yearly</span>
-                          <span className="text-sm text-slate-400 font-normal line-through">₦6,000</span>
-                        </>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-amber-800 font-medium mt-1">
-                      {billingInterval === 'yearly' ? '₦43,200 / year (save 40%)' : 'Flexible monthly billing'}
-                    </p>
-                  </div>
-
-                  <div className="border-t border-amber-100 pt-3 space-y-2 text-xs text-slate-800 font-sans">
-                    <div className="flex items-center space-x-2 font-semibold">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Unlimited messages & homework snaps</span>
-                    </div>
-                    <div className="flex items-center space-x-2 font-semibold">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Unlimited notebook & Exam Prep access</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Smart notebook — view, print & download</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>My Week: weekly revision and Weekly Challenge</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>All subjects Primary 3 to SS3</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Leaderboard and star system</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Parent dashboard and reports</span>
-                    </div>
-
-                    <div className="flex items-center space-x-2 text-slate-400">
-                      <X className="w-4 h-4 shrink-0" />
-                      <span className="line-through">Multiple children</span>
-                    </div>
+                    <p className={`${FUN} text-2xl font-bold`}>Family</p>
+                    <p className="text-sm font-bold text-purple-200">Up to 3 children</p>
                   </div>
                 </div>
-
-                <button
-                  onClick={() => handleSubscribe('basic')}
-                  disabled={isLoadingPlan !== null}
-                  className="w-full py-3.5 rounded-2xl bg-[#0E8256] hover:bg-[#085C40] disabled:opacity-60 text-white font-jakarta font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2"
-                >
-                  {isLoadingPlan === 'basic' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Opening checkout...</span>
-                    </>
-                  ) : (
-                    <span>Subscribe to Basic</span>
-                  )}
-                </button>
+                <div>
+                  <p className={`${FUN} text-4xl font-bold`}>
+                    {yearly ? '₦7,200' : '₦12,000'}
+                    <span className="text-base text-purple-200 font-semibold"> / month</span>
+                  </p>
+                  <p className="text-sm font-bold text-[#FFC83D]">{yearly ? '₦86,400 a year (save 40%)' : 'Pay monthly'}</p>
+                </div>
+                <ul className="space-y-2.5 text-[15px] font-semibold">
+                  <Feature emoji="✅">Everything in Basic</Feature>
+                  <Feature emoji="👥">Up to 3 children</Feature>
+                  <Feature emoji="📱">Priority WhatsApp support</Feature>
+                  <Feature emoji="✨">Early access to new features</Feature>
+                  <Feature emoji="🌍">Igbo and Hausa (coming soon)</Feature>
+                </ul>
+                {currentPlan === 'family' && stage === 'paid' ? (
+                  <div className={`${FUN} w-full py-4 rounded-2xl bg-white/15 text-white text-xl font-bold text-center`}>Current plan</div>
+                ) : (
+                  <button
+                    onClick={() => handleSubscribe('family')}
+                    disabled={isLoadingPlan !== null}
+                    className={`${FUN} ${PRESS} w-full py-4 rounded-2xl bg-[#FFC83D] text-[#2E1065] text-xl font-bold border-b-[6px] border-[#E0A800] disabled:opacity-60 inline-flex items-center justify-center gap-2`}
+                  >
+                    {isLoadingPlan === 'family' ? <><Loader2 className="w-5 h-5 animate-spin" /> Opening checkout...</> : 'Get Family ▶'}
+                  </button>
+                )}
               </div>
 
-              <div className="bg-[#085C40] text-white rounded-3xl border-2 border-emerald-400 p-5 space-y-4 flex flex-col justify-between shadow-xl">
-                <div className="space-y-3">
+              <div className="md:order-1 rounded-[28px] bg-white border-2 border-slate-200 border-b-[6px] p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <Emoji3D emoji="🎮" className="w-16 h-16" />
                   <div>
-                    <h3 className="font-serif text-xl font-bold text-amber-300">Family</h3>
-                    <div className="text-2xl font-bold text-white mt-1 font-serif flex items-baseline flex-wrap gap-1.5">
-                      {billingInterval === 'monthly' ? (
-                        <>
-                          <span>₦12,000</span>
-                          <span className="text-xs text-emerald-200 font-normal ml-1"> / month</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>₦7,200</span>
-                          <span className="text-xs text-emerald-200 font-normal ml-1"> / mo, billed yearly</span>
-                          <span className="text-sm text-emerald-400/70 font-normal line-through">₦12,000</span>
-                        </>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-amber-200 font-medium mt-1">
-                      {billingInterval === 'yearly' ? '₦86,400 / year (save 40%)' : 'Up to 3 children access'}
-                    </p>
-                  </div>
-
-                  <div className="border-t border-emerald-800/80 pt-3 space-y-2 text-xs text-emerald-100 font-sans">
-                    <div className="flex items-center space-x-2 font-bold text-amber-300">
-                      <Check className="w-4 h-4 text-amber-300 shrink-0" />
-                      <span>Everything in Basic</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>Up to 3 children</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>Priority WhatsApp support</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>Early access to new features</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>Igbo and Hausa coming soon</span>
-                    </div>
+                    <p className={`${FUN} text-2xl font-bold text-slate-800`}>Free</p>
+                    <p className="text-sm font-bold text-slate-500">{stage === 'paid' ? 'Always free' : "You're on this plan"}</p>
                   </div>
                 </div>
-
-                <button
-                  onClick={() => handleSubscribe('family')}
-                  disabled={isLoadingPlan !== null}
-                  className="w-full py-3.5 rounded-2xl bg-amber-400 hover:bg-amber-300 disabled:opacity-60 text-slate-950 font-jakarta font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2"
-                >
-                  {isLoadingPlan === 'family' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                      <span>Opening checkout...</span>
-                    </>
-                  ) : (
-                    <span>Subscribe to Family</span>
-                  )}
-                </button>
+                <p className={`${FUN} text-4xl font-bold text-slate-900`}>₦0</p>
+                <ul className="space-y-2.5 text-[15px] font-semibold text-slate-700">
+                  <Feature emoji="🎁">7-day trial: 5 chats, 5 notebook &amp; 5 Exam Prep a day</Feature>
+                  <Feature emoji="💬">Then 2 Mama Titi chats a day</Feature>
+                  <Feature emoji="🎮">Game Zone: all games free</Feature>
+                  <Feature emoji="🏆">Leaderboard, stars &amp; coins</Feature>
+                </ul>
+                {stage !== 'paid' && (
+                  <div className={`${FUN} w-full py-3.5 rounded-2xl bg-slate-100 text-slate-500 text-lg font-bold text-center`}>Current plan</div>
+                )}
               </div>
-
             </div>
 
-            <div className="p-4 bg-emerald-950 text-center border-t border-emerald-900 flex flex-col sm:flex-row items-center justify-between gap-3 px-6">
-              <span className="text-xs text-emerald-200 font-medium">
-                Need help choosing a plan or making a bank transfer? Chat with our team!
-              </span>
-              <button
-                onClick={handleWhatsAppSupport}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-jakarta font-bold text-xs shadow-xs flex items-center space-x-2 shrink-0"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>Chat on WhatsApp</span>
-              </button>
+            {/* Trust row */}
+            <div className="bg-[#FFF8EC] px-4 pb-6 sm:px-6">
+              <div className="rounded-3xl bg-white border-2 border-slate-200 p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm font-bold text-slate-600">
+                <p className="flex items-center gap-2"><Emoji3D emoji="🔒" className="w-8 h-8" /> Secure payment with Paystack</p>
+                <p className="flex items-center gap-2"><Emoji3D emoji="💳" className="w-8 h-8" /> Card, bank transfer or USSD</p>
+                <button onClick={handleWhatsAppSupport} className="flex items-center gap-2 text-[#16A34A] text-left">
+                  <Emoji3D emoji="💬" className="w-8 h-8" /> Questions? Chat with us on WhatsApp
+                </button>
+              </div>
             </div>
-
           </div>
         )}
-
       </div>
     </div>
   );
