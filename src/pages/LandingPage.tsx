@@ -5,6 +5,8 @@ import { Emoji3D } from '../components/Emoji3D';
 interface LandingPageProps {
   onStartLearning: () => void;
   onStartCatchingUp: () => void;
+  onLogIn?: () => void;
+  onSignUp?: () => void;
 }
 
 // Put a real photo of a Nigerian child doing homework on a phone at
@@ -176,7 +178,7 @@ const ChatMockup: React.FC = () => (
   </div>
 );
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onStartLearning }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onStartLearning, onLogIn, onSignUp }) => {
   useFunFonts();
   const [photoMissing, setPhotoMissing] = useState(false);
 
@@ -192,9 +194,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartLearning }) => 
             <span className={`${FUN} text-xl sm:text-2xl font-bold text-slate-900`}>Funly<span className="text-[#16A34A]">Learn</span></span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onStartLearning} className="font-bold text-slate-700 px-2 sm:px-3 py-2 hover:text-slate-900">Log in</button>
+            <button onClick={onLogIn || onStartLearning} className="font-bold text-slate-700 px-2 sm:px-3 py-2 hover:text-slate-900">Log in</button>
             <button
-              onClick={onStartLearning}
+              onClick={onSignUp || onStartLearning}
               className={`${FUN} ${PRESS} px-4 py-2.5 rounded-2xl bg-[#15803D] text-white font-bold border-b-4 border-[#064E3B]`}
             >
               Sign up
