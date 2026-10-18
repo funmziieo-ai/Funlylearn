@@ -251,6 +251,8 @@ export default function App() {
     if (hasRealName(profile)) {
       applyTrialIfUnpaid(profile);
       setView('app');
+      // Someone who opened a game invite link lands straight in the games.
+      setActiveTab(inviteTarget || 'home');
       return;
     }
     // Signing out clears the profile from this phone, but a guest's
@@ -459,6 +461,7 @@ export default function App() {
               <LeaderboardPage
                 profile={profile}
                 onGoToHomework={() => setActiveTab('chat')}
+                userId={user?.id || getOrCreateGuestSessionId()}
               />
             )}
 
