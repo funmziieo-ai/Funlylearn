@@ -8,9 +8,10 @@
 //   'hub'  - relaxed theme while the child browses Naija Lingo
 //   'game' - faster, more exciting track during a game
 //
-// To use a real recorded song instead, put an MP3 you have the rights
-// to use in /public/audio/ and set its path in MUSIC_FILES below. The
-// file then plays (looped) instead of the generated track.
+// Real recorded music: upload MP3s you have the rights to use to
+// public/audio/game-hub.mp3 (calm, for the Game Zone menu) and
+// public/audio/game-play.mp3 (upbeat, during games). They play
+// automatically. If a file isn't there, the built-in music plays instead.
 
 export type MusicTrack = 'hub' | 'game';
 export type SoundEffect =
@@ -18,12 +19,13 @@ export type SoundEffect =
   | 'combo' | 'win' | 'unlock' | 'whoosh' | 'splash';
 
 const MUSIC_FILES: Partial<Record<MusicTrack, string>> = {
-  // hub: '/audio/lingo-hub.mp3',
-  // game: '/audio/lingo-game.mp3',
+  hub: '/audio/game-hub.mp3',
+  game: '/audio/game-play.mp3',
 };
+const FILE_VOLUME = 0.5;
 
-const MUSIC_VOLUME = 0.32;
-const DUCKED_VOLUME = 0.06;
+const MUSIC_VOLUME = 0.55; // louder, so it's clearly heard on phone speakers
+const DUCKED_VOLUME = 0.08;
 const SFX_VOLUME = 0.7;
 const PREFS_KEY = 'funlylearn_game_audio_prefs';
 
@@ -87,6 +89,8 @@ class GameAudio {
   private nextTime = 0;
   private track: MusicTrack | null = null;
   private ducked = false;
+  // Tracks whose MP3 isn't uploaded, so we don't keep asking for them.
+  private missingFiles = new Set<MusicTrack>();
   private prefs: AudioPrefs = loadPrefs();
   private listeners = new Set<() => void>();
 
@@ -162,10 +166,16 @@ class GameAudio {
     this.stopSound();
 
     const file = MUSIC_FILES[track];
-    if (file) {
+    if (file && !this.missingFiles.has(track)) {
       const el = new Audio(file);
       el.loop = true;
-      el.volume = this.ducked ? DUCKED_VOLUME : MUSIC_VOLUME;
+      el.volume = this.ducked ? DUCKED_VOLUME : FILE_VOLUME;
+      // No file uploaded (or it can't play): use the built-in music.
+      el.addEventListener('error', () => {
+        this.missingFiles.add(track);
+        if (this.fileAudio === el) this.fileAudio = null;
+        if (this.track === track && this.prefs.music) this.playMusic(track);
+      }, { once: true });
       el.play().catch(() => {});
       this.fileAudio = el;
       return;
@@ -223,7 +233,7 @@ class GameAudio {
 
   unduck() {
     this.ducked = false;
-    if (this.fileAudio) this.fileAudio.volume = MUSIC_VOLUME;
+    if (this.fileAudio) this.fileAudio.volume = FILE_VOLUME;
     if (this.ctx && this.musicBus) {
       this.musicBus.gain.cancelScheduledValues(this.ctx.currentTime);
       this.musicBus.gain.setTargetAtTime(MUSIC_VOLUME, this.ctx.currentTime, 0.25);
