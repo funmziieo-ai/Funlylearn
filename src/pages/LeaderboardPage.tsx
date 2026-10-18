@@ -1,298 +1,293 @@
-import React, { useState, useEffect } from 'react';
-import { Trophy, Star, Loader2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import confetti from 'canvas-confetti';
 import { UserProfile } from '../types';
-import { fetchLeaderboard } from '../services/supabaseService';
+import { fetchLeaderboardV2, LeaderboardData, LeaderboardEntry, LeaderboardPeriod } from '../services/supabaseService';
+import { Emoji3D } from '../components/Emoji3D';
 
 interface LeaderboardPageProps {
   profile: UserProfile;
   onGoToHomework: () => void;
+  // The child's account id (or this device's guest id), so the
+  // leaderboard always recognises them correctly.
+  userId?: string;
 }
 
-interface RankedUser {
-  rank: number;
-  id: string;
-  name: string;
-  stars: number;
-  isUser: boolean;
-  levelBadge: string;
+const FUN = "font-['Fredoka']";
+const PRESS = 'transition-transform active:translate-y-[4px]';
+const STARRY: React.CSSProperties = {
+  backgroundColor: '#2E1065',
+  backgroundImage: [
+    'radial-gradient(circle at 15% 8%, rgba(255,200,61,.22), transparent 35%)',
+    'radial-gradient(circle at 90% 30%, rgba(56,189,248,.16), transparent 35%)',
+    'radial-gradient(circle at 50% 95%, rgba(22,163,74,.2), transparent 40%)',
+    'radial-gradient(rgba(255,255,255,.08) 1.5px, transparent 1.5px)'
+  ].join(','),
+  backgroundSize: 'auto, auto, auto, 26px 26px'
+};
+const AVATAR_COLORS = ['#16A34A', '#0284C7', '#7E22CE', '#FF6B35', '#E0A800', '#DB2777', '#0D9488'];
+const STYLES = `
+.lb-bob { animation: lb-bob 1.6s ease-in-out infinite; }
+@keyframes lb-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+.lb-rise { animation: lb-rise .5s ease-out both; }
+@keyframes lb-rise { 0% { transform: translateY(30px); opacity: 0 } 100% { transform: translateY(0); opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { .lb-bob, .lb-rise { animation: none !important; } }
+`;
+
+function colorFor(name: string): string {
+  const sum = Array.from(name).reduce((total, ch) => total + ch.charCodeAt(0), 0);
+  return AVATAR_COLORS[sum % AVATAR_COLORS.length];
 }
 
-const AVATAR_EMOJIS = ['👧🏾', '👦🏾', '🧒🏾', '👧🏿', '👦🏿', '👩🏾', '🧑🏾', '👧🏽', '🧒🏽'];
-
-function emojiForId(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i)) % AVATAR_EMOJIS.length;
-  return AVATAR_EMOJIS[hash];
+// Days until the weekly race restarts (Monday, Lagos time).
+function daysUntilMonday(): number {
+  const lagos = new Date(Date.now() + 60 * 60 * 1000);
+  const day = lagos.getUTCDay(); // 0 = Sunday
+  return day === 1 ? 7 : (8 - day) % 7;
 }
 
-function Avatar({ user, size = 'md' }: { user: RankedUser; size?: 'sm' | 'md' | 'lg' }) {
-  const sizeClasses = {
-    sm: 'w-10 h-10 text-xl',
-    md: 'w-16 h-16 text-3xl',
-    lg: 'w-20 h-20 text-4xl',
-  };
-  return (
-    <div
-      className={`${sizeClasses[size]} rounded-full flex items-center justify-center border-2 ${
-        user.isUser ? 'bg-purple-100 border-purple-400' : 'bg-emerald-100 border-emerald-400'
-      }`}
-    >
-      <span>{user.isUser ? '🌟' : emojiForId(user.id)}</span>
-    </div>
-  );
+function useFunFonts() {
+  useEffect(() => {
+    const id = 'funlylearn-fun-fonts';
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap';
+    document.head.appendChild(link);
+  }, []);
 }
 
-export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
-  profile,
-  onGoToHomework,
-}) => {
-  const [filter, setFilter] = useState<'week' | 'month' | 'allTime'>('week');
-  const [rankedUsers, setRankedUsers] = useState<RankedUser[]>([]);
+const Avatar: React.FC<{ entry: LeaderboardEntry; size: string }> = ({ entry, size }) => (
+  <span
+    className={`${FUN} ${size} rounded-full flex items-center justify-center font-bold text-white shrink-0 ${
+      entry.isMe ? 'ring-4 ring-[#FFC83D]' : 'ring-2 ring-white/30'
+    }`}
+    style={{ background: colorFor(entry.name) }}
+    aria-hidden="true"
+  >
+    {entry.name.charAt(0).toUpperCase()}
+  </span>
+);
+
+export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({ profile, onGoToHomework, userId }) => {
+  useFunFonts();
+  const [period, setPeriod] = useState<LeaderboardPeriod>('week');
+  const [data, setData] = useState<LeaderboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const celebrated = useRef<Record<string, boolean>>({});
+  const userKey = userId || profile.id;
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
-
-    fetchLeaderboard(profile.classLevel, 50).then(results => {
+    setLoadFailed(false);
+    fetchLeaderboardV2(userKey, profile.classLevel, period).then(result => {
       if (cancelled) return;
-
-      const ranked: RankedUser[] = results.map((u, idx) => ({
-        rank: idx + 1,
-        id: u.id,
-        name: u.name,
-        stars: u.stars,
-        isUser: u.id === profile.id,
-        levelBadge: 'Level ' + u.level
-      }));
-
-      // If the current user has stars but wasn't in the top 50 fetched,
-      // or genuinely isn't in the table yet, still show them somewhere
-      // real rather than a fabricated position.
-      const alreadyIncluded = ranked.some(u => u.isUser);
-      if (!alreadyIncluded && profile.stars > 0) {
-        ranked.push({
-          rank: ranked.length + 1,
-          id: profile.id,
-          name: profile.name,
-          stars: profile.stars,
-          isUser: true,
-          levelBadge: 'Level ' + profile.level
-        });
-      }
-
-      setRankedUsers(ranked);
+      setData(result);
+      setLoadFailed(!result);
       setIsLoading(false);
+      // Confetti once when the child is on the podium.
+      if (result?.me && result.me.rank <= 3 && !celebrated.current[period]) {
+        celebrated.current[period] = true;
+        confetti({ particleCount: 140, spread: 80, origin: { y: 0.35 }, zIndex: 9999, colors: ['#16A34A', '#FFC83D', '#FF6B35', '#38BDF8', '#A855F7'] });
+      }
     });
-
     return () => {
       cancelled = true;
     };
-  }, [profile.classLevel, profile.id, profile.stars]);
+  }, [userKey, profile.classLevel, period, profile.stars, reloadKey]);
 
-  const top1 = rankedUsers[0];
-  const top2 = rankedUsers[1];
-  const top3 = rankedUsers[2];
-  const listUsers = rankedUsers.slice(3);
-  const selfEntry = rankedUsers.find(u => u.isUser);
+  const rows = data?.rows || [];
+  const [p1, p2, p3] = rows;
+  const listRows = rows.slice(3);
+  const me = data?.me || null;
+  const above = data?.above || null;
+  const myEntry: LeaderboardEntry | null = me ? { rank: me.rank, name: profile.name || 'You', score: me.score, isMe: true } : null;
+  const resetDays = daysUntilMonday();
+
+  const PodiumColumn: React.FC<{ entry: LeaderboardEntry; place: 1 | 2 | 3 }> = ({ entry, place }) => {
+    const big = place === 1;
+    const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉';
+    return (
+      <div className={`lb-rise flex flex-col items-center ${big ? 'w-28' : 'w-24'}`}>
+        {big && <Emoji3D emoji="👑" className="lb-bob w-12 h-12 -mb-2 relative z-10" />}
+        <div className="relative">
+          <Avatar entry={entry} size={big ? 'w-20 h-20 text-4xl' : 'w-16 h-16 text-3xl'} />
+          <Emoji3D emoji={medal} className="absolute -bottom-2 -right-3 w-9 h-9" />
+        </div>
+        <p className={`${FUN} font-bold mt-3 text-center leading-tight ${entry.isMe ? 'text-[#FFC83D]' : ''}`}>
+          {entry.isMe ? 'You' : entry.name}
+        </p>
+        <p className="font-extrabold text-[#FFC83D] inline-flex items-center gap-1">
+          <Emoji3D emoji="⭐" className="w-5 h-5" />
+          {entry.score}
+        </p>
+        <div
+          className={`w-full mt-2 rounded-t-2xl flex items-start justify-center pt-2 ${
+            big ? 'h-28 bg-gradient-to-b from-[#FFC83D] to-[#E0A800]' : place === 2 ? 'h-20 bg-white/15' : 'h-14 bg-white/15'
+          }`}
+        >
+          <span className={`${FUN} text-3xl font-bold ${big ? 'text-[#2E1065]' : 'text-white/80'}`}>{entry.rank}</span>
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24 font-sans bg-[#064E3B] text-white min-h-[calc(100vh-120px)]">
-
-      {/* Header */}
-      <div className="text-center space-y-2 pt-2">
-        <div className="flex items-center justify-center space-x-2">
-          <Trophy className="w-8 h-8 text-amber-400 fill-amber-400 animate-pulse" />
-          <h1 className="font-serif text-3xl font-bold text-amber-300">
-            Leaderboard
-          </h1>
-        </div>
-        <p className="text-xs text-emerald-200">{profile.classLevel} scholars</p>
-      </div>
-
-      {/* Filter Tabs */}
-      <div className="flex rounded-full bg-[#022C22] p-1 font-jakarta font-bold text-xs border border-emerald-700 max-w-sm mx-auto">
-        {(['week', 'month', 'allTime'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`flex-1 py-2 rounded-full transition-all ${
-              filter === f
-                ? 'bg-[#FFD166] text-slate-900 shadow-md font-bold'
-                : 'text-emerald-200 hover:text-white'
-            }`}
-          >
-            {f === 'week' ? 'Week' : f === 'month' ? 'Month' : 'All-Time'}
-          </button>
-        ))}
-      </div>
-
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-16 space-y-3">
-          <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
-          <p className="text-sm text-emerald-200">Loading scholars...</p>
-        </div>
-      ) : rankedUsers.length === 0 ? (
-        <div className="bg-[#022C22] rounded-3xl p-8 text-center space-y-3">
-          <span className="text-4xl">🌱</span>
-          <h3 className="font-serif font-bold text-lg text-amber-300">
-            Be the first {profile.classLevel} scholar!
-          </h3>
-          <p className="text-sm text-emerald-200">
-            No one in your class has earned stars yet — answer questions with Mama Titi to take the top spot.
+    <div className="max-w-xl mx-auto p-3 sm:p-6 pb-28 font-['Nunito']">
+      <style>{STYLES}</style>
+      <div className="relative rounded-[32px] overflow-hidden text-white p-4 sm:p-6 space-y-5 pb-28 min-h-[75vh]" style={STARRY}>
+        <div className="text-center space-y-1 pt-1">
+          <p className={`${FUN} text-4xl font-bold inline-flex items-center gap-2`}>
+            <Emoji3D emoji="🏆" className="lb-bob w-12 h-12" /> Leaderboard
           </p>
-          <button
-            onClick={onGoToHomework}
-            className="px-5 py-3 rounded-full bg-[#FF6B35] hover:bg-[#E85523] text-white font-jakarta font-bold text-xs transition-all"
-          >
-            Start Learning 🚀
-          </button>
+          <p className="text-white/80 font-semibold">{profile.classLevel} scholars across Nigeria</p>
         </div>
-      ) : (
-        <>
-          {/* Podium Section */}
-          <div className="flex items-end justify-center space-x-3 pt-6 pb-4">
 
-            {top2 && (
-              <div className="flex flex-col items-center w-24">
-                <div className="relative mb-2">
-                  <Avatar user={top2} size="md" />
-                  <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-slate-300 text-slate-900 font-bold text-xs flex items-center justify-center border border-white">
-                    2
-                  </span>
-                </div>
-                <div className="w-full bg-[#033D2E] rounded-t-2xl p-3 text-center border-t border-emerald-600/50 h-28 flex flex-col justify-end">
-                  <span className="font-jakarta font-bold text-sm text-white truncate block">
-                    {top2.isUser ? 'You' : top2.name}
-                  </span>
-                  <span className="text-xs text-amber-300 font-semibold flex items-center justify-center space-x-1">
-                    <Star className="w-3 h-3 fill-amber-300" />
-                    <span>{top2.stars}</span>
-                  </span>
-                </div>
-              </div>
-            )}
+        <div className="grid grid-cols-2 gap-2 bg-white/10 rounded-2xl p-1.5 max-w-sm mx-auto">
+          {(['week', 'all'] as LeaderboardPeriod[]).map(p => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`${FUN} ${PRESS} py-2.5 rounded-xl font-semibold ${period === p ? 'bg-[#FFC83D] text-[#2E1065]' : 'text-white/80'}`}
+            >
+              {p === 'week' ? 'This week' : 'All time'}
+            </button>
+          ))}
+        </div>
+        {period === 'week' && (
+          <p className="text-center text-sm font-bold text-[#FFC83D] -mt-2">
+            ⏰ New race starts Monday · {resetDays === 7 ? 'started today!' : `${resetDays} ${resetDays === 1 ? 'day' : 'days'} left`}
+          </p>
+        )}
 
-            {top1 && (
-              <div className="flex flex-col items-center w-28 -mt-4 z-10">
-                <div className="relative mb-2">
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-amber-300">
-                    <Star className="w-6 h-6 fill-amber-300 animate-bounce" />
-                  </div>
-                  <Avatar user={top1} size="lg" />
-                  <span className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-amber-400 text-slate-900 font-extrabold text-xs flex items-center justify-center border-2 border-white shadow-sm">
-                    1
-                  </span>
-                </div>
-                <div className="w-full bg-[#022C22] rounded-t-3xl p-3 text-center border-t-2 border-amber-400 h-36 flex flex-col justify-end shadow-xl">
-                  <span className="font-jakarta font-bold text-base text-white truncate block">
-                    {top1.isUser ? 'You' : top1.name}
-                  </span>
-                  <span className="text-xs text-amber-300 font-bold flex items-center justify-center space-x-1">
-                    <Star className="w-3.5 h-3.5 fill-amber-300" />
-                    <span>{top1.stars}</span>
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {top3 && (
-              <div className="flex flex-col items-center w-24">
-                <div className="relative mb-2">
-                  <Avatar user={top3} size="md" />
-                  <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-amber-700 text-white font-bold text-xs flex items-center justify-center border border-white">
-                    3
-                  </span>
-                </div>
-                <div className="w-full bg-[#033D2E] rounded-t-2xl p-3 text-center border-t border-emerald-600/50 h-24 flex flex-col justify-end">
-                  <span className="font-jakarta font-bold text-sm text-white truncate block">
-                    {top3.isUser ? 'You' : top3.name}
-                  </span>
-                  <span className="text-xs text-amber-300 font-semibold flex items-center justify-center space-x-1">
-                    <Star className="w-3 h-3 fill-amber-300" />
-                    <span>{top3.stars}</span>
-                  </span>
-                </div>
-              </div>
-            )}
+        {isLoading ? (
+          <div className="py-16 text-center space-y-3">
+            <Emoji3D emoji="🏆" className="lb-bob w-16 h-16 mx-auto" />
+            <p className="font-semibold text-white/80">Loading the scholars...</p>
           </div>
+        ) : loadFailed ? (
+          <div className="rounded-3xl bg-white/10 p-6 text-center space-y-3">
+            <Emoji3D emoji="😕" className="w-14 h-14 mx-auto" />
+            <p className="font-semibold">The leaderboard didn't load. Check your internet and try again.</p>
+            <button
+              onClick={() => setReloadKey(k => k + 1)}
+              className={`${FUN} ${PRESS} px-6 py-3 rounded-2xl bg-[#FFC83D] text-[#2E1065] font-bold border-b-[5px] border-[#E0A800]`}
+            >
+              🔄 Try again
+            </button>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-3xl bg-white/10 p-6 text-center space-y-3">
+            <Emoji3D emoji="🌱" className="w-14 h-14 mx-auto" />
+            <p className={`${FUN} text-2xl font-bold text-[#FFC83D]`}>
+              {period === 'week' ? 'A brand new race!' : `Be the first ${profile.classLevel} scholar!`}
+            </p>
+            <p className="font-semibold text-white/85">Win your first star with Mama Titi and take the top spot.</p>
+            <button
+              onClick={onGoToHomework}
+              className={`${FUN} ${PRESS} px-6 py-3.5 rounded-2xl bg-[#FFC83D] text-[#2E1065] text-lg font-bold border-b-[5px] border-[#E0A800]`}
+            >
+              Win stars now ▶
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-end justify-center gap-2 sm:gap-3 pt-6">
+              {p2 && <PodiumColumn entry={p2} place={2} />}
+              {p1 && <PodiumColumn entry={p1} place={1} />}
+              {p3 && <PodiumColumn entry={p3} place={3} />}
+            </div>
 
-          {/* List */}
-          {listUsers.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-xs font-jakarta font-bold text-emerald-200 tracking-wide uppercase">
-                Next in Rank
-              </h3>
-              <div className="space-y-2.5">
-                {listUsers.map(u => (
-                  <div
-                    key={u.id}
-                    className={`p-3.5 rounded-full flex items-center justify-between transition-all ${
-                      u.isUser
-                        ? 'bg-[#E9D5FF] text-slate-900 border-2 border-purple-500 shadow-md'
-                        : 'bg-white text-slate-900'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <span
-                        className={`w-6 text-center font-jakarta font-bold text-sm ${
-                          u.isUser ? 'text-purple-900' : 'text-purple-700'
-                        }`}
-                      >
-                        {u.rank}
-                      </span>
-                      <Avatar user={u} size="sm" />
-                      <div>
-                        <h4 className="font-jakarta font-bold text-sm leading-tight">
-                          {u.isUser ? 'You (' + profile.name + ') 🇳🇬' : u.name}
-                        </h4>
-                        <p
-                          className={`text-[11px] ${
-                            u.isUser ? 'text-purple-800' : 'text-slate-500'
-                          } font-sans`}
-                        >
-                          {'⭐ ' + u.stars + ' stars'}
-                        </p>
-                      </div>
+            {/* Goal card */}
+            <div className="rounded-3xl bg-gradient-to-br from-[#FFC83D] to-[#FF6B35] p-4 text-[#2E1065] border-b-[6px] border-[#D9480F] space-y-3">
+              {data?.hidden ? (
+                <p className={`${FUN} text-xl font-bold`}>Your parent has hidden you from the leaderboard. You can still win stars!</p>
+              ) : !me ? (
+                <div className="flex items-center gap-3">
+                  <Emoji3D emoji="🌟" className="w-12 h-12 shrink-0" />
+                  <p className={`${FUN} text-2xl font-bold leading-tight`}>Win your first star to join the board!</p>
+                </div>
+              ) : !above ? (
+                <div className="flex items-center gap-3">
+                  <Emoji3D emoji="👑" className="w-12 h-12 shrink-0" />
+                  <p className={`${FUN} text-2xl font-bold leading-tight`}>You're number 1! Keep your crown!</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <Emoji3D emoji="🎯" className="w-12 h-12 shrink-0" />
+                    <div>
+                      <p className={`${FUN} text-2xl font-bold leading-tight`}>
+                        {above.score - me.score + 1} more {above.score - me.score + 1 === 1 ? 'star' : 'stars'} to pass {above.name.split(' ')[0]}!
+                      </p>
+                      <p className="font-bold opacity-80">You're number {me.rank} {period === 'week' ? 'this week' : 'of all time'}</p>
                     </div>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-jakarta font-bold ${
-                        u.isUser
-                          ? 'bg-purple-700 text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {u.levelBadge}
+                  </div>
+                  <div className="h-4 rounded-full bg-white/50 overflow-hidden">
+                    <div className="h-full rounded-full bg-[#15803D]" style={{ width: `${Math.round((me.score / (above.score + 1)) * 100)}%` }} />
+                  </div>
+                </>
+              )}
+              <button
+                onClick={onGoToHomework}
+                className={`${FUN} ${PRESS} w-full py-3 rounded-2xl bg-[#2E1065] text-[#FFC83D] text-lg font-bold border-b-[5px] border-black/40`}
+              >
+                Win stars now ▶
+              </button>
+            </div>
+
+            {listRows.length > 0 && (
+              <div className="space-y-2">
+                {listRows.map(entry => (
+                  <div
+                    key={`${entry.rank}-${entry.name}`}
+                    className={`rounded-2xl px-3 py-2.5 flex items-center gap-3 ${entry.isMe ? 'bg-[#FFC83D] text-[#2E1065]' : 'bg-white/10'}`}
+                  >
+                    <span className={`${FUN} w-8 text-center text-xl font-bold`}>{entry.rank}</span>
+                    <Avatar entry={entry} size="w-11 h-11 text-xl" />
+                    <span className={`${FUN} text-lg font-semibold flex-1 truncate`}>{entry.isMe ? `You (${entry.name.split(' ')[0]})` : entry.name}</span>
+                    <span className="font-extrabold inline-flex items-center gap-1 text-lg">
+                      <Emoji3D emoji="⭐" className="w-6 h-6" />
+                      {entry.score}
                     </span>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </>
+        )}
 
-          {/* Encouragement Banner */}
-          {selfEntry && (
-            <div className="p-5 rounded-3xl bg-[#6D28D9] text-white space-y-3 shadow-xl">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1 max-w-xs">
-                  <h4 className="font-serif font-bold text-lg leading-tight">
-                    You are #{selfEntry.rank} in {profile.classLevel}! 🦾
-                  </h4>
-                  <p className="text-xs text-purple-200 font-sans">
-                    Keep answering questions with Mama Titi to climb higher!
-                  </p>
-                </div>
-                <button
-                  onClick={onGoToHomework}
-                  className="px-5 py-3 rounded-full bg-[#FF6B35] hover:bg-[#E85523] text-white font-jakarta font-bold text-xs transition-all"
-                >
-                  Go! 🚀
-                </button>
-              </div>
+        {/* How to win stars */}
+        <div className="rounded-3xl bg-white/5 border-2 border-white/10 p-4 space-y-2">
+          <p className={`${FUN} text-xl font-bold inline-flex items-center gap-2`}>
+            <Emoji3D emoji="⭐" className="w-7 h-7" /> How to win stars
+          </p>
+          <div className="grid grid-cols-2 gap-2 text-sm font-bold">
+            <p className="rounded-2xl bg-white/10 px-3 py-2 flex items-center gap-2"><Emoji3D emoji="💬" className="w-7 h-7 shrink-0" />Homework with Mama Titi</p>
+            <p className="rounded-2xl bg-white/10 px-3 py-2 flex items-center gap-2"><Emoji3D emoji="🏆" className="w-7 h-7 shrink-0" />Weekly Challenge</p>
+            <p className="rounded-2xl bg-white/10 px-3 py-2 flex items-center gap-2"><Emoji3D emoji="🎓" className="w-7 h-7 shrink-0" />Exam Prep</p>
+            <p className="rounded-2xl bg-white/10 px-3 py-2 flex items-center gap-2"><Emoji3D emoji="🎮" className="w-7 h-7 shrink-0" />Game Zone</p>
+          </div>
+        </div>
+
+        {/* The child's own row, always visible */}
+        {myEntry && !isLoading && (
+          <div className="absolute left-3 right-3 bottom-3 sm:left-6 sm:right-6">
+            <div className="rounded-2xl bg-white text-[#2E1065] shadow-2xl px-3 py-2.5 flex items-center gap-3 border-b-4 border-slate-300">
+              <span className={`${FUN} w-8 text-center text-xl font-bold`}>{myEntry.rank}</span>
+              <Avatar entry={myEntry} size="w-11 h-11 text-xl" />
+              <span className={`${FUN} text-lg font-bold flex-1`}>You</span>
+              <span className="font-extrabold inline-flex items-center gap-1 text-lg">
+                <Emoji3D emoji="⭐" className="w-6 h-6" />
+                {myEntry.score}
+              </span>
             </div>
-          )}
-        </>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
