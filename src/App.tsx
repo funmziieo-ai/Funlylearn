@@ -223,8 +223,24 @@ export default function App() {
       // every single time instead of just once.
       setView(hasRealName(profile) ? 'app' : 'onboarding');
     } else {
+      setAuthMode('signup');
       setView('auth');
     }
+  };
+
+  // Which tab the sign-in screen opens on: Log in or Create account.
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup');
+
+  // "Log in" always shows the sign-in form, even on a phone that was
+  // used as a guest, so a guest can log into their real account.
+  const handleLogIn = () => {
+    setAuthMode('signin');
+    setView('auth');
+  };
+
+  const handleSignUp = () => {
+    setAuthMode('signup');
+    setView('auth');
   };
 
   const handleStartCatchingUp = () => {
@@ -355,13 +371,18 @@ export default function App() {
           <LandingPage
             onStartLearning={handleStartLearning}
             onStartCatchingUp={handleStartCatchingUp}
+            onLogIn={handleLogIn}
+            onSignUp={handleSignUp}
           />
         )}
 
         {view === 'auth' && (
           <AuthScreen
+            key={authMode}
+            initialMode={authMode}
             onAuthSuccess={handleAuthSuccess}
             onContinueAsGuest={handleContinueAsGuest}
+            onBack={() => setView('landing')}
           />
         )}
 
