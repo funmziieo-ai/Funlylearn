@@ -14,12 +14,16 @@ const HAPPY_SMILEY_DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYg
 interface AuthScreenProps {
   onAuthSuccess: (user: any) => void;
   onContinueAsGuest: () => void;
+  // Which form to open on: "signin" (Log in) or "signup" (Create account).
+  initialMode?: 'signin' | 'signup';
+  // Goes back to the landing page.
+  onBack?: () => void;
 }
 
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinueAsGuest }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinueAsGuest, initialMode = 'signin', onBack }) => {
   const [showPassword, setShowPassword] = useState(false);
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -96,6 +100,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
       className="min-h-screen flex flex-col items-center justify-center px-5 py-10 relative overflow-hidden"
       style={{ background: 'linear-gradient(to bottom, #7ED9A8 0%, #2FAE73 30%, #0E8256 60%, #064E3B 100%)' }}
     >
+      {onBack && (
+        <button
+          onClick={onBack}
+          aria-label="Back to the home page"
+          className="absolute top-4 left-4 z-20 px-4 py-2.5 rounded-2xl bg-white/90 text-[#064E3B] font-bold shadow-lg transition-transform active:translate-y-[3px]"
+        >
+          ◀ Back
+        </button>
+      )}
       <div className="w-full max-w-sm relative z-10">
 
         {/* Card now uses a distinctly brighter green (#0E8256) than the
@@ -200,7 +213,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
           Skip for now — Continue as Guest
         </button>
         <p className="text-center text-emerald-200/70 text-[11px] mt-1.5 px-4">
-          5 free messages a day as a guest. Sign in anytime to save your stars.
+          Guests get the 7-day free trial too. Create an account to keep your stars on any phone.
         </p>
       </div>
     </div>
