@@ -1013,3 +1013,69 @@ export async function getLatestWeeklyTestResult(userId: string): Promise<WeeklyT
   const data = await callWeeklyTestFunction({ action: 'latest_result', userId });
   return data?.result || null;
 }
+
+// ============================================================
+// LEADERBOARD v2 (get_leaderboard in leaderboard-migration.sql)
+// ============================================================
+// Names arrive already shortened to first name + surname initial, and
+// "isMe" is decided on the server, so the child is always recognised.
+
+export type LeaderboardPeriod = 'week' | 'all';
+
+export interface LeaderboardEntry {
+  rank: number;
+  name: string;
+  score: number;
+  isMe: boolean;
+}
+
+export interface LeaderboardData {
+  rows: LeaderboardEntry[];
+  me: { rank: number; score: number } | null;
+  above: { name: string; score: number } | null;
+  hidden: boolean;
+  total: number;
+}
+
+export async function fetchLeaderboardV2(
+  userKey: string,
+  classLevel: string,
+  period: LeaderboardPeriod,
+  limit: number = 50
+): Promise<LeaderboardData | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.rpc('get_leaderboard', {
+      p_user_key: userKey,
+      p_class: classLevel,
+      p_period: period,
+      p_limit: limit
+    });
+    if (error || !data) {
+      console.warn('Leaderboard load failed:', error?.message);
+      return null;
+    }
+    const d = data as any;
+    return {
+      rows: Array.isArray(d.rows) ? d.rows : [],
+      me: d.me || null,
+      above: d.above || null,
+      hidden: Boolean(d.hidden),
+      total: Number(d.total) || 0
+    };
+  } catch (e) {
+    console.warn('Leaderboard load failed:', e);
+    return null;
+  }
+}
+
+// Parents' switch: hide or show the child on the leaderboard.
+export async function setLeaderboardHidden(userKey: string, hidden: boolean): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data, error } = await supabase.rpc('set_leaderboard_hidden', { p_user_key: userKey, p_hidden: hidden });
+    return !error && Boolean(data);
+  } catch (e) {
+    return false;
+  }
+}
