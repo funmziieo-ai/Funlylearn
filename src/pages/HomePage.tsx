@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Camera, GraduationCap, Languages, Trophy, Smartphone } from 'lucide-react';
 import { UserProfile } from '../types';
+import { emoji3dUrl } from '../components/Emoji3D';
 
 // Real 3D illustrations (CC0-licensed, from 3dicons.co) load from the
 // public/ folder as plain paths rather than bundler imports -- this is
@@ -77,7 +78,8 @@ export const HomePage: React.FC<HomePageProps> = ({ profile, onNavigate, onProfi
         ? 'Kọ Yoruba nipasẹ ere igbadun'
         : 'Learn Yoruba through fun games',
       icon: Languages,
-      illustrationPath: '/assets/images/naija-lingo.png',
+      // The Game Zone's 3D game controller (replaces the placeholder icon).
+      illustrationPath: emoji3dUrl('🎮'),
       bg: 'bg-purple-500',
       pillValue: profile.lingoLevel || 1,
       pillLabel: isYoruba ? 'ipele' : 'level',
