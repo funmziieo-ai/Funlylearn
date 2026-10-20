@@ -290,7 +290,12 @@ export async function fetchAudioTTS(
       .replace(/[✅❌⭐🌟📚🎮🇳🇬🇬🇧👍💪🔊📝🎯🏆🎉]/gu, '')
       .trim();
 
-    const voice = 'Idera';
+    // Yorùbá text uses a YarnGPT Yorùbá voice (chosen in yarngpt-proxy);
+    // everything else uses Idera, YarnGPT's English voice. The Yorùbá
+    // label is new, so clips saved earlier (read with the English voice)
+    // are never replayed.
+    const isYorubaText = ['yo', 'yor', 'yoruba'].includes(String(language || '').toLowerCase());
+    const voice = isYorubaText ? 'yarngpt-yoruba-v2' : 'Idera';
     const cacheKey = await hashCacheKey(cleanText, voice, language);
 
     // Check the local cache first — this is what makes repeat text
@@ -327,7 +332,8 @@ export async function fetchAudioTTS(
           },
           body: JSON.stringify({
             text: cleanText,
-            voice,
+            voice: isYorubaText ? undefined : voice,
+            language: isYorubaText ? 'yoruba' : 'english',
             response_format: 'mp3'
           }),
           signal: controller.signal
