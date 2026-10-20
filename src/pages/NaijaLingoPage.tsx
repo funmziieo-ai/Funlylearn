@@ -846,7 +846,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                   </div>
                   <SyncedReadAlong
                     text={levelWords[0].word + ' means ' + levelWords[0].englishTranslation + '. ' + levelWords[0].culturalNote}
-                    language="yo"
+                    language="en"
                   />
                   <div className="rounded-2xl bg-[#FFF4D1] p-3">
                     <p className={`${FUN} font-semibold text-[#8A5A00]`}>🌍 Did you know?</p>
