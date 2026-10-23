@@ -1,12 +1,11 @@
 name: Build Android APK + AAB
 
 # This entire build runs on GitHub's servers, not your Chromebook.
-# Trigger it manually from the "Actions" tab in your repo, or it will
-# also run automatically any time you push to the main branch.
+# Run it from the "Actions" tab: Build Android APK + AAB -> Run workflow.
+# It no longer runs on every commit, so ordinary website changes don't
+# trigger a 5-15 minute app build.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
   build:
@@ -51,18 +50,31 @@ jobs:
 
       - name: Install Capacitor
         run: |
-          npm install @capacitor/core
-          npm install -D @capacitor/cli
-          npm install @capacitor/android
-          npm install @capacitor/browser
+          # Pinned to version 8 to match @capacitor/core in package.json.
+          npm install @capacitor/core@^8
+          npm install -D @capacitor/cli@^8
+          npm install @capacitor/android@^8
+          npm install @capacitor/browser@^8
 
       - name: Create Capacitor config
         run: |
+          # The app opens the live funlylearn.com, so every website update
+          # appears in the app straight away, with no new app release.
+          # To make the app carry its own copy instead, delete the
+          # "server" block below.
           cat > capacitor.config.json << 'EOF'
           {
             "appId": "com.funlylearn.app",
             "appName": "FunlyLearn",
-            "webDir": "dist"
+            "webDir": "dist",
+            "server": {
+              "url": "https://funlylearn.com",
+              "androidScheme": "https",
+              "cleartext": false
+            },
+            "android": {
+              "allowMixedContent": false
+            }
           }
           EOF
 
@@ -81,6 +93,16 @@ jobs:
           sed -i '/<\/manifest>/i\    <uses-feature android:name="android.hardware.camera" android:required="false" />' android/app/src/main/AndroidManifest.xml
           echo "Manifest after patching:"
           cat android/app/src/main/AndroidManifest.xml
+
+      # Google Play only accepts an upload whose version code is higher
+      # than the last one, so every build uses GitHub's run number
+      # (1, 2, 3...) as its version code, e.g. version 1.0.7 = build 7.
+      - name: Set the app version from the build number
+        run: |
+          sed -i "s/versionCode [0-9][0-9]*/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
+          echo "Version set to:"
+          grep -E "versionCode|versionName" android/app/build.gradle
 
       - name: Set up app icon
         run: |
