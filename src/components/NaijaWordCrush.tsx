@@ -6,6 +6,7 @@ import { UserProfile } from '../types';
 import { gameAudio } from '../utils/gameAudio';
 import { Emoji3D } from './Emoji3D';
 import { ShareSheet, ShareData, openNativeShare } from './ShareSheet';
+import { QuickNamePrompt } from './QuickNamePrompt';
 
 export interface NaijaWordCrushProps {
   profile?: UserProfile;
@@ -1366,6 +1367,7 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
         )}
 
         <ShareSheet data={shareData} onClose={() => setShareData(null)} />
+        {profile && <QuickNamePrompt profile={profile} onProfileUpdate={onProfileUpdate} />}
 
         {toast && (
           <div className={`${FUN} fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-white text-[#7E22CE] font-semibold px-5 py-3 rounded-2xl shadow-xl max-w-xs text-center`}>
