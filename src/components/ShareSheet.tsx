@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Emoji3D } from './Emoji3D';
+import { shareFromApp } from '../utils/native';
 
 export interface ShareData {
   title: string;
@@ -12,6 +13,8 @@ export interface ShareData {
 // browser doesn't have one (for example inside the Android app), so the
 // caller can show the FunlyLearn share card instead.
 export async function openNativeShare(data: ShareData): Promise<boolean> {
+  // Inside the FunlyLearn app: the phone's native share menu.
+  if (await shareFromApp(data)) return true;
   const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string; url?: string }) => Promise<void> };
   if (typeof nav.share !== 'function') return false;
   try {
@@ -22,6 +25,15 @@ export async function openNativeShare(data: ShareData): Promise<boolean> {
     if (err instanceof Error && err.name === 'AbortError') return true;
     return false;
   }
+}
+
+// What children send when they share the app itself.
+export function appShareData(): ShareData {
+  return {
+    title: 'FunlyLearn',
+    text: "I'm learning with Mama Titi on FunlyLearn: homework help with Nigerian stories, plus fun games! Try it free:",
+    url: window.location.origin
+  };
 }
 
 const FUN = "font-['Fredoka']";
