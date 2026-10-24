@@ -30,6 +30,7 @@ import { ScholarProfileModal } from './components/ScholarProfileModal';
 import { VoiceKeyModal } from './components/VoiceKeyModal';
 import { NaijaWordCrush } from './components/NaijaWordCrush';
 import { LandingPage } from './pages/LandingPage';
+import { AppStartPage } from './pages/AppStartPage';
 import mamaTitiSplash from './assets/images/mama_titi_official_1784860280943.jpg';
 import { setupAppChrome, onPhoneBackButton, closeApp } from './utils/native';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -55,7 +56,7 @@ import { ProfilePage } from './pages/ProfilePage';
 // behave like an app.
 const IS_NATIVE_APP = typeof navigator !== 'undefined' && navigator.userAgent.includes('FunlyLearnApp');
 // Where "back to start" goes: the homepage on the website, sign-in in the app.
-const START_VIEW = IS_NATIVE_APP ? 'auth' : 'landing';
+const START_VIEW = IS_NATIVE_APP ? 'start' : 'landing';
 
 function hasRealName(p: UserProfile): boolean {
   return Boolean(p.name && p.name.trim().length > 0);
@@ -63,7 +64,7 @@ function hasRealName(p: UserProfile): boolean {
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile>(() => getStoredProfile());
-  const [view, setView] = useState<'splash' | 'landing' | 'auth' | 'onboarding' | 'app' | 'reset-password' | 'welcome-back'>(IS_NATIVE_APP ? 'splash' : 'landing');
+  const [view, setView] = useState<'splash' | 'start' | 'landing' | 'auth' | 'onboarding' | 'app' | 'reset-password' | 'welcome-back'>(IS_NATIVE_APP ? 'splash' : 'landing');
   // A guest's saved profile found online after they signed out, waiting
   // for them to confirm it's them.
   const [returningGuest, setReturningGuest] = useState<UserProfile | null>(null);
@@ -154,7 +155,7 @@ export default function App() {
   // Initialize Supabase Auth Session listener
   useEffect(() => {
     if (!supabase) {
-      if (IS_NATIVE_APP) setView('auth');
+      if (IS_NATIVE_APP) setView('start');
       return;
     }
 
@@ -185,12 +186,11 @@ export default function App() {
           if (hasRealName(profile)) {
             enterAppAsGuest();
           } else {
-            setAuthMode('signup');
-            setView('auth');
+            setView('start');
           }
         }
       }).catch(() => {
-        if (IS_NATIVE_APP) setView('auth');
+        if (IS_NATIVE_APP) setView('start');
       });
     }
 
@@ -456,6 +456,10 @@ export default function App() {
           </div>
         )}
 
+        {view === 'start' && (
+          <AppStartPage onStart={handleSignUp} onLogIn={handleLogIn} />
+        )}
+
         {view === 'landing' && (
           <LandingPage
             onStartLearning={handleStartLearning}
@@ -471,7 +475,7 @@ export default function App() {
             initialMode={authMode}
             onAuthSuccess={handleAuthSuccess}
             onContinueAsGuest={handleContinueAsGuest}
-            onBack={IS_NATIVE_APP ? undefined : () => setView('landing')}
+            onBack={() => setView(START_VIEW)}
           />
         )}
 
