@@ -9,6 +9,7 @@ import { LINGO_LEVELS, getNextLockedLevel, getCoinsToNextLevel } from '../utils/
 import { gameAudio } from '../utils/gameAudio';
 import { Emoji3D } from '../components/Emoji3D';
 import { ShareSheet, ShareData, openNativeShare } from '../components/ShareSheet';
+import { QuickNamePrompt } from '../components/QuickNamePrompt';
 
 interface NaijaLingoPageProps {
   profile: UserProfile;
@@ -626,7 +627,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
               <p className={`${FUN} text-5xl font-bold tracking-tight`}>
                 Game Zone <Emoji3D emoji="🎮" className="inline-block w-14 h-14 align-middle animate-bounce" />
               </p>
-              <p className="text-white/70 font-semibold mt-1">Play, learn and win coins, {profile.name}!</p>
+              <p className="text-white/70 font-semibold mt-1">Play, learn and win coins, {profile.name || 'friend'}!</p>
             </div>
 
             {/* 1. Homework Game (English): the main attraction */}
@@ -1047,7 +1048,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
               </p>
               <p className="font-semibold text-white/80">
                 {perfect
-                  ? `You got every single one right, ${profile.name}!`
+                  ? `You got every single one right, ${profile.name || 'friend'}!`
                   : mode === 'homework'
                   ? 'Play again to practise your homework topics 🎒'
                   : 'Play again to win more coins 🪙'}
@@ -1126,6 +1127,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
         )}
 
         <ShareSheet data={shareData} onClose={() => setShareData(null)} />
+        <QuickNamePrompt profile={profile} onProfileUpdate={onProfileUpdate} />
 
         {toast && (
           <div className={`${FUN} fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-white text-[#7E22CE] font-semibold px-5 py-3 rounded-2xl shadow-xl`}>
