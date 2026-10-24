@@ -5,6 +5,7 @@ import { fetchAudioTTS } from '../services/apiClient';
 import { UserProfile } from '../types';
 import { gameAudio } from '../utils/gameAudio';
 import { Emoji3D } from './Emoji3D';
+import { ShareSheet, ShareData, openNativeShare } from './ShareSheet';
 
 export interface NaijaWordCrushProps {
   profile?: UserProfile;
@@ -296,6 +297,8 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
   const [result, setResult] = useState<RoundResult | null>(null);
   const [best, setBest] = useState(readBest());
   const [coinsPop, setCoinsPop] = useState<string | null>(null);
+  // Share card shown when the phone has no share menu of its own.
+  const [shareData, setShareData] = useState<ShareData | null>(null);
 
   const coins = profile?.coins || 0;
 
@@ -1336,9 +1339,14 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
                 </button>
               </div>
               <button
-                onClick={() => {
-                  const text = `🍬 I got ${result.got}/${result.total} in ${GAME_NAMES[result.game].slice(3)} on FunlyLearn Naija Word Crush! Can you beat me? ${window.location.origin}`;
-                  window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
+                onClick={async () => {
+                  gameAudio.sfx('tap');
+                  const data: ShareData = {
+                    title: 'FunlyLearn Word Crush',
+                    text: `🍬 I got ${result.got}/${result.total} in ${GAME_NAMES[result.game].slice(3)} on FunlyLearn Word Crush! Can you beat me?`,
+                    url: `${window.location.origin}/?invite=word_crush`
+                  };
+                  if (!(await openNativeShare(data))) setShareData(data);
                 }}
                 className={`${PRESS} ${FUN} w-full py-4 rounded-2xl bg-[#16A34A] text-xl font-semibold border-b-[6px] border-[#064E3B]`}
               >
@@ -1356,6 +1364,8 @@ export const NaijaWordCrush: React.FC<NaijaWordCrushProps> = ({ profile, onBackT
             🎵 Tap anywhere for music
           </button>
         )}
+
+        <ShareSheet data={shareData} onClose={() => setShareData(null)} />
 
         {toast && (
           <div className={`${FUN} fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-white text-[#7E22CE] font-semibold px-5 py-3 rounded-2xl shadow-xl max-w-xs text-center`}>
