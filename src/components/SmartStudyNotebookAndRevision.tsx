@@ -65,6 +65,13 @@ export interface ExamType {
   subjects: ExamSubject[];
 }
 
+
+// Printing doesn't work inside the Android app (its built-in browser has
+// no print support), so the Print buttons only show on the website.
+const INSIDE_APP =
+  typeof window !== 'undefined' &&
+  (Boolean((window as any).Capacitor?.isNativePlatform?.()) || navigator.userAgent.includes('FunlyLearnApp'));
+
 const EXAM_META: Omit<ExamType, 'subjects'>[] = [
   {
     id: 'fslc',
@@ -1621,12 +1628,14 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                   ) : (
                     <span />
                   )}
-                  <button
-                    onClick={handlePrintNotebook}
-                    className={`${FUN} ${PRESS} shrink-0 px-4 py-2.5 rounded-2xl bg-white border-2 border-b-4 border-slate-300 font-semibold text-[#064E3B]`}
-                  >
-                    {isPremium ? '🖨️ Print' : '🔒 Print'}
-                  </button>
+                  {!INSIDE_APP && (
+                    <button
+                      onClick={handlePrintNotebook}
+                      className={`${FUN} ${PRESS} shrink-0 px-4 py-2.5 rounded-2xl bg-white border-2 border-b-4 border-slate-300 font-semibold text-[#064E3B]`}
+                    >
+                      {isPremium ? '🖨️ Print' : '🔒 Print'}
+                    </button>
+                  )}
                 </div>
 
                 {isLoadingNotes ? (
@@ -1893,12 +1902,14 @@ export const SmartStudyNotebookAndRevision: React.FC<SmartStudyNotebookAndRevisi
                       </p>
                       <h2 className={`${FUN} text-2xl font-bold leading-tight`}>{selectedTopic.name}</h2>
                     </div>
-                    <button
-                      onClick={handlePrint}
-                      className={`${FUN} ${PRESS} shrink-0 px-4 py-2 rounded-2xl bg-white text-[#7E22CE] font-semibold border-b-4 border-purple-200`}
-                    >
-                      🖨️ Print
-                    </button>
+                    {!INSIDE_APP && (
+                      <button
+                        onClick={handlePrint}
+                        className={`${FUN} ${PRESS} shrink-0 px-4 py-2 rounded-2xl bg-white text-[#7E22CE] font-semibold border-b-4 border-purple-200`}
+                      >
+                        🖨️ Print
+                      </button>
+                    )}
                   </div>
                 </div>
 
