@@ -72,14 +72,16 @@ jobs:
           # - allowNavigation keeps both addresses inside the app.
           # - appendUserAgent lets the website know it's inside the app,
           #   so it can skip the homepage and feel like an app.
-          # - backgroundColor shows FunlyLearn green while loading.
+          # - backgroundColor: FunlyLearn cream while loading. The splash
+          #   screen hides as soon as FunlyLearn is ready, and never stays
+          #   longer than 3 seconds (so it can't get stuck when offline).
           # To make the app carry its own copy instead, delete "server".
           cat > capacitor.config.json << 'EOF'
           {
             "appId": "com.funlylearn.app",
             "appName": "FunlyLearn",
             "webDir": "dist",
-            "backgroundColor": "#064E3B",
+            "backgroundColor": "#FFF8EC",
             "appendUserAgent": "FunlyLearnApp",
             "server": {
               "url": "https://www.funlylearn.com",
@@ -92,9 +94,9 @@ jobs:
             },
             "plugins": {
               "SplashScreen": {
-                "launchShowDuration": 2500,
+                "launchShowDuration": 3000,
                 "launchAutoHide": true,
-                "backgroundColor": "#064E3B",
+                "backgroundColor": "#FFF8EC",
                 "showSpinner": false
               },
               "StatusBar": {
