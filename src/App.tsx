@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, UserSubscription } from './types';
 import { getStoredProfile, saveStoredProfile, DEFAULT_USER } from './services/apiClient';
 import {
@@ -30,6 +30,8 @@ import { ScholarProfileModal } from './components/ScholarProfileModal';
 import { VoiceKeyModal } from './components/VoiceKeyModal';
 import { NaijaWordCrush } from './components/NaijaWordCrush';
 import { LandingPage } from './pages/LandingPage';
+import mamaTitiSplash from './assets/images/mama_titi_official_1784860280943.jpg';
+import { setupAppChrome, onPhoneBackButton, closeApp } from './utils/native';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { ChatPage } from './pages/ChatPage';
 import { HomePage } from './pages/HomePage';
@@ -47,13 +49,21 @@ import { ProfilePage } from './pages/ProfilePage';
 // created just by loading the page. Used to gate every write to
 // Supabase below, so a bare page visit (landing page, someone who
 // bounces immediately) never creates a ghost row in child_profiles.
+// True inside the FunlyLearn Android/iPhone app. The app adds
+// "FunlyLearnApp" to its browser identity (appendUserAgent in the
+// Capacitor settings), so the site can skip the marketing homepage and
+// behave like an app.
+const IS_NATIVE_APP = typeof navigator !== 'undefined' && navigator.userAgent.includes('FunlyLearnApp');
+// Where "back to start" goes: the homepage on the website, sign-in in the app.
+const START_VIEW = IS_NATIVE_APP ? 'auth' : 'landing';
+
 function hasRealName(p: UserProfile): boolean {
   return Boolean(p.name && p.name.trim().length > 0);
 }
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile>(() => getStoredProfile());
-  const [view, setView] = useState<'landing' | 'auth' | 'onboarding' | 'app' | 'reset-password' | 'welcome-back'>('landing');
+  const [view, setView] = useState<'splash' | 'landing' | 'auth' | 'onboarding' | 'app' | 'reset-password' | 'welcome-back'>(IS_NATIVE_APP ? 'splash' : 'landing');
   // A guest's saved profile found online after they signed out, waiting
   // for them to confirm it's them.
   const [returningGuest, setReturningGuest] = useState<UserProfile | null>(null);
@@ -85,6 +95,39 @@ export default function App() {
   const [isVoiceKeyModalOpen, setIsVoiceKeyModalOpen] = useState<boolean>(false);
   const [dailyMessagesCount, setDailyMessagesCount] = useState<number>(() => getGuestDailyMessageCount().count);
 
+  // Inside the app: green status bar, hide the splash screen, and make
+  // the phone's back button behave like an app (back to Home, then close).
+  const backStateRef = useRef({ view, activeTab, isPricingOpen });
+  backStateRef.current = { view, activeTab, isPricingOpen };
+  useEffect(() => {
+    if (!IS_NATIVE_APP) return;
+    setupAppChrome();
+    return onPhoneBackButton(() => {
+      const { view: v, activeTab: tab, isPricingOpen: pricingOpen } = backStateRef.current;
+      if (pricingOpen) {
+        setIsPricingOpen(false);
+      } else if (v === 'app' && tab !== 'home') {
+        setActiveTab('home');
+      } else {
+        closeApp();
+      }
+    });
+  }, []);
+
+  // Inside the app: no text-selection highlights, no grey tap flash and
+  // no page bounce, so it feels like an app rather than a website.
+  useEffect(() => {
+    if (!IS_NATIVE_APP) return;
+    document.documentElement.classList.add('funlylearn-app');
+    const style = document.createElement('style');
+    style.textContent = `
+      html.funlylearn-app, html.funlylearn-app body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+      html.funlylearn-app body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+      html.funlylearn-app input, html.funlylearn-app textarea, html.funlylearn-app [contenteditable] { -webkit-user-select: text; user-select: text; }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
   // Daily free uses are counted per child: their account id when signed
   // in, otherwise this device's guest id. Re-sync whenever that changes.
   useEffect(() => {
@@ -110,7 +153,10 @@ export default function App() {
 
   // Initialize Supabase Auth Session listener
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) {
+      if (IS_NATIVE_APP) setView('auth');
+      return;
+    }
 
     // Detect a password recovery link directly from the URL, before
     // either auth path below runs. A recovery link creates a real,
@@ -133,11 +179,18 @@ export default function App() {
           setUser(session.user);
           handlePostAuthFlow(session.user);
         } else if (inviteTarget) {
-          // Opened from a game invite link: straight into the game as a
-          // guest, with no homepage and no forms. The game shows a short,
-          // optional "What's your name?" card instead.
           enterGameAsGuest();
+        } else if (IS_NATIVE_APP) {
+          // In the app: returning children go straight in; new ones sign up.
+          if (hasRealName(profile)) {
+            enterAppAsGuest();
+          } else {
+            setAuthMode('signup');
+            setView('auth');
+          }
         }
+      }).catch(() => {
+        if (IS_NATIVE_APP) setView('auth');
       });
     }
 
@@ -234,25 +287,24 @@ export default function App() {
     }
   };
 
-  // Game invite links open the game directly as a guest.
+  // In the app, a child who has used FunlyLearn on this phone goes
+  // straight to Home, with no homepage and no sign-in screen.
+  const enterAppAsGuest = () => {
+    setIsGuest(true);
+    getOrCreateGuestSessionId();
+    applyTrialIfUnpaid(profile);
+    setView('app');
+    setActiveTab('home');
+  };
+
+  // Game invite links open the game directly as a guest: no homepage,
+  // no forms. The game shows a short, optional "What's your name?" card.
   const enterGameAsGuest = () => {
     setIsGuest(true);
     getOrCreateGuestSessionId();
     applyTrialIfUnpaid(profile);
     setView('app');
     setActiveTab(inviteTarget || 'lingo');
-  };
-
-  // "Play now" on a game invite link: straight into the game. A
-  // signed-in player goes right in; anyone else plays as a guest (a
-  // returning guest is recognised, a new one just enters name and class).
-  const handlePlayInvite = () => {
-    if (user) {
-      setView(hasRealName(profile) ? 'app' : 'onboarding');
-      setActiveTab(inviteTarget || 'home');
-      return;
-    }
-    handleContinueAsGuest();
   };
 
   // Which tab the sign-in screen opens on: Log in or Create account.
@@ -350,7 +402,7 @@ export default function App() {
     saveStoredProfile(freshProfile);
     setUser(null);
     setIsGuest(false);
-    setView('landing');
+    setView(START_VIEW);
   };
 
   const handleOnboardingComplete = (updatedProfile: UserProfile) => {
@@ -386,7 +438,7 @@ export default function App() {
         <Navbar
           profile={profile}
           onProfileUpdate={handleProfileUpdate}
-          onNavigateLanding={() => setView('landing')}
+          onNavigateLanding={() => setView(START_VIEW)}
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
@@ -394,12 +446,20 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1">
+        {view === 'splash' && (
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-[#064E3B] text-white">
+            <div className="w-28 h-28 rounded-full bg-white border-[6px] border-[#FFC83D] overflow-hidden shadow-2xl animate-pulse">
+              <img src={mamaTitiSplash} alt="Mama Titi" className="w-full h-full object-cover object-top" />
+            </div>
+            <p className="text-3xl font-extrabold tracking-tight">Funly<span className="text-[#FFC83D]">Learn</span></p>
+            <div className="w-8 h-8 rounded-full border-4 border-white/30 border-t-[#FFC83D] animate-spin" aria-label="Loading" />
+          </div>
+        )}
+
         {view === 'landing' && (
           <LandingPage
             onStartLearning={handleStartLearning}
             onStartCatchingUp={handleStartCatchingUp}
-            invite={inviteTarget === 'lingo' || inviteTarget === 'word_crush' ? inviteTarget : null}
-            onPlayInvite={handlePlayInvite}
             onLogIn={handleLogIn}
             onSignUp={handleSignUp}
           />
@@ -411,7 +471,7 @@ export default function App() {
             initialMode={authMode}
             onAuthSuccess={handleAuthSuccess}
             onContinueAsGuest={handleContinueAsGuest}
-            onBack={() => setView('landing')}
+            onBack={IS_NATIVE_APP ? undefined : () => setView('landing')}
           />
         )}
 
@@ -451,7 +511,7 @@ export default function App() {
           <OnboardingPage
             initialProfile={profile}
             onComplete={handleOnboardingComplete}
-            onExit={() => setView('landing')}
+            onExit={() => setView(START_VIEW)}
           />
         )}
 
