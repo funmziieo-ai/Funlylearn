@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home, Search, MoreHorizontal, User, Crown, X } from 'lucide-react';
+import { Home, Search, MoreHorizontal, User, Crown, X, Share2 } from 'lucide-react';
+import { ShareSheet, ShareData, openNativeShare, appShareData } from './ShareSheet';
 
 interface BottomNavProps {
   activeTab: string;
@@ -21,6 +22,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onOpenProfileModal
 }) => {
   const [showMore, setShowMore] = useState(false);
+  const [shareData, setShareData] = useState<ShareData | null>(null);
+  const shareApp = async () => {
+    const data = appShareData();
+    if (!(await openNativeShare(data))) setShareData(data);
+  };
   const moreRef = useRef<HTMLDivElement | null>(null);
 
   // Each primary item either switches to a real tab (isTabItem: true)
@@ -50,6 +56,13 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       label: 'My Scholar Profile',
       icon: User,
       onSelect: () => (onOpenProfileModal ? onOpenProfileModal() : onTabChange('me')),
+      isTabItem: false
+    },
+    {
+      id: 'share',
+      label: 'Share FunlyLearn',
+      icon: Share2,
+      onSelect: shareApp,
       isTabItem: false
     }
   ];
@@ -152,6 +165,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           </button>
         </div>
       </nav>
+      <ShareSheet data={shareData} onClose={() => setShareData(null)} />
     </>
   );
 };
