@@ -8,6 +8,7 @@ import { fetchHomeworkRecords, getClassNotesForSession, getWeeklyTest } from '..
 import { LINGO_LEVELS, getNextLockedLevel, getCoinsToNextLevel } from '../utils/coinsSystem';
 import { gameAudio } from '../utils/gameAudio';
 import { Emoji3D } from '../components/Emoji3D';
+import { ShareSheet, ShareData, openNativeShare } from '../components/ShareSheet';
 
 interface NaijaLingoPageProps {
   profile: UserProfile;
@@ -337,11 +338,21 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
     setTimeout(() => setToast(null), 2400);
   };
 
-  const handleShareOnWhatsApp = (scoreText?: string) => {
-    const shareText = scoreText
-      ? `${scoreText} Can you beat me? 😎 Play Naija Lingo on FunlyLearn: ${window.location.origin}`
-      : `I'm learning Yorùbá with Mama Titi on FunlyLearn's Naija Lingo! 🥁 Come and play: ${window.location.origin}`;
-    window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(shareText), '_blank');
+  // Share to any app: the phone's own share menu if it has one,
+  // otherwise the FunlyLearn share card. The link takes friends straight
+  // into the Game Zone after they sign up.
+  const [shareData, setShareData] = useState<ShareData | null>(null);
+  const handleShare = async (scoreText?: string) => {
+    gameAudio.sfx('tap');
+    const data: ShareData = {
+      title: 'FunlyLearn Game Zone',
+      text: scoreText
+        ? `${scoreText} Can you beat me? 😎 Play on FunlyLearn:`
+        : "I'm playing games made from my homework on FunlyLearn! 🎮 Come and play:",
+      url: `${window.location.origin}/?invite=lingo`
+    };
+    const shared = await openNativeShare(data);
+    if (!shared) setShareData(data);
   };
 
   const openLevel = (levelId: number) => {
@@ -801,7 +812,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
             </div>
 
             <button
-              onClick={() => handleShareOnWhatsApp()}
+              onClick={() => handleShare()}
               className={`${PRESS} ${FUN} w-full py-4 rounded-2xl bg-[#16A34A] text-xl font-semibold border-b-[6px] border-[#064E3B]`}
             >
               📲 Invite friends to play
@@ -1084,7 +1095,7 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
                 </button>
               </div>
               <button
-                onClick={() => handleShareOnWhatsApp(
+                onClick={() => handleShare(
                   mode === 'homework'
                     ? `🎒 I scored ${correctCount}/${total} in my FunlyLearn Homework Game!`
                     : `🥁 I scored ${correctCount}/${total} in Naija Lingo ${currentLevel.name} on FunlyLearn!`
@@ -1113,6 +1124,8 @@ export const NaijaLingoPage: React.FC<NaijaLingoPageProps> = ({
             🎵 Tap anywhere for music
           </button>
         )}
+
+        <ShareSheet data={shareData} onClose={() => setShareData(null)} />
 
         {toast && (
           <div className={`${FUN} fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-white text-[#7E22CE] font-semibold px-5 py-3 rounded-2xl shadow-xl`}>
