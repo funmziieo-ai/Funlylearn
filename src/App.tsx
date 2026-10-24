@@ -31,7 +31,6 @@ import { VoiceKeyModal } from './components/VoiceKeyModal';
 import { NaijaWordCrush } from './components/NaijaWordCrush';
 import { LandingPage } from './pages/LandingPage';
 import { AppStartPage } from './pages/AppStartPage';
-import mamaTitiSplash from './assets/images/mama_titi_official_1784860280943.jpg';
 import { setupAppChrome, onPhoneBackButton, closeApp } from './utils/native';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { ChatPage } from './pages/ChatPage';
@@ -447,12 +446,18 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1">
         {view === 'splash' && (
-          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-[#064E3B] text-white">
-            <div className="w-28 h-28 rounded-full bg-white border-[6px] border-[#FFC83D] overflow-hidden shadow-2xl animate-pulse">
-              <img src={mamaTitiSplash} alt="Mama Titi" className="w-full h-full object-cover object-top" />
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#FFF8EC]">
+            <style>{`
+              @keyframes fl-load { 0% { transform: translateX(-100%) } 100% { transform: translateX(250%) } }
+              .fl-load { animation: fl-load 1.3s ease-in-out infinite; }
+              @media (prefers-reduced-motion: reduce) { .fl-load { animation: none; transform: none; width: 100% !important; } }
+            `}</style>
+            <p className="font-['Fredoka'] text-5xl font-bold tracking-tight text-slate-900">
+              Funly<span className="text-[#15803D]">Learn</span>
+            </p>
+            <div className="mt-5 w-40 h-1.5 rounded-full bg-[#15803D]/15 overflow-hidden" role="progressbar" aria-label="Loading">
+              <div className="fl-load h-full w-2/5 rounded-full bg-[#15803D]" />
             </div>
-            <p className="text-3xl font-extrabold tracking-tight">Funly<span className="text-[#FFC83D]">Learn</span></p>
-            <div className="w-8 h-8 rounded-full border-4 border-white/30 border-t-[#FFC83D] animate-spin" aria-label="Loading" />
           </div>
         )}
 
