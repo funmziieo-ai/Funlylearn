@@ -132,6 +132,11 @@ export default function App() {
         if (session?.user) {
           setUser(session.user);
           handlePostAuthFlow(session.user);
+        } else if (inviteTarget) {
+          // Opened from a game invite link: straight into the game as a
+          // guest, with no homepage and no forms. The game shows a short,
+          // optional "What's your name?" card instead.
+          enterGameAsGuest();
         }
       });
     }
@@ -222,10 +227,32 @@ export default function App() {
       // returning users through the "What class are you in?" screen
       // every single time instead of just once.
       setView(hasRealName(profile) ? 'app' : 'onboarding');
+      if (hasRealName(profile)) setActiveTab(inviteTarget || 'home');
     } else {
       setAuthMode('signup');
       setView('auth');
     }
+  };
+
+  // Game invite links open the game directly as a guest.
+  const enterGameAsGuest = () => {
+    setIsGuest(true);
+    getOrCreateGuestSessionId();
+    applyTrialIfUnpaid(profile);
+    setView('app');
+    setActiveTab(inviteTarget || 'lingo');
+  };
+
+  // "Play now" on a game invite link: straight into the game. A
+  // signed-in player goes right in; anyone else plays as a guest (a
+  // returning guest is recognised, a new one just enters name and class).
+  const handlePlayInvite = () => {
+    if (user) {
+      setView(hasRealName(profile) ? 'app' : 'onboarding');
+      setActiveTab(inviteTarget || 'home');
+      return;
+    }
+    handleContinueAsGuest();
   };
 
   // Which tab the sign-in screen opens on: Log in or Create account.
@@ -371,6 +398,8 @@ export default function App() {
           <LandingPage
             onStartLearning={handleStartLearning}
             onStartCatchingUp={handleStartCatchingUp}
+            invite={inviteTarget === 'lingo' || inviteTarget === 'word_crush' ? inviteTarget : null}
+            onPlayInvite={handlePlayInvite}
             onLogIn={handleLogIn}
             onSignUp={handleSignUp}
           />
