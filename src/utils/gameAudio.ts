@@ -22,11 +22,14 @@ const MUSIC_FILES: Partial<Record<MusicTrack, string>> = {
   hub: '/audio/game-hub.mp3',
   game: '/audio/game-play.mp3',
 };
-const FILE_VOLUME = 0.5;
+const FILE_VOLUME = 1.0; // uploaded MP3s at full volume
 
-const MUSIC_VOLUME = 0.55; // louder, so it's clearly heard on phone speakers
-const DUCKED_VOLUME = 0.08;
-const SFX_VOLUME = 0.7;
+const MUSIC_VOLUME = 0.9; // loud and clear on phone speakers
+const DUCKED_VOLUME = 0.15;
+const SFX_VOLUME = 1.0;
+// Extra loudness for phone speakers. A limiter after it stops loud
+// moments from crackling.
+const MASTER_BOOST = 1.8;
 const PREFS_KEY = 'funlylearn_game_audio_prefs';
 
 interface AudioPrefs { music: boolean; sfx: boolean; }
@@ -101,12 +104,23 @@ class GameAudio {
       const Ctx = window.AudioContext || (window as any).webkitAudioContext;
       if (!Ctx) return null;
       this.ctx = new Ctx();
+      // music + effects -> boost -> limiter -> speaker
+      const limiter = this.ctx.createDynamicsCompressor();
+      limiter.threshold.value = -12;
+      limiter.knee.value = 8;
+      limiter.ratio.value = 12;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.25;
+      limiter.connect(this.ctx.destination);
+      const master = this.ctx.createGain();
+      master.gain.value = MASTER_BOOST;
+      master.connect(limiter);
       this.musicBus = this.ctx.createGain();
       this.musicBus.gain.value = MUSIC_VOLUME;
-      this.musicBus.connect(this.ctx.destination);
+      this.musicBus.connect(master);
       this.sfxBus = this.ctx.createGain();
       this.sfxBus.gain.value = SFX_VOLUME;
-      this.sfxBus.connect(this.ctx.destination);
+      this.sfxBus.connect(master);
     }
     return this.ctx;
   }
