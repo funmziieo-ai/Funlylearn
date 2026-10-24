@@ -12,14 +12,14 @@ interface LandingPageProps {
 // Put a real photo of a Nigerian child doing homework on a phone at
 // public/assets/images/landing-hero.jpg and it shows here automatically.
 // Until then, a phone mock-up of Mama Titi's chat is shown instead.
-const HERO_PHOTO = '/assets/images/landing-hero.jpg';
+export const HERO_PHOTO = '/assets/images/landing-hero.jpg';
 
 // English first, then Yorùbá, Igbo and Hausa, one at a time.
 const GREETINGS = ['Welcome', 'Ẹ káàbọ̀', 'Nnọọ', 'Barka da zuwa'];
 
 const FUN = "font-['Fredoka']";
 const PRESS = 'transition-transform active:translate-y-[4px]';
-const ANKARA: React.CSSProperties = {
+export const ANKARA: React.CSSProperties = {
   backgroundColor: '#064E3B',
   backgroundImage: [
     'linear-gradient(135deg, #FFC83D 25%, transparent 25%)',
@@ -29,7 +29,7 @@ const ANKARA: React.CSSProperties = {
   ].join(','),
   backgroundSize: '28px 28px'
 };
-const ANKARA_DOTS: React.CSSProperties = {
+export const ANKARA_DOTS: React.CSSProperties = {
   backgroundImage: [
     'radial-gradient(circle at 10px 10px, rgba(255,200,61,.35) 3px, transparent 3.5px)',
     'radial-gradient(circle at 24px 24px, rgba(255,107,53,.25) 3px, transparent 3.5px)'
@@ -37,7 +37,7 @@ const ANKARA_DOTS: React.CSSProperties = {
   backgroundSize: '28px 28px'
 };
 
-const STYLES = `
+export const STYLES = `
 .lp-greet { display: inline-block; transition: transform .35s ease, opacity .35s ease; }
 .lp-greet.out { transform: translateY(-100%); opacity: 0; }
 .lp-greet.in { transform: translateY(100%); opacity: 0; transition: none; }
@@ -51,7 +51,7 @@ const STYLES = `
 @media (prefers-reduced-motion: reduce) { .lp-float, .lp-float2, .lp-wiggle, .lp-greet, .lp-pop { animation: none !important; transition: none !important; } }
 `;
 
-function useFunFonts() {
+export function useFunFonts() {
   useEffect(() => {
     const id = 'funlylearn-fun-fonts';
     if (document.getElementById(id)) return;
@@ -63,7 +63,7 @@ function useFunFonts() {
   }, []);
 }
 
-const MovingGreeting: React.FC = () => {
+export const MovingGreeting: React.FC = () => {
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<'' | 'out' | 'in'>('');
 
@@ -112,7 +112,7 @@ const STORIES: Story[] = [
 ];
 
 // One conversation plays out, then the next story begins.
-const StoryChat: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
+export const StoryChat: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
   const [storyIndex, setStoryIndex] = useState(0);
   const [step, setStep] = useState(4); // 1 question, 2 story, 3 answer, 4 praise
 
