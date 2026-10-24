@@ -10,6 +10,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Needed so the build can publish the APK as a GitHub Release.
+    permissions:
+      contents: write
     # A normal run of this whole workflow takes 5-15 minutes. If any
     # single step hangs (a stuck interactive prompt, a stalled
     # download), this forces the whole job to fail after 30 minutes
@@ -55,25 +58,50 @@ jobs:
           npm install -D @capacitor/cli@^8
           npm install @capacitor/android@^8
           npm install @capacitor/browser@^8
+          # Phone features the website uses inside the app: back button,
+          # green status bar, splash screen and the native share menu.
+          npm install @capacitor/app@^8 @capacitor/status-bar@^8 @capacitor/splash-screen@^8 @capacitor/share@^8
 
       - name: Create Capacitor config
         run: |
-          # The app opens the live funlylearn.com, so every website update
-          # appears in the app straight away, with no new app release.
-          # To make the app carry its own copy instead, delete the
-          # "server" block below.
+          # The app opens the live www.funlylearn.com, so every website
+          # update appears in the app straight away, with no new app
+          # release. Notes:
+          # - "www." matters: funlylearn.com redirects to www, and a
+          #   redirect to a different address opened Chrome instead.
+          # - allowNavigation keeps both addresses inside the app.
+          # - appendUserAgent lets the website know it's inside the app,
+          #   so it can skip the homepage and feel like an app.
+          # - backgroundColor shows FunlyLearn green while loading.
+          # To make the app carry its own copy instead, delete "server".
           cat > capacitor.config.json << 'EOF'
           {
             "appId": "com.funlylearn.app",
             "appName": "FunlyLearn",
             "webDir": "dist",
+            "backgroundColor": "#064E3B",
+            "appendUserAgent": "FunlyLearnApp",
             "server": {
-              "url": "https://funlylearn.com",
+              "url": "https://www.funlylearn.com",
               "androidScheme": "https",
-              "cleartext": false
+              "cleartext": false,
+              "allowNavigation": ["funlylearn.com", "www.funlylearn.com"]
             },
             "android": {
               "allowMixedContent": false
+            },
+            "plugins": {
+              "SplashScreen": {
+                "launchShowDuration": 2500,
+                "launchAutoHide": true,
+                "backgroundColor": "#064E3B",
+                "showSpinner": false
+              },
+              "StatusBar": {
+                "backgroundColor": "#064E3B",
+                "style": "DARK",
+                "overlaysWebView": false
+              }
             }
           }
           EOF
@@ -181,3 +209,20 @@ jobs:
         with:
           name: FunlyLearn-release-aab
           path: android/app/build/outputs/bundle/release/FunlyLearn.aab
+
+      # Also publishes the files as a GitHub Release: a normal download
+      # (not a ZIP), so phones can install the APK directly. This link
+      # always downloads the newest app:
+      # https://github.com/funmziieo-ai/Funlylearn/releases/latest/download/FunlyLearn.apk
+      - name: Publish the APK as a downloadable release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-v1.0.${{ github.run_number }}
+          name: FunlyLearn app 1.0.${{ github.run_number }}
+          body: |
+            Android phones: download and install FunlyLearn.apk.
+            FunlyLearn.aab is only for uploading to Google Play; it can't be installed on a phone.
+          files: |
+            android/app/build/outputs/apk/release/FunlyLearn.apk
+            android/app/build/outputs/bundle/release/FunlyLearn.aab
+          make_latest: true
