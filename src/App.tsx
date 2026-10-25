@@ -351,7 +351,11 @@ export default function App() {
     // Signing out clears the profile from this phone, but a guest's
     // profile is still saved online under this device's guest id. Look
     // for it so they don't have to type their name again.
-    const saved = await fetchChildProfile(guestId);
+    // Don't keep the child waiting: give the online check 3 seconds at most.
+    const saved = await Promise.race([
+      fetchChildProfile(guestId).catch(() => null),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 3000))
+    ]);
     if (saved && hasRealName(saved)) {
       setReturningGuest(saved);
       setView('welcome-back');
