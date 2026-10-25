@@ -295,7 +295,10 @@ export async function fetchAudioTTS(
     // label is new, so clips saved earlier (read with the English voice)
     // are never replayed.
     const isYorubaText = ['yo', 'yor', 'yoruba'].includes(String(language || '').toLowerCase());
-    const voice = isYorubaText ? 'yarngpt-yoruba-v2' : 'Idera';
+    // Mama Titi speaks with Idera for everything. These labels are new, so
+    // clips saved on phones before (including an old male Yorùbá voice)
+    // are never replayed; every phrase is fetched fresh in Idera's voice.
+    const voice = isYorubaText ? 'idera-yoruba-v4' : 'idera-english-v4';
     const cacheKey = await hashCacheKey(cleanText, voice, language);
 
     // Check the local cache first — this is what makes repeat text
