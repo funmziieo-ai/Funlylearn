@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
-import { ArrowRight, Check, ChevronLeft, Heart, Volume2, Loader2 } from 'lucide-react';
+import { Check, Volume2, Loader2 } from 'lucide-react';
 import { UserProfile, ClassLevel, LanguageCode } from '../types';
-import { MamaTitiAvatar } from '../components/MamaTitiAvatar';
+import { Emoji3D } from '../components/Emoji3D';
+import { ANKARA, ANKARA_DOTS, useFunFonts } from './LandingPage';
+import mamaTitiMain from '../assets/images/mama_titi_official_1784860280943.jpg';
+
+const FUN = "font-['Fredoka']";
+const PRESS = 'transition-transform active:translate-y-[4px]';
 import { fetchAudioTTS, clearStoredChat } from '../services/apiClient';
 
 interface OnboardingPageProps {
@@ -18,6 +23,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
   onComplete,
   onExit
 }) => {
+  useFunFonts();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState(initialProfile.name || '');
   const [classLevel, setClassLevel] = useState<ClassLevel | null>(initialProfile.classLevel || null);
@@ -104,69 +110,100 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
     }
   };
 
-  return (
-    <div className="h-screen overflow-hidden bg-[#FFFBF5] text-slate-800 font-sans flex flex-col p-4 sm:p-6">
+  const MamaBubble: React.FC<{ title?: string; text: string }> = ({ title, text }) => (
+    <div className="rounded-3xl bg-white border-2 border-emerald-100 p-4 flex items-start gap-3 text-left shadow-sm">
+      <img src={mamaTitiMain} alt="" className="w-11 h-11 rounded-full object-cover object-top border-[3px] border-[#FFC83D] shrink-0" />
+      <div className="text-sm">
+        {title && <p className={`${FUN} font-bold text-[#064E3B]`}>{title}</p>}
+        <p className="font-semibold text-slate-600">{text}</p>
+      </div>
+    </div>
+  );
 
-      {/* Header */}
-      <div className="max-w-md mx-auto w-full flex items-center justify-between py-2">
-        <div className="flex items-center space-x-2">
+  const ContinueButton: React.FC<{ disabled?: boolean; onClick?: () => void; type?: 'button' | 'submit'; children: React.ReactNode }> = ({ disabled, onClick, type = 'button', children }) => (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`${FUN} ${PRESS} w-full py-4 rounded-2xl bg-[#15803D] text-white text-xl font-bold border-b-[6px] border-[#064E3B] disabled:opacity-40 disabled:active:translate-y-0`}
+    >
+      {children}
+    </button>
+  );
+
+  const classTile = (cls: ClassLevel) => (
+    <button
+      key={cls}
+      type="button"
+      onClick={() => setClassLevel(cls)}
+      className={`${FUN} ${PRESS} py-3 rounded-2xl border-2 border-b-4 text-base font-semibold bg-white text-slate-800 border-slate-200`}
+    >
+      {cls}
+    </button>
+  );
+
+  const languageCard = (code: 'en' | 'yo', flag: string, title: string, subtitle: string, color: string, light: string) => (
+    <button
+      type="button"
+      onClick={() => setLanguage(code)}
+      className={`${PRESS} w-full p-4 rounded-3xl border-2 border-b-[5px] flex items-center gap-4 text-left ${
+        language === code ? `${light}` : 'border-slate-200 bg-white'
+      }`}
+      style={language === code ? { borderColor: color } : undefined}
+    >
+      <Emoji3D emoji={flag} className="w-12 h-12 shrink-0" />
+      <div className="flex-1">
+        <p className={`${FUN} text-xl font-bold text-slate-900`}>{title}</p>
+        <p className="text-sm font-semibold text-slate-600">{subtitle}</p>
+      </div>
+      {language === code && (
+        <span className="w-8 h-8 rounded-full text-white flex items-center justify-center shrink-0" style={{ backgroundColor: color }}>
+          <Check className="w-5 h-5" />
+        </span>
+      )}
+    </button>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#FFF8EC] text-slate-800 font-['Nunito'] flex flex-col" style={ANKARA_DOTS}>
+      {/* Header: same logo as the landing page */}
+      <div className="max-w-md mx-auto w-full flex items-center justify-between gap-2 px-4 pt-4">
+        <div className="flex items-center gap-2">
           {step > 1 && (
             <button
               onClick={() => setStep((step - 1) as 1 | 2)}
-              className="p-1.5 text-slate-600 hover:text-slate-900 rounded-full bg-slate-100"
+              aria-label="Back"
+              className={`${PRESS} w-10 h-10 rounded-full bg-white border-2 border-slate-200 border-b-4 font-bold text-[#064E3B]`}
             >
-              <ChevronLeft className="w-5 h-5" />
+              ◀
             </button>
           )}
-          <div className="w-8 h-8 rounded-full bg-[#064E3B] flex items-center justify-center text-white font-bold text-sm">
-            F
-          </div>
-          <span className="font-serif text-xl font-bold text-[#064E3B]">FunlyLearn 🇳🇬</span>
+          <div className={`${FUN} w-9 h-9 rounded-2xl bg-[#15803D] text-white text-xl font-bold flex items-center justify-center border-b-4 border-[#064E3B]`}>F</div>
+          <span className={`${FUN} text-xl font-bold text-slate-900`}>Funly<span className="text-[#15803D]">Learn</span></span>
         </div>
-
-        {/* Progress dots */}
-        <div className="flex items-center space-x-1.5">
+        <div className="flex items-center gap-1.5" aria-label={`Step ${step} of 3`}>
           {[1, 2, 3].map(s => (
-            <div
+            <span
               key={s}
-              className={
-                'h-2 rounded-full transition-all ' +
-                (step === s
-                  ? 'w-6 bg-[#064E3B]'
-                  : step > s
-                  ? 'w-2 bg-emerald-400'
-                  : 'w-2 bg-slate-200')
-              }
+              className={`h-2.5 rounded-full transition-all ${step === s ? 'w-7 bg-[#15803D]' : step > s ? 'w-2.5 bg-[#FFC83D]' : 'w-2.5 bg-slate-300'}`}
             />
           ))}
         </div>
-
         {onExit && (
-          <button
-            onClick={onExit}
-            className="text-xs font-bold text-slate-500 hover:text-slate-800"
-          >
-            Exit
-          </button>
+          <button onClick={onExit} className="font-bold text-slate-700 px-2 py-2">Exit</button>
         )}
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-md mx-auto w-full flex-1 overflow-y-auto flex flex-col justify-center py-6">
-
-        {/* STEP 1 — Name */}
+      <div className="max-w-md mx-auto w-full flex-1 flex flex-col justify-center px-5 py-6">
+        {/* STEP 1: name */}
         {step === 1 && (
-          <form onSubmit={handleNextStep1} className="space-y-6 text-center">
-            <div className="flex justify-center mb-2">
-              <MamaTitiAvatar size="lg" />
+          <form onSubmit={handleNextStep1} className="space-y-5 text-center">
+            <div className="w-32 h-32 mx-auto rounded-full bg-white border-[6px] border-[#FFC83D] shadow-xl overflow-hidden">
+              <img src={mamaTitiMain} alt="Mama Titi" className="w-full h-full object-cover object-top" />
             </div>
-            <div className="space-y-2">
-              <h2 className="font-serif text-3xl font-bold text-[#064E3B]">
-                What is your child's name?
-              </h2>
-              <p className="text-xs text-slate-500">
-                Mama Titi will address them personally during every lesson!
-              </p>
+            <div className="space-y-1.5">
+              <h2 className={`${FUN} text-3xl font-bold text-slate-900 leading-tight`}>What is your child's name?</h2>
+              <p className="font-semibold text-slate-600">Mama Titi will call them by name in every lesson!</p>
             </div>
             <input
               type="text"
@@ -174,319 +211,123 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Tobi, Chidinma, Amina"
               required
-              className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-slate-200 focus:border-[#064E3B] text-slate-800 font-bold text-lg text-center shadow-sm outline-none transition-all"
+              maxLength={30}
+              className={`${FUN} w-full px-5 py-4 rounded-2xl bg-white border-2 border-b-4 border-slate-200 focus:border-[#15803D] outline-none text-xl font-semibold text-center text-slate-900`}
             />
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-left">
-              <p className="text-xs text-slate-700 leading-relaxed italic">
-                "Welcome my star! I am excited to guide you step by step through your school topics!" — Mama Titi
-              </p>
-            </div>
-            <button
-              type="submit"
-              disabled={!name.trim()}
-              className="w-full py-4 rounded-full bg-[#064E3B] hover:bg-[#022C22] disabled:opacity-40 text-white font-bold text-base shadow-lg transition-all flex items-center justify-center space-x-2"
-            >
-              <span>Continue</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
+            <MamaBubble text={'"Welcome, my star! I can\'t wait to help you with your school topics, step by step!"'} />
+            <ContinueButton type="submit" disabled={!name.trim()}>Continue ▶</ContinueButton>
           </form>
         )}
 
-        {/* STEP 2 — Class Level */}
+        {/* STEP 2: class */}
         {step === 2 && (
           <div className="space-y-5">
-            <div className="text-center space-y-2">
-              <h2 className="font-serif text-3xl font-bold text-[#064E3B]">
-                What class is {name || 'scholar'} in?
-              </h2>
-              <p className="text-xs text-slate-500">
-                We will tailor the learning to their exact school level.
-              </p>
+            <div className="text-center space-y-1.5">
+              <h2 className={`${FUN} text-3xl font-bold text-slate-900 leading-tight`}>What class is {name || 'your child'} in?</h2>
+              <p className="font-semibold text-slate-600">Mama Titi teaches at exactly the right level.</p>
             </div>
 
-            {/* Out of school toggle */}
-            <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Heart className="w-4 h-4 text-[#FF6B35]" />
-                <span className="text-xs font-bold text-slate-800">
-                  Not currently in school?
-                </span>
-              </div>
+            <div className="rounded-2xl bg-white border-2 border-b-4 border-slate-200 p-3 flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2 font-bold text-slate-800">
+                <Emoji3D emoji="🏠" className="w-7 h-7" /> Not in school right now?
+              </span>
               <button
                 type="button"
                 onClick={() => setIsOutOfSchool(!isOutOfSchool)}
-                className={
-                  'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ' +
-                  (isOutOfSchool ? 'bg-[#FF6B35]' : 'bg-slate-300')
-                }
+                role="switch"
+                aria-checked={isOutOfSchool}
+                aria-label="Not in school right now"
+                className={`relative w-14 h-8 rounded-full shrink-0 transition-colors ${isOutOfSchool ? 'bg-[#FF6B35]' : 'bg-slate-300'}`}
               >
-                <span
-                  className={
-                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ' +
-                    (isOutOfSchool ? 'translate-x-5' : 'translate-x-0')
-                  }
-                />
+                <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all ${isOutOfSchool ? 'left-7' : 'left-1'}`} />
               </button>
             </div>
 
             {classLevel ? (
-              /* A class has been chosen — show only that one, with a way to change it */
-              <div className="p-4 rounded-2xl bg-[#064E3B] flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-7 h-7 rounded-full bg-white text-[#064E3B] flex items-center justify-center shrink-0">
-                    <Check className="w-4 h-4" />
-                  </div>
-                  <span className="font-bold text-white text-sm">{classLevel}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setClassLevel(null)}
-                  className="text-xs font-bold text-emerald-200 underline"
-                >
-                  Change
-                </button>
+              <div className="rounded-2xl bg-[#15803D] border-b-[5px] border-[#064E3B] p-4 flex items-center justify-between">
+                <span className={`${FUN} flex items-center gap-2 text-xl font-bold text-white`}>
+                  <span className="w-8 h-8 rounded-full bg-white text-[#15803D] flex items-center justify-center"><Check className="w-5 h-5" /></span>
+                  {classLevel}
+                </span>
+                <button type="button" onClick={() => setClassLevel(null)} className="font-bold text-emerald-100 underline">Change</button>
               </div>
             ) : (
-              <>
-                {/* Primary classes */}
+              <div className="space-y-4">
                 <div>
-                  <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
-                    Primary School
-                  </span>
-                  <div className="grid grid-cols-3 gap-2.5 mt-2">
-                    {primaryClasses.map(cls => (
-                      <button
-                        key={cls}
-                        type="button"
-                        onClick={() => setClassLevel(cls)}
-                        className="py-3 px-2 rounded-full border-2 text-xs font-bold transition-all border-slate-200 bg-white text-slate-800 hover:border-slate-300"
-                      >
-                        {cls}
-                      </button>
-                    ))}
-                  </div>
+                  <p className={`${FUN} font-bold text-slate-700 flex items-center gap-2`}><Emoji3D emoji="🎒" className="w-6 h-6" /> Primary school</p>
+                  <div className="grid grid-cols-3 gap-2.5 mt-2">{primaryClasses.map(classTile)}</div>
                 </div>
-
-                {/* Secondary classes */}
                 <div>
-                  <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
-                    Secondary School
-                  </span>
-                  <div className="grid grid-cols-3 gap-2.5 mt-2">
-                    {secondaryClasses.map(cls => (
-                      <button
-                        key={cls}
-                        type="button"
-                        onClick={() => setClassLevel(cls)}
-                        className="py-3 px-2 rounded-full border-2 text-xs font-bold transition-all border-slate-200 bg-white text-slate-800 hover:border-slate-300"
-                      >
-                        {cls}
-                      </button>
-                    ))}
-                  </div>
+                  <p className={`${FUN} font-bold text-slate-700 flex items-center gap-2`}><Emoji3D emoji="🏫" className="w-6 h-6" /> Secondary school</p>
+                  <div className="grid grid-cols-3 gap-2.5 mt-2">{secondaryClasses.map(classTile)}</div>
                 </div>
-              </>
+              </div>
             )}
 
-            {/* Mama Titi bubble */}
-            <div className="p-4 rounded-3xl bg-white border border-amber-200 shadow-sm flex items-start space-x-3">
-              <MamaTitiAvatar size="sm" showOnlineStatus={false} />
-              <div className="text-xs space-y-0.5">
-                <span className="font-serif font-bold text-purple-900 block">
-                  "Well done scholar!"
-                </span>
-                <p className="text-slate-600 italic">
-                  "The right class level means I teach exactly what {name || 'your child'} needs for their exams."
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleNextStep2}
-              disabled={!classLevel}
-              className="w-full py-4 rounded-full bg-[#064E3B] hover:bg-[#022C22] disabled:opacity-40 text-white font-bold text-base shadow-lg transition-all flex items-center justify-center space-x-2"
-            >
-              <span>Continue</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
+            <MamaBubble title="Well done!" text={`"The right class means I teach exactly what ${name || 'your child'} needs for school and exams."`} />
+            <ContinueButton onClick={handleNextStep2} disabled={!classLevel}>Continue ▶</ContinueButton>
           </div>
         )}
 
-        {/* STEP 3 — Language */}
+        {/* STEP 3: language */}
         {step === 3 && (
-          <div className="space-y-5 text-center">
-            <div className="space-y-2">
-              <div className="flex justify-center mb-3">
-                <MamaTitiAvatar size="md" showOnlineStatus={false} />
-              </div>
-              <h2 className="font-serif text-3xl font-bold text-[#064E3B]">
-                How should Mama Titi teach?
-              </h2>
-              <p className="text-xs text-slate-500">
-                Pick your language. You can always change this later!
-              </p>
+          <div className="space-y-4 text-center">
+            <div className="w-24 h-24 mx-auto rounded-full bg-white border-[5px] border-[#FFC83D] shadow-lg overflow-hidden">
+              <img src={mamaTitiMain} alt="Mama Titi" className="w-full h-full object-cover object-top" />
+            </div>
+            <div className="space-y-1.5">
+              <h2 className={`${FUN} text-3xl font-bold text-slate-900 leading-tight`}>How should Mama Titi teach?</h2>
+              <p className="font-semibold text-slate-600">Pick a language. You can change it later.</p>
             </div>
 
-            <div className="space-y-3 pt-1 text-left">
+            <div className="space-y-3">
+              {languageCard('en', '🇬🇧', 'English', 'Mama Titi teaches in English', '#15803D', 'bg-[#DCFCE7]')}
+              {languageCard('yo', '🇳🇬', 'Yorùbá', 'Mama Titi teaches in Yorùbá', '#7E22CE', 'bg-[#F3E8FF]')}
 
-              {/* English */}
-              <button
-                type="button"
-                onClick={() => setLanguage('en')}
-                className={
-                  'w-full p-4 rounded-3xl border-2 flex items-center space-x-4 transition-all ' +
-                  (language === 'en'
-                    ? 'border-[#064E3B] bg-emerald-50 shadow-md'
-                    : 'border-slate-200 bg-white hover:border-emerald-200')
-                }
-              >
-                <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-2xl shrink-0">
-                  🇬🇧
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-serif font-bold text-lg text-slate-900">
-                    English
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Mama Titi teaches in English
-                  </p>
-                </div>
-                {language === 'en' && (
-                  <div className="w-7 h-7 rounded-full bg-[#064E3B] text-white flex items-center justify-center shrink-0">
-                    <Check className="w-4 h-4" />
-                  </div>
-                )}
-              </button>
-
-              {/* Yoruba */}
-              <button
-                type="button"
-                onClick={() => setLanguage('yo')}
-                className={
-                  'w-full p-4 rounded-3xl border-2 flex items-center space-x-4 transition-all ' +
-                  (language === 'yo'
-                    ? 'border-[#5B21B6] bg-purple-50 shadow-md'
-                    : 'border-slate-200 bg-white hover:border-purple-200')
-                }
-              >
-                <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-2xl shrink-0">
-                  🇳🇬
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-serif font-bold text-lg text-slate-900">
-                    Yoruba
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Mama Titi teaches in Yoruba
-                  </p>
-                </div>
-                {language === 'yo' && (
-                  <div className="w-7 h-7 rounded-full bg-[#5B21B6] text-white flex items-center justify-center shrink-0">
-                    <Check className="w-4 h-4" />
-                  </div>
-                )}
-              </button>
-
-              {/* English & Yoruba voice previews — both always visible to
-                  create anticipation, not just after selecting a language */}
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handlePlayPreview('en')}
-                  disabled={previewLoading !== null}
-                  className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center space-x-2 disabled:opacity-60"
-                >
-                  {previewLoading === 'en' ? (
-                    <Loader2 className="w-4 h-4 text-emerald-700 animate-spin" />
-                  ) : (
-                    <Volume2 className="w-4 h-4 text-emerald-700" />
-                  )}
-                  <span className="text-xs sm:text-sm font-bold text-emerald-800">
-                    {activePreviewLang === 'en' ? 'Playing...' : 'Hear in English'}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handlePlayPreview('yo')}
-                  disabled={previewLoading !== null}
-                  className="p-3 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-center space-x-2 disabled:opacity-60"
-                >
-                  {previewLoading === 'yo' ? (
-                    <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
-                  ) : (
-                    <Volume2 className="w-4 h-4 text-purple-600" />
-                  )}
-                  <span className="text-xs sm:text-sm font-bold text-purple-700">
-                    {activePreviewLang === 'yo' ? 'Playing...' : 'Hear in Yoruba'}
-                  </span>
-                </button>
+                {(['en', 'yo'] as const).map(code => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => handlePlayPreview(code)}
+                    disabled={previewLoading !== null}
+                    className={`${PRESS} p-3 rounded-2xl border-2 border-b-4 bg-white flex items-center justify-center gap-2 font-bold disabled:opacity-60 ${
+                      code === 'en' ? 'border-emerald-200 text-[#15803D]' : 'border-purple-200 text-[#7E22CE]'
+                    }`}
+                  >
+                    {previewLoading === code ? <Loader2 className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
+                    {activePreviewLang === code ? 'Playing…' : code === 'en' ? 'Hear English' : 'Hear Yorùbá'}
+                  </button>
+                ))}
               </div>
 
               {language === 'yo' && (
-                <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 text-left">
-                  <p className="text-xs font-bold text-purple-800 mb-1">
-                    Preview of Yoruba mode:
-                  </p>
-                  <p className="text-sm text-purple-700 italic">
-                    "{YORUBA_PREVIEW_TEXT}"
-                  </p>
-                  <p className="text-[10px] text-purple-500 mt-1">
-                    Good morning! My name is Mama Titi. Let us learn together today!
-                  </p>
+                <div className="rounded-2xl bg-[#F3E8FF] border-2 border-purple-200 p-4 text-left">
+                  <p className="text-sm font-bold text-[#7E22CE]">How Yorùbá mode sounds:</p>
+                  <p className="font-semibold text-purple-900 italic mt-1">"{YORUBA_PREVIEW_TEXT}"</p>
+                  <p className="text-xs font-semibold text-purple-700 mt-1">Good morning! My name is Mama Titi. Let us learn together today!</p>
                 </div>
               )}
 
-              {/* Igbo — Coming Soon */}
-              <div className="w-full p-4 rounded-3xl border border-slate-200 bg-slate-50 flex items-center space-x-4 opacity-60">
-                <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-2xl shrink-0">
-                  🇳🇬
+              {(['Igbo', 'Hausa'] as const).map(lang => (
+                <div key={lang} className="w-full p-4 rounded-3xl border-2 border-slate-200 bg-white/60 flex items-center gap-4 text-left opacity-70">
+                  <Emoji3D emoji="🇳🇬" className="w-12 h-12 shrink-0 grayscale" />
+                  <div className="flex-1">
+                    <p className={`${FUN} text-xl font-bold text-slate-500`}>{lang}</p>
+                    <p className="text-sm font-semibold text-slate-500">Mama Titi teaches in {lang}</p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-[#FFC83D] text-[#064E3B] text-xs font-bold shrink-0">Coming soon</span>
                 </div>
-                <div className="flex-1">
-                  <h4 className="font-serif font-bold text-lg text-slate-400">
-                    Igbo
-                  </h4>
-                  <p className="text-xs text-slate-400">
-                    Mama Titi teaches in Igbo
-                  </p>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold shrink-0">
-                  Coming Soon
-                </span>
-              </div>
-
-              {/* Hausa — Coming Soon */}
-              <div className="w-full p-4 rounded-3xl border border-slate-200 bg-slate-50 flex items-center space-x-4 opacity-60">
-                <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-2xl shrink-0">
-                  🇳🇬
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-serif font-bold text-lg text-slate-400">
-                    Hausa
-                  </h4>
-                  <p className="text-xs text-slate-400">
-                    Mama Titi teaches in Hausa
-                  </p>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold shrink-0">
-                  Coming Soon
-                </span>
-              </div>
+              ))}
             </div>
 
-            <button
-              onClick={handleFinish}
-              className="w-full py-4 rounded-full bg-gradient-to-r from-[#064E3B] to-[#5B21B6] hover:opacity-95 text-white font-bold text-base shadow-lg transition-all flex items-center justify-center space-x-2"
-            >
-              <span>Start Learning with Mama Titi!</span>
-            </button>
-
-            <p className="text-[11px] text-slate-400">
-              You are seconds away from your first lesson!
-            </p>
+            <ContinueButton onClick={handleFinish}>Start learning with Mama Titi ▶</ContinueButton>
+            <p className="text-sm font-semibold text-slate-600">You're seconds away from your first lesson!</p>
           </div>
         )}
       </div>
+
+      <div className="h-2" style={ANKARA} />
     </div>
   );
-}
+};
