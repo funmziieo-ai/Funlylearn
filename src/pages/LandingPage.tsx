@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import mamaTitiMain from '../assets/images/mama_titi_official_1784860280943.jpg';
 import { Emoji3D } from '../components/Emoji3D';
 
@@ -7,6 +7,8 @@ interface LandingPageProps {
   onStartCatchingUp: () => void;
   onLogIn?: () => void;
   onSignUp?: () => void;
+  // In the app, the feature cards become swipe slides to shorten the page.
+  slides?: boolean;
 }
 
 // Put a real photo of a Nigerian child doing homework on a phone at
@@ -178,8 +180,133 @@ const ChatMockup: React.FC = () => (
   </div>
 );
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onStartLearning, onLogIn, onSignUp }) => {
+
+// Swipe slides for the feature cards (used in the app). They move on their
+// own every 4 seconds, pause while touched, and can be swiped.
+const FeatureSlides: React.FC<{ cards: React.ReactNode[] }> = ({ cards }) => {
+  const [slide, setSlide] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const startX = useRef<number | null>(null);
+  const count = cards.length;
+
+  useEffect(() => {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = setInterval(() => {
+      if (!paused) setSlide(s => (s + 1) % count);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [paused, count]);
+
+  const goTo = (i: number) => setSlide((i + count) % count);
+
+  return (
+    <div>
+      <div
+        className="overflow-hidden rounded-[28px]"
+        role="region"
+        aria-label="FunlyLearn features"
+        onPointerDown={e => { startX.current = e.clientX; setPaused(true); }}
+        onPointerUp={e => {
+          if (startX.current !== null) {
+            const dx = e.clientX - startX.current;
+            if (Math.abs(dx) > 40) goTo(slide + (dx < 0 ? 1 : -1));
+          }
+          startX.current = null;
+          setTimeout(() => setPaused(false), 3000);
+        }}
+        onPointerLeave={() => { startX.current = null; setPaused(false); }}
+      >
+        <div
+          className="flex items-stretch"
+          style={{ transform: `translateX(-${slide * 100}%)`, transition: 'transform .45s cubic-bezier(.3,.8,.3,1)' }}
+        >
+          {cards.map((card, i) => (
+            <div key={i} className="min-w-full" aria-hidden={i !== slide}>{card}</div>
+          ))}
+        </div>
+      </div>
+      <div className="flex justify-center gap-0.5 pt-2">
+        {cards.map((_, i) => (
+          <button key={i} onClick={() => goTo(i)} aria-label={`Show card ${i + 1}`} className="p-1.5">
+            <span className={`block h-2.5 rounded-full transition-all ${i === slide ? 'w-7 bg-[#15803D]' : 'w-2.5 bg-slate-300'}`} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export const LandingPage: React.FC<LandingPageProps> = ({ onStartLearning, onLogIn, onSignUp, slides = false }) => {
   useFunFonts();
+
+  const notebookCard = (
+    <div className="h-full rounded-[28px] bg-[#DCFCE7] border-b-[6px] border-[#15803D] p-5 space-y-3">
+      {slides && (
+        <p className={`${FUN} inline-block px-3 py-1 rounded-full bg-[#15803D] text-white text-sm font-bold`}>Made from your homework</p>
+      )}
+      <div className="flex items-center gap-3">
+        <Emoji3D emoji="📒" className="w-14 h-14 shrink-0" />
+        <p className={`${FUN} text-2xl font-bold text-slate-900 leading-tight`}>Your own notebook</p>
+      </div>
+      {slides && (
+        <p className="font-bold text-slate-800">Every question you ask Mama Titi becomes a note in Create Notebook.</p>
+      )}
+      <p className="font-semibold text-slate-700">
+        Revise from your notes before tests. Hard topics come back each week until you get them right.
+      </p>
+    </div>
+  );
+  const gamesCard = (
+    <div className="h-full rounded-[28px] bg-[#2E1065] text-white border-b-[6px] border-black/40 p-5 space-y-3">
+      <div className="flex items-center gap-3">
+        <Emoji3D emoji="🎮" className="w-14 h-14 shrink-0" />
+        <p className={`${FUN} text-2xl font-bold leading-tight`}>Games made just for you</p>
+      </div>
+      <p className="font-semibold text-purple-100">
+        Play games with questions from what you learnt this week, with music, coins and confetti. Topics you're still learning come up more, so you get better while you play.
+      </p>
+      <div className="rounded-2xl bg-white/10 p-3 space-y-2 text-sm">
+        <div className="flex items-center justify-between gap-2">
+          <span className="px-2 py-0.5 rounded-full bg-[#FF6B35] text-xs font-bold">💪 From Tuesday's homework</span>
+          <span className={`${FUN} text-[#FFC83D] font-bold`}>+10 🪙</span>
+        </div>
+        <p className={`${FUN} font-semibold`}>Which fraction is equal to 1/2?</p>
+        <div className="grid grid-cols-2 gap-2">
+          <span className="rounded-xl bg-[#0284C7] px-3 py-1.5 font-bold">2/3</span>
+          <span className="rounded-xl bg-[#15803D] px-3 py-1.5 font-bold ring-2 ring-[#FFC83D]">2/4 ✅</span>
+        </div>
+      </div>
+    </div>
+  );
+  const snapCard = (
+    <div className="h-full rounded-[28px] bg-[#FFF4D1] border-b-[6px] border-[#E0A800] p-5 space-y-2">
+      <Emoji3D emoji="📸" className="w-12 h-12" />
+      <p className={`${FUN} text-xl font-bold text-slate-900`}>Snap any question</p>
+      <p className="font-semibold text-slate-600">Explained step by step, with stories about markets, Naira and jollof.</p>
+    </div>
+  );
+  const parentsCard = (
+    <div className="h-full rounded-[28px] bg-[#064E3B] text-white border-b-[6px] border-black/30 p-5 space-y-3">
+      <p className={`${FUN} text-[#FFC83D] font-bold`}>For parents</p>
+      <p className={`${FUN} text-2xl font-bold leading-tight`}>Know how your child is doing, even at work</p>
+      <p className="font-semibold text-emerald-100">FunlyLearn sends you their results, so you always know what they learnt and what needs more practice.</p>
+      <div className="rounded-2xl bg-[#E5DDD5] p-2.5">
+        <div className="rounded-xl rounded-tr-md bg-[#DCF8C6] text-slate-800 px-3 py-2 text-sm leading-relaxed">
+          🏆 <b>Tolu's Weekly Challenge</b><br />
+          Score: 9 / 10 ⭐⭐⭐⭐⭐<br />
+          🚀 Improved: Equivalent Fractions<br />
+          💪 Still practising: Nouns and Pronouns
+        </div>
+      </div>
+    </div>
+  );
+  const examCard = (
+    <div className="h-full rounded-[28px] bg-[#E0F4FF] border-b-[6px] border-[#38BDF8] p-5 space-y-2">
+      <Emoji3D emoji="🎓" className="w-12 h-12" />
+      <p className={`${FUN} text-xl font-bold text-slate-900`}>Exam practice</p>
+      <p className="font-semibold text-slate-600">Practise for Common Entrance, BECE and WAEC. After each question, Mama Titi shows you the right answer and why.</p>
+    </div>
+  );
   const [photoMissing, setPhotoMissing] = useState(false);
 
   return (
@@ -261,77 +388,60 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartLearning, onLog
         <div className="h-3" style={ANKARA} />
       </section>
 
-      {/* Made from your child's own homework */}
+      {/* Made from your homework */}
       <section className="max-w-6xl mx-auto px-4 py-12 space-y-6">
-        <div className="text-center space-y-2">
-          <h2 className={`${FUN} text-4xl font-bold text-slate-900`}>Made from your homework</h2>
-          <p className="text-lg font-semibold text-slate-600">Every question you ask Mama Titi becomes a note in Create Notebook.</p>
-        </div>
+        {!slides && (
+          <div className="text-center space-y-2">
+            <h2 className={`${FUN} text-4xl font-bold text-slate-900`}>Made from your homework</h2>
+            <p className="text-lg font-semibold text-slate-600">Every question you ask Mama Titi becomes a note in Create Notebook.</p>
+          </div>
+        )}
 
-        <div className="grid md:grid-cols-2 gap-4">
-          {/* Revision notebook */}
-          <div className="rounded-[28px] bg-[#DCFCE7] border-b-[6px] border-[#15803D] p-5 space-y-3">
-            <div className="flex items-center gap-3">
-              <Emoji3D emoji="📒" className="w-14 h-14 shrink-0" />
-              <p className={`${FUN} text-2xl font-bold text-slate-900 leading-tight`}>Your own notebook</p>
+        {slides ? (
+          // In the app: the same cards as swipe slides, to keep the page short.
+          <FeatureSlides cards={[notebookCard, gamesCard, snapCard, examCard, parentsCard]} />
+        ) : (
+          <>
+            <div className="grid md:grid-cols-2 gap-4">
+              {notebookCard}
+              {gamesCard}
             </div>
-            <p className="font-semibold text-slate-700">
-              Revise from your notes before tests. Hard topics come back each week until you get them right.
-            </p>
-          </div>
-
-          {/* Homework games */}
-          <div className="rounded-[28px] bg-[#2E1065] text-white border-b-[6px] border-black/40 p-5 space-y-3">
-            <div className="flex items-center gap-3">
-              <Emoji3D emoji="🎮" className="w-14 h-14 shrink-0" />
-              <p className={`${FUN} text-2xl font-bold leading-tight`}>Games made just for you</p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {snapCard}
+              {examCard}
             </div>
-            <p className="font-semibold text-purple-100">
-              Play games with questions from what you learnt this week, with music, coins and confetti. Topics you're still learning come up more, so you get better while you play.
-            </p>
-            <div className="rounded-2xl bg-white/10 p-3 space-y-2 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="px-2 py-0.5 rounded-full bg-[#FF6B35] text-xs font-bold">💪 From Tuesday's homework</span>
-                <span className={`${FUN} text-[#FFC83D] font-bold`}>+10 🪙</span>
-              </div>
-              <p className={`${FUN} font-semibold`}>Which fraction is equal to 1/2?</p>
-              <div className="grid grid-cols-2 gap-2">
-                <span className="rounded-xl bg-[#0284C7] px-3 py-1.5 font-bold">2/3</span>
-                <span className="rounded-xl bg-[#15803D] px-3 py-1.5 font-bold ring-2 ring-[#FFC83D]">2/4 ✅</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div className="rounded-[28px] bg-[#FFF4D1] border-b-[6px] border-[#E0A800] p-5 space-y-2">
-            <Emoji3D emoji="📸" className="w-12 h-12" />
-            <p className={`${FUN} text-xl font-bold text-slate-900`}>Snap any question</p>
-            <p className="font-semibold text-slate-600">Explained step by step, with stories about markets, Naira and jollof.</p>
-          </div>
-          <div className="rounded-[28px] bg-[#E0F4FF] border-b-[6px] border-[#38BDF8] p-5 space-y-2">
-            <Emoji3D emoji="🎓" className="w-12 h-12" />
-            <p className={`${FUN} text-xl font-bold text-slate-900`}>Exam practice</p>
-            <p className="font-semibold text-slate-600">Practise for Common Entrance, BECE and WAEC. After each question, Mama Titi shows you the right answer and why.</p>
-          </div>
-        </div>
+          </>
+        )}
       </section>
 
-      {/* Parents */}
+      {/* Parents (on the website; in the app it's one of the slides) */}
+      {!slides && (
+        <>
       <section className="bg-[#064E3B] text-white">
         <div className="max-w-3xl mx-auto px-4 py-12 flex flex-col items-center text-center space-y-4">
           <p className={`${FUN} text-[#FFC83D] font-bold text-lg`}>For parents</p>
-          <h2 className={`${FUN} text-4xl font-bold leading-tight`}>See how your child is doing</h2>
-          <p className="text-lg font-semibold text-emerald-100">Get results on WhatsApp and a report for each subject, every week.</p>
+          <h2 className={`${FUN} text-4xl font-bold leading-tight`}>Know how your child is doing, even at work</h2>
+          <p className="text-lg font-semibold text-emerald-100">
+            FunlyLearn sends you their results, so you always know what they learnt and what needs more practice.
+          </p>
           <div className="max-w-sm w-full rounded-3xl bg-[#E5DDD5] p-3 text-left">
-            <div className="rounded-2xl rounded-tr-md bg-[#DCF8C6] text-slate-800 px-3 py-2 text-sm leading-relaxed">
-              🏆 <b>Weekly Challenge: 9 / 10</b><br />
+            <div className="rounded-2xl rounded-tr-md bg-[#DCF8C6] text-slate-800 px-3 py-2 text-sm leading-relaxed shadow-sm">
+              🏆 <b>Tolu's Weekly Challenge</b><br />
+              Score: 9 / 10 ⭐⭐⭐⭐⭐<br />
               🚀 Improved: Equivalent Fractions<br />
-              💪 Practising: Nouns and Pronouns
+              💪 Still practising: Nouns and Pronouns<br />
+              <span className="text-xs text-slate-500">Sent from FunlyLearn</span>
             </div>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2 pt-1">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 text-sm font-semibold"><Emoji3D emoji="📱" className="w-5 h-5" /> Weekly Challenge results on WhatsApp</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 text-sm font-semibold"><Emoji3D emoji="📧" className="w-5 h-5" /> An email when they finish homework</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 text-sm font-semibold"><Emoji3D emoji="📊" className="w-5 h-5" /> A report for each subject, every week</span>
           </div>
         </div>
       </section>
+        </>
+      )}
 
       {/* Final nudge */}
       <section className="max-w-6xl mx-auto px-4 py-12 text-center space-y-4">
