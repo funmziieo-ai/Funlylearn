@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase, resetPasswordForEmail } from '../services/supabaseService';
 import mamaTitiMain from '../assets/images/mama_titi_official_1784860280943.jpg';
 
 interface AuthScreenProps {
   onAuthSuccess: (user: any) => void;
-  onContinueAsGuest: () => void;
+  onContinueAsGuest: () => void | Promise<void>;
   // Which form to open on: "signin" (Log in) or "signup" (Create account).
   initialMode?: 'signin' | 'signup';
   // Goes back to the landing page.
@@ -116,6 +116,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
   };
 
   const signUp = mode === 'signup';
+
+  // "Try it as a guest" reacts on the first touch (even with the keyboard
+  // open) and shows "Starting…" straight away while the app gets ready.
+  const [guestStarting, setGuestStarting] = useState(false);
+  const guestBusy = useRef(false); // stops a touch and a tap both starting it
+  const startAsGuest = async () => {
+    if (guestBusy.current) return;
+    guestBusy.current = true;
+    setGuestStarting(true);
+    try {
+      await onContinueAsGuest();
+    } finally {
+      guestBusy.current = false;
+      setGuestStarting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#FFF8EC] text-slate-800 font-['Nunito']">
@@ -237,10 +253,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, onContinu
 
         <div className="space-y-1.5 text-center pb-6">
           <button
-            onClick={onContinueAsGuest}
+            onPointerDown={e => {
+              // Respond before the keyboard closes and moves the button.
+              if (e.pointerType !== 'mouse') {
+                e.preventDefault();
+                startAsGuest();
+              }
+            }}
+            onClick={startAsGuest}
+            disabled={guestStarting}
             className={`${FUN} ${PRESS} w-full py-3.5 rounded-2xl bg-white text-[#7E22CE] text-lg font-bold border-2 border-b-[5px] border-[#A855F7]`}
           >
-            Try it as a guest
+            {guestStarting ? 'Starting…' : 'Try it as a guest'}
           </button>
           <p className="text-sm font-semibold text-slate-600">
             Guests get the 7-day free trial too. Create an account to keep your stars on any phone.
