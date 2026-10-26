@@ -320,6 +320,28 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     directFileInputRef.current?.click();
   };
 
+  // The subject buttons ("Help me with Mathematics") aren't questions yet,
+  // so Mama Titi simply asks what the child is working on. This answers
+  // instantly, without calling the AI or using a daily free chat.
+  const PRESET_REPLIES_EN = [
+    "Great choice! 🔢 What maths question are you working on? Type it, or snap a photo of your homework, and we'll solve it together, step by step.",
+    "Lovely! 📖 What English homework do you have? Type the question, or snap a photo of it, and we'll work through it together.",
+    "Wonderful! 🔬 What Basic Science question are you working on? Type it, or snap a photo, and I'll explain it with a story you know.",
+    "Very good! 🌍 What Social Studies question do you have? Type it, or snap a photo of it, and let's learn it together."
+  ];
+  const PRESET_REPLY_YO = 'Ó dára! Kí ni ìbéèrè iṣẹ́ ilé rẹ? Tẹ̀ ẹ́ síbí, tàbí ya fọ́tò rẹ̀, a ó jọ yanjú rẹ̀ ní ìgbésẹ̀-ìgbésẹ̀.';
+  const handlePreset = (suggestion: string, index: number) => {
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const userMsg: ChatMessage = { id: 'u-' + Date.now(), sender: 'user', text: suggestion, timestamp: time };
+    const mamaMsg: ChatMessage = {
+      id: 'm-' + (Date.now() + 1),
+      sender: 'mama_titi',
+      text: isYoruba ? PRESET_REPLY_YO : PRESET_REPLIES_EN[index] || PRESET_REPLIES_EN[0],
+      timestamp: time
+    };
+    setMessages(prev => [...prev, userMsg, mamaMsg]);
+  };
+
   const handleSend = async (
     overrideText?: string,
     imagePayload?: string
@@ -467,7 +489,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       }
 
       const userMessageCount = newHistory.filter(m => m.sender === 'user').length;
-      if (userMessageCount >= POLL_TRIGGER_MESSAGE_COUNT) {
+      // Parent feedback questions now live on the Parents page, so the
+      // children's chat is never interrupted by a pop-up.
+      if (false && userMessageCount >= POLL_TRIGGER_MESSAGE_COUNT) {
         maybeShowPoll();
       }
 
@@ -699,43 +723,45 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
       <div
         onClick={handleOpenCamera}
-        className="mt-2 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2.5 px-3.5 sm:px-4 shadow-sm flex items-center justify-between shrink-0 rounded-2xl mx-2 cursor-pointer"
+        className="mt-2 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2 px-2.5 sm:p-2.5 sm:px-4 shadow-sm flex items-center justify-between gap-2 shrink-0 rounded-2xl mx-2 cursor-pointer"
       >
-        <div className="flex items-center space-x-2">
-          <div className="p-1.5 bg-slate-950 text-amber-300 rounded-xl">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-1.5 bg-slate-950 text-amber-300 rounded-xl shrink-0">
             <Camera className="w-4 h-4" />
           </div>
-          <div>
-            <p className="font-serif font-bold text-xs sm:text-sm leading-tight text-slate-950">
+          <div className="min-w-0">
+            <p className="font-serif font-bold text-xs sm:text-sm leading-tight text-slate-950 truncate">
               {isYoruba ? 'Ṣe Aworan Iṣẹ Ile Rẹ' : 'Snap Your Homework'}
             </p>
-            <p className="text-[10px] sm:text-[11px] text-slate-800 font-sans">
+            <p className="text-[10px] sm:text-[11px] text-slate-800 font-sans truncate">
               {isYoruba
                 ? 'Gba owó ere 5 fun aworan iṣẹ ile kọọkan!'
                 : 'Earn 5 coins per homework snap!'}
             </p>
           </div>
         </div>
-        <div className="flex items-center space-x-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleOpenUpload();
             }}
-            className="px-3 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs transition-all flex items-center space-x-1"
+            aria-label={isYoruba ? 'Gbe Soke' : 'Upload'}
+            className="p-2 min-[400px]:px-3 min-[400px]:py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs transition-all flex items-center gap-1"
           >
-            <Upload className="w-3.5 h-3.5" />
-            <span>{isYoruba ? 'Gbe Soke' : 'Upload'}</span>
+            <Upload className="w-4 h-4 min-[400px]:w-3.5 min-[400px]:h-3.5" />
+            <span className="hidden min-[400px]:inline">{isYoruba ? 'Gbe Soke' : 'Upload'}</span>
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleNewChat();
             }}
-            className="px-3 py-1.5 rounded-full bg-red-900/80 hover:bg-red-800 text-red-100 font-bold text-xs transition-all flex items-center space-x-1"
+            aria-label={isYoruba ? 'Ibaraẹnisọrọ Tuntun' : 'New Chat'}
+            className="p-2 min-[400px]:px-3 min-[400px]:py-1.5 rounded-full bg-red-900/80 hover:bg-red-800 text-red-100 font-bold text-xs transition-all flex items-center gap-1"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>{isYoruba ? 'Ibaraẹnisọrọ Tuntun' : 'New Chat'}</span>
+            <RefreshCw className="w-4 h-4 min-[400px]:w-3.5 min-[400px]:h-3.5" />
+            <span className="hidden min-[400px]:inline">{isYoruba ? 'Tuntun' : 'New Chat'}</span>
           </button>
         </div>
       </div>
@@ -832,10 +858,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   'Help me with Basic Science',
                   'Help me with Social Studies'
                 ]
-            ).map(suggestion => (
+            ).map((suggestion, index) => (
               <button
                 key={suggestion}
-                onClick={() => handleSend(suggestion)}
+                onClick={() => handlePreset(suggestion, index)}
                 className="px-3.5 py-2 rounded-full bg-white border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-xs font-jakarta font-bold text-[#064E3B] transition-all shadow-sm"
               >
                 {suggestion}
@@ -920,16 +946,18 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               : `Free plan: ${dailyChatLimit} chats a day (your 7-day trial has ended). Upgrade for unlimited!`}
           </button>
         )}
-        <div className="bg-white/95 backdrop-blur-md rounded-full border-2 border-slate-300 shadow-2xl p-1.5 flex items-center space-x-2">
+        <div className="bg-white/95 backdrop-blur-md rounded-full border-2 border-slate-300 shadow-2xl p-1.5 flex items-center gap-1.5 w-full min-w-0">
           <button
             onClick={handleOpenUpload}
-            className="p-2.5 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-[#064E3B] transition-all"
+            aria-label={isYoruba ? 'Gbe aworan soke' : 'Upload a photo'}
+            className="p-2.5 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-[#064E3B] transition-all shrink-0"
           >
             <Upload className="w-4 h-4" />
           </button>
           <button
             onClick={handleOpenCamera}
-            className="p-2.5 rounded-full bg-[#FFE8DE] hover:bg-[#FFD0BE] text-[#FF6B35] font-bold transition-all"
+            aria-label={isYoruba ? 'Ya aworan' : 'Take a photo'}
+            className="p-2.5 rounded-full bg-[#FFE8DE] hover:bg-[#FFD0BE] text-[#FF6B35] font-bold transition-all shrink-0"
           >
             <Camera className="w-4 h-4" />
           </button>
@@ -941,17 +969,18 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             placeholder={
               isYoruba
                 ? croppedImage
-                  ? 'Beere Mama Titi nipa aworan yii...'
-                  : 'Beere Mama Titi ohunkohun tabi ṣe aworan iṣẹ ile...'
+                  ? 'Beere nipa aworan yii...'
+                  : 'Beere Mama Titi...'
                 : croppedImage
-                ? 'Ask Mama Titi about this photo...'
-                : 'Ask Mama Titi anything or snap homework...'
+                ? 'Ask about this photo...'
+                : 'Ask Mama Titi...'
             }
-            className="flex-1 bg-transparent border-none outline-none font-sans text-sm text-slate-800 placeholder:text-slate-400 px-2"
+            className="flex-1 min-w-0 w-full bg-transparent border-none outline-none font-sans text-base sm:text-sm text-slate-800 placeholder:text-slate-400 px-1.5"
           />
           <button
             onClick={() => handleSend()}
             disabled={!inputText.trim() && !croppedImage}
+            aria-label={isYoruba ? 'Firanṣẹ' : 'Send'}
             className="p-3 rounded-full bg-[#FF6B35] hover:bg-[#E85523] disabled:opacity-40 text-white font-bold transition-all shadow-md shrink-0"
           >
             <Send className="w-4 h-4" />
