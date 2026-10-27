@@ -816,8 +816,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                       <SyncedReadAlong
                         text={msg.text}
                         language={profile.language}
+                        // Only the welcome message plays by itself (the
+                        // same in English and Yorùbá). Every other answer
+                        // plays when the child taps Listen, which saves
+                        // voice credits.
                         autoPlay={
                           isMama &&
+                          msg.id.startsWith('welcome-') &&
                           idx === messages.length - 1 &&
                           !isLoading
                         }
