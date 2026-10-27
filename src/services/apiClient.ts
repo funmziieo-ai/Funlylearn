@@ -335,9 +335,8 @@ export async function fetchAudioTTS(
           },
           body: JSON.stringify({
             text: cleanText,
-            voice: isYorubaText ? undefined : voice,
-            language: isYorubaText ? 'yoruba' : 'english',
-            response_format: 'mp3'
+            language: isYorubaText ? 'yo' : 'en',
+            voiceId: 'idera'
           }),
           signal: controller.signal
         }
@@ -356,8 +355,8 @@ export async function fetchAudioTTS(
       let quotaMsg: string | undefined;
       try {
         const errJson = JSON.parse(errText);
-        if (errJson && errJson.quotaLikely) {
-          quotaMsg = errJson.error;
+        if (errJson && (errJson.quotaLikely || errJson.code === 'QUOTA_EXCEEDED')) {
+          quotaMsg = errJson.error || 'Out of credits';
         }
       } catch {
         // errText wasn't JSON — not a quota response, ignore.
@@ -368,7 +367,24 @@ export async function fetchAudioTTS(
       );
     }
 
-    const blob = await res.blob();
+    // yarngpt-proxy answers with a link to the saved recording
+    // ({ audioUrl, cached }); fetch the MP3 from that link.
+    let blob: Blob;
+    const contentType = res.headers.get('Content-Type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      if (!data || !data.audioUrl) {
+        throw new Error('No audio link returned');
+      }
+      const audioRes = await fetch(data.audioUrl);
+      if (!audioRes.ok) {
+        throw new Error('Audio download failed: ' + audioRes.status);
+      }
+      blob = await audioRes.blob();
+    } else {
+      // Older version of the function: audio bytes directly.
+      blob = await res.blob();
+    }
 
     if (blob.size < 100) {
       throw new Error('Audio blob too small');
