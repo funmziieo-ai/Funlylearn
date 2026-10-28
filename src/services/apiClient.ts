@@ -1,5 +1,5 @@
 import { UserProfile, ChatMessage } from '../types';
-import { supabase } from './supabaseService';
+import { supabase, getUsageUserKey, getAccessToken } from './supabaseService';
 export { supabase };
 
 const SUPABASE_FUNCTIONS_URL = 'https://qeooehgozaaojaovukfq.supabase.co/functions/v1';
@@ -266,6 +266,21 @@ async function setCachedAudioBlob(key: string, blob: Blob): Promise<void> {
   }
 }
 
+// A link Mama Titi's voice can be played from directly. The voice
+// function sends a saved recording at once, or streams a new one as
+// YarnGPT makes it, so she starts speaking within a second or two.
+export function voiceStreamUrl(text: string, language: string): string {
+  const isYorubaText = ['yo', 'yor', 'yoruba'].includes(String(language || '').toLowerCase());
+  return (
+    SUPABASE_FUNCTIONS_URL +
+    '/yarngpt-proxy?text=' + encodeURIComponent(text) +
+    '&language=' + (isYorubaText ? 'yo' : 'en') +
+    '&voiceId=idera' +
+    '&child=' + encodeURIComponent(getUsageUserKey() || '') +
+    (getAccessToken() ? '&auth=' + encodeURIComponent(getAccessToken() as string) : '')
+  );
+}
+
 export async function fetchAudioTTS(
   text: string,
   language: string
@@ -276,6 +291,7 @@ export async function fetchAudioTTS(
   voice?: string;
   quotaMessage?: string;
   fromCache?: boolean;
+  voiceLimit?: boolean;
 }> {
   try {
     if (!text || text.trim().length === 0) {
@@ -336,7 +352,9 @@ export async function fetchAudioTTS(
           body: JSON.stringify({
             text: cleanText,
             language: isYorubaText ? 'yo' : 'en',
-            voiceId: 'idera'
+            voiceId: 'idera',
+            childKey: getUsageUserKey() || undefined,
+            authToken: getAccessToken() || undefined
           }),
           signal: controller.signal
         }
@@ -355,10 +373,15 @@ export async function fetchAudioTTS(
       let quotaMsg: string | undefined;
       try {
         const errJson = JSON.parse(errText);
+        if (errJson && errJson.code === 'VOICE_LIMIT') {
+          throw new Error('VOICE_LIMIT:' + (errJson.error || 'Daily voice limit reached'));
+        }
         if (errJson && (errJson.quotaLikely || errJson.code === 'QUOTA_EXCEEDED')) {
           quotaMsg = errJson.error || 'Out of credits';
         }
-      } catch {
+      } catch (parseErr) {
+        // The daily-limit message must reach the caller.
+        if (parseErr instanceof Error && parseErr.message.startsWith('VOICE_LIMIT:')) throw parseErr;
         // errText wasn't JSON — not a quota response, ignore.
       }
 
@@ -406,6 +429,11 @@ export async function fetchAudioTTS(
   } catch (err) {
     console.error('YarnGPT call failed:', err);
     const msg = err instanceof Error ? err.message : String(err);
+
+    if (msg.startsWith('VOICE_LIMIT:')) {
+      // This child has used today's new voice recordings.
+      return { voiceLimit: true };
+    }
 
     if (msg.startsWith('QUOTA:')) {
       return {
