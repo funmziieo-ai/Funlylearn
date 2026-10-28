@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Pause } from 'lucide-react';
-import { fetchAudioTTS, voiceStreamUrl } from '../services/apiClient';
+import { fetchAudioTTS, voiceStreamUrl, normalizeSpeechText } from '../services/apiClient';
 
 // Shared across EVERY SyncedReadAlong instance in the app (one per
 // message bubble). Without this, an autoplaying message's audio and a
@@ -96,17 +96,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   // clobbered by, or clobber, the other call.
   const callTokenRef = useRef(0);
 
-  const normalizeText = (raw: string): string => {
-    return raw
-      .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace(/([.,!?:;])([A-Za-z])/g, '$1 $2')
-      .replace(/([A-Za-z])([0-9])/g, '$1 $2')
-      .replace(/([0-9])([A-Za-z])/g, '$1 $2')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-  };
-
-  const cleanText = normalizeText(text);
+  const cleanText = normalizeSpeechText(text);
   const words = cleanText.split(/\s+/).filter(w => w.length > 0);
   const isYoruba = language === 'yo';
 
@@ -156,42 +146,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   // silent-autoplay case, falling straight through to stopAll() every
   // time. A tap would stop it, and the very next tap would start it
   // fresh — exactly the stop-then-restart behaviour being reported.
-  // When YarnGPT can't make the voice (e.g. out of credits), English is
-  // read with the phone's own free voice instead. Yorùbá stays silent:
-  // most phones have no Yorùbá voice, so it would sound wrong.
-  const speakWithPhoneVoice = (myToken: number): boolean => {
-    if (language === 'yo' || typeof window === 'undefined' || !window.speechSynthesis) return false;
-    try {
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = 'en-NG';
-      const voices = window.speechSynthesis.getVoices();
-      const preferred =
-        voices.find(v => v.lang === 'en-NG') ||
-        voices.find(v => v.lang === 'en-GB') ||
-        voices.find(v => v.lang && v.lang.startsWith('en'));
-      if (preferred) utterance.voice = preferred;
-      utterance.rate = 0.95;
-      utterance.onstart = () => {
-        if (callTokenRef.current === myToken && isManualRef.current) setIsRealAudioPlaying(true);
-      };
-      const finish = () => {
-        if (callTokenRef.current !== myToken) return;
-        setIsRealAudioPlaying(false);
-        setIsPlaying(false);
-        if (onSpeechStateChange) onSpeechStateChange(false);
-      };
-      utterance.onend = finish;
-      utterance.onerror = finish;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-      return true;
-    } catch (_e) {
-      return false;
-    }
-  };
-
-  // No YarnGPT voice: show the upgrade screen if the daily limit was
-  // reached, otherwise use the phone's voice for English.
+  // No voice: show the upgrade screen if the daily limit was reached.
   const handleNoVoice = (
     result: { voiceLimit?: boolean; useClientSpeech?: boolean },
     myToken: number
@@ -200,9 +155,8 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       if (isManualRef.current && onVoiceLimit) onVoiceLimit();
       return false;
     }
-    if (isManualRef.current && result.useClientSpeech) {
-      return speakWithPhoneVoice(myToken);
-    }
+    // No robotic phone voice: if Mama Titi's voice isn't available, the
+    // button simply goes back to "Listen to Voice".
     return false;
   };
 
@@ -373,7 +327,9 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
             };
             const onReady = () => done(true);
             const onFail = () => done(false);
-            const timer = setTimeout(() => done(false), 20000);
+            // The free voice server can take a little while for a brand-new
+            // answer, so wait up to a minute before trying the other way.
+            const timer = setTimeout(() => done(false), 60000);
             audio.addEventListener('canplay', onReady);
             audio.addEventListener('error', onFail);
           });
