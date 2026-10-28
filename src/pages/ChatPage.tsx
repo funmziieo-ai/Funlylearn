@@ -11,7 +11,8 @@ import {
   getStoredChat,
   saveStoredChat,
   clearStoredChat,
-  getWelcomeMessage
+  getWelcomeMessage,
+  prefetchVoice
 } from '../services/apiClient';
 import { saveHomeworkRecord, saveAppPollResponse, prepareNotesForSession, getPlanStage, dailyLimitFor } from '../services/supabaseService';
 import { getUnlockedLevels } from '../utils/coinsSystem';
@@ -409,6 +410,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       };
 
       setMessages(prev => [...prev, mamaMsg]);
+
+      // Free plans use your own free voice server: record the answer in the
+      // background now, so "Listen to Voice" plays straight away.
+      if (!isPremium) prefetchVoice(response.reply, profile.language);
 
       const isCorrect =
         response.reply.toLowerCase().includes('ehhh') ||
