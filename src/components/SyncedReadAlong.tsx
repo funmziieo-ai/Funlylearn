@@ -30,6 +30,39 @@ interface SyncedReadAlongProps {
   className?: string;
 }
 
+
+// Phones only let a sound start shortly after a tap. A new voice clip can
+// take longer than that to arrive, and the phone then blocks it, so the
+// child had to tap again. Fix: on the tap, start a tiny silent sound on an
+// audio player straight away, then play Mama Titi's voice on that SAME
+// player when it's ready; the phone then allows it.
+let silentSoundUrl: string | null = null;
+function getSilentSoundUrl(): string {
+  if (silentSoundUrl) return silentSoundUrl;
+  const sampleRate = 8000;
+  const samples = 400; // 0.05 seconds of silence
+  const buffer = new ArrayBuffer(44 + samples * 2);
+  const view = new DataView(buffer);
+  const writeText = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+  writeText(0, 'RIFF');
+  view.setUint32(4, 36 + samples * 2, true);
+  writeText(8, 'WAVE');
+  writeText(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeText(36, 'data');
+  view.setUint32(40, samples * 2, true);
+  silentSoundUrl = URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+  return silentSoundUrl;
+}
+
 export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   text,
   language = 'en',
@@ -135,9 +168,10 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
         }
         return;
       }
-      if (manual) {
-        // Already in a visible, manually-started playback — a second
-        // tap here is a genuine "stop" request.
+      if (manual && isRealAudioPlaying) {
+        // Mama Titi is actually speaking: a tap here means "stop".
+        // (Taps while the voice is still loading are ignored, so an
+        // impatient second tap no longer cancels the first.)
         stopAll();
       }
       // A non-manual (autoplay) call landing while already playing
@@ -146,6 +180,17 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
     }
 
     isManualRef.current = manual;
+
+    // Unlock playback now, while we're still inside the tap.
+    let unlockedPlayer: HTMLAudioElement | null = null;
+    if (manual) {
+      try {
+        unlockedPlayer = new Audio(getSilentSoundUrl());
+        unlockedPlayer.play().catch(() => {});
+      } catch (_e) {
+        unlockedPlayer = null;
+      }
+    }
 
     // Silence any other message's audio that might currently be
     // playing (autoplay on another bubble, a leftover from a previous
@@ -205,7 +250,14 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       if (stoppedRef.current || callTokenRef.current !== myToken) return;
 
       if (ttsData.audioUrl) {
-        const audio = new Audio(ttsData.audioUrl);
+        let audio: HTMLAudioElement;
+        if (unlockedPlayer) {
+          audio = unlockedPlayer;
+          audio.pause();
+          audio.src = ttsData.audioUrl;
+        } else {
+          audio = new Audio(ttsData.audioUrl);
+        }
         audioRef.current = audio;
 
         // Register this as THE app-wide active audio right away (before
