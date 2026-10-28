@@ -266,6 +266,43 @@ async function setCachedAudioBlob(key: string, blob: Blob): Promise<void> {
   }
 }
 
+// The exact text Mama Titi's voice is made from. Shared by the Listen
+// button and the background recording, so both find the same saved clip.
+export function normalizeSpeechText(raw: string): string {
+  return raw
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([.,!?:;])([A-Za-z])/g, '$1 $2')
+    .replace(/([A-Za-z])([0-9])/g, '$1 $2')
+    .replace(/([0-9])([A-Za-z])/g, '$1 $2')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+// Records Mama Titi's answer in the background as soon as it appears, so
+// "Listen" plays at once. The voice function only does this on your own
+// free voice server (never on paid YarnGPT, so it never costs credits).
+export function prefetchVoice(text: string, language: string): void {
+  const clean = normalizeSpeechText(text);
+  if (clean.length < 2 || clean.length > 1500) return;
+  const isYorubaText = ['yo', 'yor', 'yoruba'].includes(String(language || '').toLowerCase());
+  fetch(SUPABASE_FUNCTIONS_URL + '/yarngpt-proxy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_PUBLISHABLE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_PUBLISHABLE_KEY
+    },
+    body: JSON.stringify({
+      text: clean,
+      language: isYorubaText ? 'yo' : 'en',
+      voiceId: 'idera',
+      childKey: getUsageUserKey() || undefined,
+      authToken: getAccessToken() || undefined,
+      prefetch: true
+    })
+  }).catch(() => {});
+}
+
 // A link Mama Titi's voice can be played from directly. The voice
 // function sends a saved recording at once, or streams a new one as
 // YarnGPT makes it, so she starts speaking within a second or two.
