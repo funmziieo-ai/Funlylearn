@@ -31,7 +31,7 @@ import threading
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 CACHE_DIR = Path(os.environ.get("CACHE_DIR", "/workspace/cache"))
@@ -77,41 +77,38 @@ class YarnGPT2Engine:
 
         self.torch = torch
         self.audio_tokenizer = AudioTokenizerV2(MODEL_ID, str(WAV_MODEL), str(WAV_CONFIG))
-        self.model = AutoModelForCausalLM.from_pretrained(MODEL_ID, torch_dtype="auto").to(self.audio_tokenizer.device)
+        # Half precision on a GPU: roughly twice as fast, same voice.
+        dtype = torch.float16 if torch.cuda.is_available() else "auto"
+        self.model = AutoModelForCausalLM.from_pretrained(MODEL_ID, torch_dtype=dtype).to(self.audio_tokenizer.device)
         self.model.eval()
 
-    def synthesize(self, text: str, lang_name: str, speaker: str):
-        """Returns a 1-D float tensor at 24 kHz."""
+    def synthesize_chunk(self, chunk: str, lang_name: str, speaker: str):
+        """One sentence or two -> 1-D float audio at 24 kHz (with a short pause after)."""
         torch = self.torch
-        pieces = []
-        for chunk in split_into_chunks(text):
-            prompt = self.audio_tokenizer.create_prompt(chunk, lang=lang_name, speaker_name=speaker)
-            input_ids = self.audio_tokenizer.tokenize_prompt(prompt)
-            with torch.inference_mode():
-                output = self.model.generate(
-                    input_ids=input_ids,
-                    temperature=0.1,
-                    repetition_penalty=1.1,
-                    max_length=4000,
-                )
-            codes = self.audio_tokenizer.get_codes(output)
-            audio = self.audio_tokenizer.get_audio(codes)
-            pieces.append(audio.reshape(-1).float().cpu())
-            pieces.append(torch.zeros(int(SAMPLE_RATE * 0.25)))  # short pause between sentences
-        return torch.cat(pieces) if pieces else torch.zeros(1)
+        prompt = self.audio_tokenizer.create_prompt(chunk, lang=lang_name, speaker_name=speaker)
+        input_ids = self.audio_tokenizer.tokenize_prompt(prompt)
+        with torch.inference_mode():
+            output = self.model.generate(
+                input_ids=input_ids,
+                temperature=0.1,
+                repetition_penalty=1.1,
+                max_length=4000,
+            )
+        codes = self.audio_tokenizer.get_codes(output)
+        audio = self.audio_tokenizer.get_audio(codes).reshape(-1).float().cpu()
+        return torch.cat([audio, torch.zeros(int(SAMPLE_RATE * 0.25))])
 
 
 class FakeEngine:
     """Test mode: a short beep per sentence, no model needed."""
 
-    def synthesize(self, text: str, lang_name: str, speaker: str):
+    def synthesize_chunk(self, chunk: str, lang_name: str, speaker: str):
         import math
         import array
 
         samples = array.array("f")
-        for _ in split_into_chunks(text):
-            for i in range(int(SAMPLE_RATE * 0.3)):
-                samples.append(0.2 * math.sin(2 * math.pi * 440 * i / SAMPLE_RATE))
+        for i in range(int(SAMPLE_RATE * 0.3)):
+            samples.append(0.2 * math.sin(2 * math.pi * 440 * i / SAMPLE_RATE))
         return samples
 
 
@@ -123,9 +120,7 @@ def get_engine():
 
 
 # ---------- Helpers ----------
-def split_into_chunks(text: str, target: int = 220):
-    """YarnGPT2 sounds best on short passages: split into ~1-2 sentences."""
-    sentences = re.findall(r"[^.!?…]+[.!?…]*\s*", text) or [text]
+def _group_sentences(sentences, target: int):
     chunks, current = [], ""
     for sentence in sentences:
         if len(current) + len(sentence) > target and current.strip():
@@ -137,10 +132,35 @@ def split_into_chunks(text: str, target: int = 220):
     return chunks
 
 
+def split_into_chunks(text: str, target: int = 150):
+    """YarnGPT2 sounds best on short passages: split into ~1-2 sentences.
+    The FIRST sentence is always its own piece, so Mama Titi starts
+    speaking as soon as it's ready while the rest is still being made."""
+    sentences = re.findall(r"[^.!?…]+[.!?…]*\s*", text) or [text]
+    if len(sentences) == 1:
+        return _group_sentences(sentences, target)
+    return [sentences[0].strip()] + _group_sentences(sentences[1:], target)
+
+
 def clean_text(text: str) -> str:
     text = re.sub(r"[*_#`>\[\]]", " ", text)
     text = re.sub(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]", " ", text)  # emoji
     return re.sub(r"\s+", " ", text).strip()
+
+
+def mp3_bytes(audio) -> bytes:
+    """Float audio -> MP3 bytes (needs ffmpeg). Each sentence is encoded
+    on its own; MP3 pieces joined together play as one recording."""
+    import array
+
+    values = audio.numpy().tolist() if hasattr(audio, "numpy") else list(audio)
+    pcm = array.array("h", (max(-32768, min(32767, int(v * 32767))) for v in values))
+    result = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-f", "s16le", "-ar", str(SAMPLE_RATE), "-ac", "1", "-i", "pipe:0",
+         "-codec:a", "libmp3lame", "-b:a", "64k", "-f", "mp3", "pipe:1"],
+        input=pcm.tobytes(), stdout=subprocess.PIPE, check=True,
+    )
+    return result.stdout
 
 
 def write_mp3(audio, mp3_path: Path):
@@ -265,8 +285,21 @@ def tts(req: TTSRequest, x_tts_secret: str | None = Header(default=None)):
     if mp3_path.exists():
         return FileResponse(mp3_path, media_type="audio/mpeg", headers={"X-Cache": "HIT"})
 
-    with generate_lock:
-        if not mp3_path.exists():  # another request may have just made it
-            audio = get_engine().synthesize(text, lang_name, speaker)
-            write_mp3(audio, mp3_path)
-    return FileResponse(mp3_path, media_type="audio/mpeg", headers={"X-Cache": "MISS"})
+    # New text: send the voice sentence by sentence as it's made, so Mama
+    # Titi starts speaking after the first sentence, and keep the whole
+    # recording in the cache for next time.
+    def stream_new_recording():
+        with generate_lock:
+            if mp3_path.exists():  # another request just made it
+                yield mp3_path.read_bytes()
+                return
+            parts = []
+            for chunk in split_into_chunks(text):
+                piece = mp3_bytes(get_engine().synthesize_chunk(chunk, lang_name, speaker))
+                parts.append(piece)
+                yield piece
+            tmp = mp3_path.with_suffix(".part.mp3")
+            tmp.write_bytes(b"".join(parts))
+            tmp.replace(mp3_path)  # only a complete recording ever appears in the cache
+
+    return StreamingResponse(stream_new_recording(), media_type="audio/mpeg", headers={"X-Cache": "MISS"})
