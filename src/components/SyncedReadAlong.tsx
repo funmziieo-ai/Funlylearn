@@ -360,8 +360,6 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
               'inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ' +
               (isRealAudioPlaying
                 ? 'bg-[#FF6B35] text-white hover:bg-[#E85523] ring-2 ring-amber-300'
-                : isLoading
-                ? 'bg-gradient-to-r from-amber-400 via-orange-400 to-amber-400 text-slate-900 shadow-sm'
                 : 'bg-[#064E3B] text-white hover:bg-[#022C22]')
             }
           >
@@ -370,16 +368,9 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
                 <Pause className="w-3.5 h-3.5 animate-pulse text-amber-200" />
                 <span>{isYoruba ? 'Mama Titi n sọrọ...' : 'Mama Titi is Speaking...'}</span>
               </>
-            ) : isLoading ? (
-              <>
-                <Volume2 className="w-3.5 h-3.5 text-[#064E3B]" />
-                <span>
-                  {isYoruba
-                    ? 'Ohùn ń bọ̀ — tẹ̀síwájú ẹ̀kọ́, ọmọ mi olóòyè!'
-                    : 'Voice is on its way — keep learning, Scholar!'}
-                </span>
-              </>
             ) : (
+              // While loading, or if the voice can't play, the button simply
+              // stays as "Listen to Voice". Nothing else is shown.
               <>
                 <Volume2 className="w-3.5 h-3.5 text-amber-300" />
                 <span>{isYoruba ? 'Gbọ́ Ohùn' : 'Listen to Voice'}</span>
