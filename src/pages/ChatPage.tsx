@@ -826,6 +826,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                           idx === messages.length - 1 &&
                           !isLoading
                         }
+                        // Free/trial children who use today's new voice
+                        // recordings see the plans; paid children just
+                        // keep reading.
+                        onVoiceLimit={isPremium ? undefined : onOpenPricingModal}
                         onSpeechStateChange={speaking =>
                           setSpeakingMessageId(
                             speaking ? msg.id : null
