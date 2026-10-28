@@ -8,6 +8,22 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+// The signed-in child's login token, kept up to date. Sent with voice
+// requests so the server can safely check the child's plan (free voice
+// for free plans, YarnGPT's Idera for paid plans). Guests have none.
+let currentAccessToken: string | null = null;
+if (supabase) {
+  supabase.auth.getSession()
+    .then(({ data }) => { currentAccessToken = data.session?.access_token || null; })
+    .catch(() => {});
+  supabase.auth.onAuthStateChange((_event, session) => {
+    currentAccessToken = session?.access_token || null;
+  });
+}
+export function getAccessToken(): string | null {
+  return currentAccessToken;
+}
+
 // Guest Session Key
 const GUEST_SESSION_KEY = 'funlylearn_guest_session_id';
 const LOCAL_SUB_KEY = 'funlylearn_user_subscription_v1';
@@ -67,6 +83,12 @@ let usageUserKey: string | null = null;
 // this device's guest id).
 export function setUsageUserKey(key: string | null): void {
   usageUserKey = key;
+}
+
+// Who is using the app (account id or this device's guest id). Sent with
+// voice requests so the server can apply the daily voice limit per child.
+export function getUsageUserKey(): string | null {
+  return usageUserKey;
 }
 
 function lagosToday(): string {
