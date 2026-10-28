@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Pause } from 'lucide-react';
-import { fetchAudioTTS } from '../services/apiClient';
+import { fetchAudioTTS, voiceStreamUrl } from '../services/apiClient';
 
 // Shared across EVERY SyncedReadAlong instance in the app (one per
 // message bubble). Without this, an autoplaying message's audio and a
@@ -26,6 +26,8 @@ interface SyncedReadAlongProps {
   text: string;
   language?: string;
   autoPlay?: boolean;
+  // Called when this child has used today's new voice recordings.
+  onVoiceLimit?: () => void;
   onSpeechStateChange?: (isSpeaking: boolean) => void;
   className?: string;
 }
@@ -67,6 +69,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   text,
   language = 'en',
   autoPlay = false,
+  onVoiceLimit,
   onSpeechStateChange,
   className = ''
 }) => {
@@ -153,6 +156,56 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
   // silent-autoplay case, falling straight through to stopAll() every
   // time. A tap would stop it, and the very next tap would start it
   // fresh — exactly the stop-then-restart behaviour being reported.
+  // When YarnGPT can't make the voice (e.g. out of credits), English is
+  // read with the phone's own free voice instead. Yorùbá stays silent:
+  // most phones have no Yorùbá voice, so it would sound wrong.
+  const speakWithPhoneVoice = (myToken: number): boolean => {
+    if (language === 'yo' || typeof window === 'undefined' || !window.speechSynthesis) return false;
+    try {
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = 'en-NG';
+      const voices = window.speechSynthesis.getVoices();
+      const preferred =
+        voices.find(v => v.lang === 'en-NG') ||
+        voices.find(v => v.lang === 'en-GB') ||
+        voices.find(v => v.lang && v.lang.startsWith('en'));
+      if (preferred) utterance.voice = preferred;
+      utterance.rate = 0.95;
+      utterance.onstart = () => {
+        if (callTokenRef.current === myToken && isManualRef.current) setIsRealAudioPlaying(true);
+      };
+      const finish = () => {
+        if (callTokenRef.current !== myToken) return;
+        setIsRealAudioPlaying(false);
+        setIsPlaying(false);
+        if (onSpeechStateChange) onSpeechStateChange(false);
+      };
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  };
+
+  // No YarnGPT voice: show the upgrade screen if the daily limit was
+  // reached, otherwise use the phone's voice for English.
+  const handleNoVoice = (
+    result: { voiceLimit?: boolean; useClientSpeech?: boolean },
+    myToken: number
+  ): boolean => {
+    if (result.voiceLimit) {
+      if (isManualRef.current && onVoiceLimit) onVoiceLimit();
+      return false;
+    }
+    if (isManualRef.current && result.useClientSpeech) {
+      return speakWithPhoneVoice(myToken);
+    }
+    return false;
+  };
+
   const handlePlay = async (manual: boolean) => {
     if (isPlaying) {
       if (manual && !isManualRef.current) {
@@ -236,8 +289,15 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
       }, 300);
     }
 
+    // On a tap, short texts play straight from the stream link (Mama Titi
+    // starts speaking as the voice is being made). Otherwise, and as a
+    // fallback, the finished recording is fetched first.
+    const useStream = manual && !!unlockedPlayer && cleanText.length <= 1200;
+
     try {
-      const ttsData = await fetchAudioTTS(cleanText, language);
+      let ttsData: { audioUrl?: string; voiceLimit?: boolean; useClientSpeech?: boolean } = useStream
+        ? { audioUrl: voiceStreamUrl(cleanText, language) }
+        : await fetchAudioTTS(cleanText, language);
 
       if (loadingIndicatorTimeoutRef.current) {
         clearTimeout(loadingIndicatorTimeoutRef.current);
@@ -301,6 +361,42 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           requestAnimationFrame(syncToAudio);
         });
 
+        if (useStream) {
+          // Wait until the stream has sound ready (or fails).
+          audio.load();
+          const streamOk = await new Promise<boolean>(resolve => {
+            const done = (ok: boolean) => {
+              audio.removeEventListener('canplay', onReady);
+              audio.removeEventListener('error', onFail);
+              clearTimeout(timer);
+              resolve(ok);
+            };
+            const onReady = () => done(true);
+            const onFail = () => done(false);
+            const timer = setTimeout(() => done(false), 20000);
+            audio.addEventListener('canplay', onReady);
+            audio.addEventListener('error', onFail);
+          });
+          if (stoppedRef.current || callTokenRef.current !== myToken) return;
+          if (!streamOk) {
+            // Streaming didn't work: fetch the finished recording instead,
+            // and play it on the same (already unlocked) player.
+            const fallback = await fetchAudioTTS(cleanText, language);
+            if (stoppedRef.current || callTokenRef.current !== myToken) return;
+            if (!fallback.audioUrl) {
+              audio.pause();
+              if (audioRef.current === audio) audioRef.current = null;
+              if (handleNoVoice(fallback, myToken)) return; // phone voice is speaking
+              setIsLoading(false);
+              setIsPlaying(false);
+              if (onSpeechStateChange) onSpeechStateChange(false);
+              return;
+            }
+            ttsData = fallback;
+            audio.src = fallback.audioUrl;
+          }
+        }
+
         await audio.play();
 
         // Re-check after the await — a stop or a newer call could have
@@ -333,7 +429,7 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
             setIsPlaying(false);
             if (onSpeechStateChange) onSpeechStateChange(false);
           }
-          URL.revokeObjectURL(ttsData.audioUrl!);
+          if (ttsData.audioUrl && ttsData.audioUrl.startsWith('blob:')) URL.revokeObjectURL(ttsData.audioUrl);
         };
 
         audio.onerror = () => {
@@ -357,11 +453,12 @@ export const SyncedReadAlong: React.FC<SyncedReadAlongProps> = ({
           audioRef.current = null;
         };
       } else {
-        // No real audio available — per the fix above, there is no
-        // fallback highlighting to fall back to. Reset fully so this
-        // component (and its button) is ready for a fresh attempt
-        // next time, instead of leaving isPlaying stuck true with
-        // nothing actually happening.
+        // No YarnGPT voice: upgrade screen (daily limit) or phone voice
+        // (English, e.g. when YarnGPT credits have run out).
+        if (handleNoVoice(ttsData, myToken)) {
+          if (isCurrentlyManual()) setIsLoading(false);
+          return;
+        }
         if (isCurrentlyManual()) setIsLoading(false);
         setIsPlaying(false);
         if (onSpeechStateChange) onSpeechStateChange(false);
