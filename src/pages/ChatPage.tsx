@@ -716,59 +716,18 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         </div>
       )}
 
-      <div className="bg-[#064E3B] text-white p-3 sm:p-4 shadow-sm flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-3">
-          <div>
-            <h2 className="font-serif font-bold text-lg leading-tight">
-              {isYoruba ? `Ẹ ku ọjọ, ${profile.name}!` : `Welcome, ${profile.name}!`}
-            </h2>
-          </div>
-        </div>
-      </div>
-
-      <div
-        onClick={handleOpenCamera}
-        className="mt-2 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 p-2 px-2.5 sm:p-2.5 sm:px-4 shadow-sm flex items-center justify-between gap-2 shrink-0 rounded-2xl mx-2 cursor-pointer"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="p-1.5 bg-slate-950 text-amber-300 rounded-xl shrink-0">
-            <Camera className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="font-serif font-bold text-xs sm:text-sm leading-tight text-slate-950 truncate">
-              {isYoruba ? 'Ṣe Aworan Iṣẹ Ile Rẹ' : 'Snap Your Homework'}
-            </p>
-            <p className="text-[10px] sm:text-[11px] text-slate-800 font-sans truncate">
-              {isYoruba
-                ? 'Gba owó ere 5 fun aworan iṣẹ ile kọọkan!'
-                : 'Earn 5 coins per homework snap!'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenUpload();
-            }}
-            aria-label={isYoruba ? 'Gbe Soke' : 'Upload'}
-            className="p-2 min-[400px]:px-3 min-[400px]:py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs transition-all flex items-center gap-1"
-          >
-            <Upload className="w-4 h-4 min-[400px]:w-3.5 min-[400px]:h-3.5" />
-            <span className="hidden min-[400px]:inline">{isYoruba ? 'Gbe Soke' : 'Upload'}</span>
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleNewChat();
-            }}
-            aria-label={isYoruba ? 'Ibaraẹnisọrọ Tuntun' : 'New Chat'}
-            className="p-2 min-[400px]:px-3 min-[400px]:py-1.5 rounded-full bg-red-900/80 hover:bg-red-800 text-red-100 font-bold text-xs transition-all flex items-center gap-1"
-          >
-            <RefreshCw className="w-4 h-4 min-[400px]:w-3.5 min-[400px]:h-3.5" />
-            <span className="hidden min-[400px]:inline">{isYoruba ? 'Tuntun' : 'New Chat'}</span>
-          </button>
-        </div>
+      <div className="bg-[#064E3B] text-white p-3 sm:p-4 shadow-sm flex items-center justify-between gap-3 shrink-0">
+        <h2 className="font-serif font-bold text-lg leading-tight truncate min-w-0">
+          {isYoruba ? `Ẹ ku ọjọ, ${profile.name}!` : `Welcome, ${profile.name}!`}
+        </h2>
+        <button
+          onClick={handleNewChat}
+          aria-label={isYoruba ? 'Ìjíròrò tuntun' : 'New chat'}
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition-all active:scale-95"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>{isYoruba ? 'Tuntun' : 'New chat'}</span>
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-44">
@@ -859,6 +818,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
         {messages.length === 1 && !isLoading && (
           <div className="flex flex-wrap gap-2 -mt-2">
+            <button
+              onClick={handleOpenCamera}
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full bg-amber-100 border-2 border-amber-300 text-amber-900 text-xs font-bold shadow-sm active:scale-95 transition-transform"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              {isYoruba ? 'Ya fọ́tò iṣẹ́ ilé rẹ, gba owó ẹ̀yẹ 5!' : 'Snap your homework and earn 5 coins!'}
+            </button>
             {(isYoruba
               ? [
                   'Ran mi lọwọ pẹlu Iṣiro',
