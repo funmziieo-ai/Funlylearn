@@ -26,7 +26,11 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
   useFunFonts();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState(initialProfile.name || '');
-  const [classLevel, setClassLevel] = useState<ClassLevel | null>(initialProfile.classLevel || null);
+  // New children choose their own class (no silent "JSS 1" default);
+  // someone editing an existing profile keeps their class.
+  const [classLevel, setClassLevel] = useState<ClassLevel | null>(
+    initialProfile.name ? initialProfile.classLevel || null : null
+  );
   const [isOutOfSchool, setIsOutOfSchool] = useState(initialProfile.isOutOfSchool || false);
   const [language, setLanguage] = useState<LanguageCode>(initialProfile.language || 'en');
   const [previewLoading, setPreviewLoading] = useState<'en' | 'yo' | null>(null);
@@ -41,7 +45,21 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
     if (name.trim()) setStep(2);
   };
 
-  const handleNextStep2 = () => setStep(3);
+  // Continue is always tappable. Without a class (or a learning level, for
+  // children not in school), the class list gives a gentle shake and a
+  // short note explains what's needed, instead of a silent grey button.
+  const [needClassNote, setNeedClassNote] = useState(false);
+  const [shakeClasses, setShakeClasses] = useState(false);
+  const handleNextStep2 = () => {
+    if (!classLevel) {
+      setNeedClassNote(true);
+      setShakeClasses(true);
+      setTimeout(() => setShakeClasses(false), 500);
+      return;
+    }
+    setNeedClassNote(false);
+    setStep(3);
+  };
 
   const handleFinish = () => {
     // Onboarding completion means "this is a fresh scholar" — reset every
@@ -135,7 +153,10 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
     <button
       key={cls}
       type="button"
-      onClick={() => setClassLevel(cls)}
+      onClick={() => {
+        setClassLevel(cls);
+        setNeedClassNote(false);
+      }}
       className={`${FUN} ${PRESS} py-3 rounded-2xl border-2 border-b-4 text-base font-semibold bg-white text-slate-800 border-slate-200`}
     >
       {cls}
@@ -179,7 +200,8 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
             </button>
           )}
           <div className={`${FUN} w-9 h-9 rounded-2xl bg-[#15803D] text-white text-xl font-bold flex items-center justify-center border-b-4 border-[#064E3B]`}>F</div>
-          <span className={`${FUN} text-xl font-bold text-slate-900`}>Funly<span className="text-[#15803D]">Learn</span></span>
+          {/* On the smallest phones (under 360px) only the green F logo shows. */}
+          <span className={`${FUN} hidden min-[360px]:inline text-xl font-bold text-slate-900`}>Funly<span className="text-[#15803D]">Learn</span></span>
         </div>
         <div className="flex items-center gap-1.5" aria-label={`Step ${step} of 3`}>
           {[1, 2, 3].map(s => (
@@ -190,7 +212,10 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
           ))}
         </div>
         {onExit && (
-          <button onClick={onExit} className="font-bold text-slate-700 px-2 py-2">Exit</button>
+          <button onClick={onExit} aria-label="Exit" className="font-bold text-slate-700 px-2 py-2 shrink-0">
+            <span className="min-[360px]:hidden" aria-hidden="true">✕</span>
+            <span className="hidden min-[360px]:inline">Exit</span>
+          </button>
         )}
       </div>
 
@@ -223,8 +248,14 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
         {step === 2 && (
           <div className="space-y-5">
             <div className="text-center space-y-1.5">
-              <h2 className={`${FUN} text-3xl font-bold text-slate-900 leading-tight`}>What class is {name || 'your child'} in?</h2>
-              <p className="font-semibold text-slate-600">Mama Titi teaches at exactly the right level.</p>
+              <h2 className={`${FUN} text-3xl font-bold text-slate-900 leading-tight`}>
+                {isOutOfSchool ? 'What level should Mama Titi teach?' : `What class is ${name || 'your child'} in?`}
+              </h2>
+              <p className="font-semibold text-slate-600">
+                {isOutOfSchool
+                  ? `No problem! Choose the level ${name || 'your child'} would like to learn at.`
+                  : 'Mama Titi teaches at exactly the right level.'}
+              </p>
             </div>
 
             <div className="rounded-2xl bg-white border-2 border-b-4 border-slate-200 p-3 flex items-center justify-between gap-3">
@@ -252,7 +283,12 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
                 <button type="button" onClick={() => setClassLevel(null)} className="font-bold text-emerald-100 underline">Change</button>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className={`space-y-4 rounded-2xl ${shakeClasses ? 'ob-shake' : ''} ${needClassNote ? 'ring-4 ring-amber-300 ring-offset-4 ring-offset-[#FFF8EC]' : ''}`}>
+                <style>{`
+                  @keyframes ob-shake { 0%,100% { transform: translateX(0) } 20% { transform: translateX(-8px) } 40% { transform: translateX(8px) } 60% { transform: translateX(-6px) } 80% { transform: translateX(6px) } }
+                  .ob-shake { animation: ob-shake .45s ease-in-out; }
+                  @media (prefers-reduced-motion: reduce) { .ob-shake { animation: none; } }
+                `}</style>
                 <div>
                   <p className={`${FUN} font-bold text-slate-700 flex items-center gap-2`}><Emoji3D emoji="🎒" className="w-6 h-6" /> Primary school</p>
                   <div className="grid grid-cols-3 gap-2.5 mt-2">{primaryClasses.map(classTile)}</div>
@@ -265,7 +301,12 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({
             )}
 
             <MamaBubble title="Well done!" text={`"The right class means I teach exactly what ${name || 'your child'} needs for school and exams."`} />
-            <ContinueButton onClick={handleNextStep2} disabled={!classLevel}>Continue ▶</ContinueButton>
+            {needClassNote && !classLevel && (
+              <p className="text-center font-bold text-amber-800 bg-amber-100 border-2 border-amber-300 rounded-2xl px-4 py-2.5" role="alert">
+                {isOutOfSchool ? '👆🏾 Please choose a level first' : '👆🏾 Please choose a class first'}
+              </p>
+            )}
+            <ContinueButton onClick={handleNextStep2}>Continue ▶</ContinueButton>
           </div>
         )}
 
